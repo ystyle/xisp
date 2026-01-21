@@ -1,0 +1,29 @@
+[package]
+  cjc-version = "1.1.0"
+  name = "xisp"
+  organization = "ystyle"
+  description = "星枢 - 仓颉嵌入式 Lisp 脚本语言"
+  version = "0.1.0"
+  target-dir = ""
+  script-dir = ""
+  output-type = "executable"
+  compile-option = "-Woff unused"
+  override-compile-option = ""
+  link-option = ""
+
+[dependencies]
+
+[test-dependencies]
+
+
+[package.package-configuration."ystyle::xisp.examples.extension_demo"]
+output-type = "executable"
+
+[package.package-configuration."ystyle::xisp.examples.test_destruct"]
+output-type = "executable"
+
+[package.package-configuration."ystyle::xisp.examples.test_pipeline"]
+output-type = "executable"
+
+[package.package-configuration."ystyle::xisp.examples.options_usage"]
+output-type = "executable"
