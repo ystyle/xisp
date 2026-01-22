@@ -315,10 +315,17 @@ extend Evaluator {
      * Thread-first 步骤 - 辅助方法：构造符号调用
      */
     func threadFirstSymbol(sym: String, value: LispValue): LispValue {
-        let args = ArrayList<LispValue>()
-        args.add(value)
-        let cell = ConsCell(Symbol(sym), list(args))
-        this.eval(Cons(cell))
+        // 构造 (sym value) 形式的调用
+        // 如果 value 是列表，需要用 quote 防止求值；否则直接使用
+        let quotedValue = if (value.isList()) {
+            // (quote value)
+            consValue(Symbol("quote"), consValue(value, Nil))
+        } else {
+            value
+        }
+        let args = consValue(quotedValue, Nil)
+        let expr = consValue(Symbol(sym), args)
+        this.eval(expr)
     }
 
     /**
@@ -327,19 +334,56 @@ extend Evaluator {
     func threadFirstList(fn: LispValue, restArgs: LispValue, value: LispValue): LispValue {
         let args = ArrayList<LispValue>()
 
-        // 先添加 restArgs 中的参数（需要求值）
-        var argCurrent: LispValue = restArgs
-        while (!argCurrent.isNil()) {
-            if (let Cons(argCell) <- argCurrent) {
-                args.add(this.eval(argCell.car))
-                argCurrent = argCell.cdr
-            } else {
-                break
-            }
+        // 检查函数名，某些函数需要特殊的参数顺序
+        let funcName = if (let Symbol(sym) <- fn) {
+            sym
+        } else {
+            ""
         }
 
-        // 添加 value（已经求值过了，直接使用）
-        args.add(value)
+        // 对于 map/filter/reduce/apply，参数顺序是 (func list ...others)
+        // 所以 value 应该在 restArgs 的函数参数之后添加
+        let needsSpecialOrder = funcName == "map" || funcName == "filter" || funcName == "reduce" || funcName == "apply"
+
+        if (needsSpecialOrder) {
+            // 先添加 restArgs 中的参数（第一个是函数，需要求值）
+            var argCurrent: LispValue = restArgs
+            while (!argCurrent.isNil()) {
+                if (let Cons(argCell) <- argCurrent) {
+                    args.add(this.eval(argCell.car))
+                    argCurrent = argCell.cdr
+                } else {
+                    break
+                }
+            }
+
+            // 再添加 value（如果 value 是列表，需要用 quote 防止求值）
+            if (value.isList()) {
+                args.add(consValue(Symbol("quote"), consValue(value, Nil)))
+            } else {
+                args.add(value)
+            }
+        } else {
+            // 默认顺序：value 在前面
+            // 先添加 value（已经求值过了，直接使用）
+            // 如果 value 是列表，需要用 quote 防止求值
+            if (value.isList()) {
+                args.add(consValue(Symbol("quote"), consValue(value, Nil)))
+            } else {
+                args.add(value)
+            }
+
+            // 再添加 restArgs 中的参数（需要求值）
+            var argCurrent: LispValue = restArgs
+            while (!argCurrent.isNil()) {
+                if (let Cons(argCell) <- argCurrent) {
+                    args.add(this.eval(argCell.car))
+                    argCurrent = argCell.cdr
+                } else {
+                    break
+                }
+            }
+        }
 
         let cell = ConsCell(fn, list(args))
         this.eval(Cons(cell))
