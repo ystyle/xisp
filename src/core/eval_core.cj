@@ -133,6 +133,16 @@ extend Evaluator {
                 }
             case NativeFunc(f) =>
                 let args = this.evalArguments(rest)
+                // 检查参数中是否有错误
+                for (arg in args) {
+                    match (arg) {
+                        case Str(s) =>
+                            if (s.startsWith("Error:")) {
+                                return arg
+                            }
+                        case _ => ()
+                    }
+                }
                 f(args)
             case _ => Nil
         }
