@@ -80,7 +80,7 @@ main(): Int64 {
     // 测试 5：传统嵌套点对解构
     println("测试 5：传统嵌套点对解构")
     println("代码: (let (((x . y) . z) '((1 2) 3 4)) (list x y z))")
-    println("期望: (1 2 (3 4))")
+    println("期望: (1 (2) (3 4))")
     let result5 = evalCode("(let (((x . y) . z) '((1 2) 3 4)) (list x y z))")
     println("结果: ${result5.toString()}")
     println()

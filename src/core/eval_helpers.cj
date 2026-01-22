@@ -190,8 +190,25 @@ extend Evaluator {
                         }
                         // 跳过下一个元素
                         current = if (let Cons(nextCell) <- currCell.cdr) { nextCell.cdr } else { currCell.cdr }
+                    } else if (binding.isDottedPair()) {
+                        // 传统点对绑定：((pattern . rest) value)
+                        // binding 本身是一个点对
+                        match (binding) {
+                            case Cons(bindingCell) =>
+                                let pattern = binding
+                                let valueExpr = if (let Cons(nextCell) <- currCell.cdr) { nextCell.car } else { currCell.cdr }
+                                let value = this.eval(valueExpr)
+
+                                match (pattern) {
+                                    case Symbol(name) => env.define(name, value)
+                                    case Cons(_) => this.destructurePattern(pattern, value, env)
+                                    case _ => ()
+                                }
+                            case _ => ()
+                        }
+                        current = currCell.cdr
                     } else {
-                        // 普通绑定
+                        // 普通绑定：(pattern value)
                         if (let Cons(bindingCell) <- binding) {
                             let pattern = bindingCell.car
                             let valueExpr = if (let Cons(cdrCell) <- bindingCell.cdr) { cdrCell.car } else { bindingCell.cdr }
