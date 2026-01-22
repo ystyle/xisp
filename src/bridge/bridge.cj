@@ -29,11 +29,32 @@ public class Bridge {
     }
 
     /**
-     * 批量注册 std.io 模块
+     * 批量注册 std.io 模块（无沙箱限制）
+     * @param env Lisp 环境
      */
     public static func registerStdIO(env: Environment) {
+        registerStdIO(env, None)
+    }
+
+    /**
+     * 批量注册 std.io 模块（带沙箱限制）
+     * @param env Lisp 环境
+     * @param pathChecker 可选的路径权限检查回调函数，接收 (路径, 是否写入) 返回是否允许
+     */
+    public static func registerStdIO(env: Environment, pathChecker: ?((String, Bool) -> Bool)) {
         // 文件读取
         registerFuncWithNS(env, "cangjie:io", "read-file", { args =>
+            // 沙箱检查
+            match (pathChecker) {
+                case Some(checker) =>
+                    if (args.size > 0 && let Str(path) <- args[0]) {
+                        if (!checker(path, false)) {
+                            return Str("Error: File read denied: ${path}")
+                        }
+                    }
+                case None => ()
+            }
+
             if (args.size > 0 && let Str(path) <- args[0]) {
                 try {
                     let bytes = File.readFrom(path)
@@ -51,6 +72,17 @@ public class Bridge {
 
         // 文件写入
         registerFuncWithNS(env, "cangjie:io", "write-file", { args =>
+            // 沙箱检查
+            match (pathChecker) {
+                case Some(checker) =>
+                    if (args.size > 0 && let Str(path) <- args[0]) {
+                        if (!checker(path, true)) {
+                            return Str("Error: File write denied: ${path}")
+                        }
+                    }
+                case None => ()
+            }
+
             if (args.size >= 2 && let Str(path) <- args[0] && let Str(content) <- args[1]) {
                 try {
                     // 如果文件已存在，先删除
@@ -74,6 +106,17 @@ public class Bridge {
 
         // 文件追加
         registerFuncWithNS(env, "cangjie:io", "append-file", { args =>
+            // 沙箱检查（append 也算写入）
+            match (pathChecker) {
+                case Some(checker) =>
+                    if (args.size > 0 && let Str(path) <- args[0]) {
+                        if (!checker(path, true)) {
+                            return Str("Error: File write denied: ${path}")
+                        }
+                    }
+                case None => ()
+            }
+
             if (args.size >= 2 && let Str(path) <- args[0] && let Str(content) <- args[1]) {
                 try {
                     File.appendTo(path, content.toArray())

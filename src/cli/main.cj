@@ -1,4 +1,6 @@
-package ystyle::xisp
+package ystyle::xisp.cli
+
+import ystyle::xisp.*
 
 main(): Int64 {
     // 默认配置：英文关键字，启用所有标准库

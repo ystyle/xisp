@@ -5,6 +5,10 @@ import ystyle::xisp.parser.*
 import ystyle::xisp.bridge.*
 import ystyle::xisp.repl.*
 import std.collection.ArrayList
+import std.sync.*
+import std.time.*
+import std.runtime.*
+import std.collection.HashSet
 
 /**
  * Lisp 解释器
@@ -37,6 +41,58 @@ public class LispInterpreter {
      */
     private var outputFn: (String) -> Unit = { s => println(s) }
 
+    // ==================== 沙箱安全字段 ====================
+
+    /**
+     * 是否启用沙箱
+     */
+    private var sandboxEnabled: Bool = false
+
+    /**
+     * 调用栈深度限制
+     */
+    private var maxStackDepth: Int64 = 1000
+
+    /**
+     * 执行超时限制
+     */
+    private var timeout: Option<Duration> = None
+
+    /**
+     * 内存限制（字节）
+     */
+    private var maxMemory: Option<Int64> = None
+
+    /**
+     * 初始内存（用于计算增量）
+     */
+    private var initialMemory: Int64 = 0
+
+    /**
+     * 禁止的函数集合（黑名单）
+     */
+    private var blockedFunctions: ArrayList<String> = ArrayList<String>()
+
+    /**
+     * 允许的函数集合（白名单，None 表示没有白名单）
+     */
+    private var allowedFunctions: Option<ArrayList<String>> = None
+
+    /**
+     * 是否允许文件写入
+     */
+    private var allowFileWrite: Bool = true
+
+    /**
+     * 允许的文件路径（白名单）
+     */
+    private var allowedPaths: ArrayList<String> = ArrayList<String>()
+
+    /**
+     * 当前执行的 Future（用于超时控制）
+     */
+    private var currentFuture: ?Future<LispValue> = None
+
     /**
      * 创建新的 Lisp 解释器实例（默认配置）
      */
@@ -44,6 +100,12 @@ public class LispInterpreter {
         this.env = Environment()
         this.evaluator = Evaluator(this.env)
         this.bridge = BridgeManager(this.env)
+
+        // 设置 bridge 的 interpreter 引用
+        this.bridge.setInterpreter(this)
+
+        // 设置函数权限检查回调
+        this.evaluator.setFuncChecker({ funcName => this.isFunctionAllowed(funcName) })
 
         // 注册内置函数
         BuiltinFunctions.registerAll(this.env)
@@ -151,6 +213,175 @@ public class LispInterpreter {
         this.outputFn = fn
     }
 
+    // ==================== 沙箱安全配置方法 ====================
+
+    /**
+     * 启用沙箱
+     */
+    public func enableSandbox() {
+        this.sandboxEnabled = true
+        if (this.verbose) {
+            this.outputFn("沙箱已启用")
+        }
+    }
+
+    /**
+     * 设置栈深度限制
+     */
+    public func setMaxStackDepth(depth: Int64) {
+        this.maxStackDepth = depth
+        this.evaluator.setMaxStackDepth(depth)  // 同步到 Evaluator
+        if (this.verbose) {
+            this.outputFn("栈深度限制设置为: ${depth}")
+        }
+    }
+
+    /**
+     * 设置超时
+     */
+    public func setTimeout(timeout: Option<Duration>) {
+        this.timeout = timeout
+        match (timeout) {
+            case Some(d) => this.outputFn("超时设置为: ${d}")
+            case None => this.outputFn("无超时限制")
+        }
+    }
+
+    /**
+     * 设置内存限制
+     */
+    public func setMaxMemory(bytes: Option<Int64>) {
+        this.maxMemory = bytes
+        match (bytes) {
+            case Some(b) => this.outputFn("内存限制设置为: ${b} 字节")
+            case None => ()
+        }
+    }
+
+    /**
+     * 禁止单个函数
+     */
+    public func blockFunction(funcName: String) {
+        this.blockedFunctions.add(funcName)
+        if (this.verbose) {
+            this.outputFn("禁止函数: ${funcName}")
+        }
+    }
+
+    /**
+     * 批量禁止函数
+     */
+    public func blockFunctions(funcNames: Array<String>) {
+        for (funcName in funcNames) {
+            this.blockedFunctions.add(funcName)
+        }
+        if (this.verbose) {
+            this.outputFn("禁止 ${funcNames.size} 个函数")
+        }
+    }
+
+    /**
+     * 设置函数白名单
+     */
+    public func setAllowedFunctions(funcNames: Array<String>) {
+        var list = ArrayList<String>()
+        for (funcName in funcNames) {
+            list.add(funcName)
+        }
+        this.allowedFunctions = Some(list)
+        if (this.verbose) {
+            this.outputFn("设置函数白名单: ${funcNames.size} 个函数")
+        }
+    }
+
+    /**
+     * 禁止文件写入
+     */
+    public func blockFileWrite() {
+        this.allowFileWrite = false
+        if (this.verbose) {
+            this.outputFn("禁止文件写入")
+        }
+    }
+
+    /**
+     * 设置允许的路径
+     */
+    public func setAllowedPaths(paths: Array<String>) {
+        for (path in paths) {
+            this.allowedPaths.add(path)
+        }
+        if (this.verbose) {
+            this.outputFn("设置允许路径: ${paths.size} 个")
+        }
+    }
+
+    /**
+     * 获取最大栈深度
+     */
+    public func getMaxStackDepth(): Int64 {
+        this.maxStackDepth
+    }
+
+    /**
+     * 检查函数是否允许调用
+     */
+    public func isFunctionAllowed(funcName: String): Bool {
+        // 先检查黑名单
+        for (blocked in this.blockedFunctions) {
+            if (blocked == funcName) {
+                return false
+            }
+        }
+
+        // 如果有白名单，检查白名单
+        match (this.allowedFunctions) {
+            case Some(allowed) =>
+                for (item in allowed) {
+                    if (item == funcName) {
+                        return true
+                    }
+                }
+                false
+            case None => true  // 没有白名单，都允许
+        }
+    }
+
+    /**
+     * 检查路径是否允许访问
+     */
+    public func isPathAllowed(path: String, isWrite: Bool): Bool {
+        // 检查写入权限
+        if (isWrite && !this.allowFileWrite) {
+            return false
+        }
+
+        // 如果有路径白名单，检查
+        if (this.allowedPaths.size > 0) {
+            for (allowedPath in this.allowedPaths) {
+                if (path.startsWith(allowedPath)) {
+                    return true
+                }
+            }
+            return false
+        }
+
+        return true
+    }
+
+    /**
+     * 检查内存限制
+     */
+    public func checkMemoryLimit(): Bool {
+        match (this.maxMemory) {
+            case Some(limit) =>
+                let currentMem = getAllocatedHeapSize()
+                let usedMem = currentMem - this.initialMemory
+                usedMem < limit
+            case None => true
+        }
+    }
+
     // ==================== 内部方法 ====================
 
     /**
@@ -176,20 +407,96 @@ public class LispInterpreter {
      * @return 求值结果，如果解析或求值失败返回 None
      */
     public func eval(code: String): LispValue {
-        try {
-            let lexer = Lexer(code)
-            let tokens = lexer.tokenize()
-            let parser = Parser(tokens)
-            let exprs = parser.parse()
+        // 如果启用沙箱，使用 evalInSandbox
+        if (this.sandboxEnabled) {
+            match (this.evalInSandboxInternal(code)) {
+                case Some(result) => result
+                case None => Nil
+            }
+        } else {
+            // 直接求值
+            try {
+                let lexer = Lexer(code)
+                let tokens = lexer.tokenize()
+                let parser = Parser(tokens)
+                let exprs = parser.parse()
 
-            if (exprs.size > 0) {
-                evaluator.eval(exprs[0])
-            } else {
+                if (exprs.size > 0) {
+                    // 执行所有表达式，返回最后一个结果
+                    var result: LispValue = Nil
+                    for (expr in exprs) {
+                        result = evaluator.eval(expr)
+                    }
+                    result
+                } else {
+                    Nil
+                }
+            } catch (e: Exception) {
+                println("Error: ${e.message}")
                 Nil
             }
+        }
+    }
+
+    /**
+     * 在沙箱中执行代码（使用线程超时）
+     * @param code Lisp 代码
+     * @return 执行结果，超时或错误返回 None
+     */
+    public func evalInSandboxInternal(code: String): ?LispValue {
+        // 记录初始内存
+        this.initialMemory = getAllocatedHeapSize()
+
+        // 在新线程中执行
+        let fut = spawn {
+            try {
+                let lexer = Lexer(code)
+                let tokens = lexer.tokenize()
+                let parser = Parser(tokens)
+                let exprs = parser.parse()
+
+                if (exprs.size > 0) {
+                    // 执行所有表达式，返回最后一个结果
+                    var result: LispValue = Nil
+                    for (expr in exprs) {
+                        result = evaluator.eval(expr)
+                    }
+                    result
+                } else {
+                    Nil
+                }
+            } catch (e: Exception) {
+                println("Sandbox error: ${e.message}")
+                Nil
+            }
+        }
+
+        this.currentFuture = Some(fut)
+
+        try {
+            match (this.timeout) {
+                case Some(duration) =>
+                    // 带超时等待
+                    let result = fut.get(duration)
+                    this.currentFuture = None
+                    Some(result)
+                case None =>
+                    // 无超时限制
+                    let result = fut.get()
+                    this.currentFuture = None
+                    Some(result)
+            }
         } catch (e: Exception) {
-            println("Error: ${e.message}")
-            Nil
+            // 超时或其他错误
+            match (this.currentFuture) {
+                case Some(_) =>
+                    // 尝试取消线程
+                    fut.cancel()
+                    this.outputFn("沙箱执行超时或被取消")
+                case None => ()
+            }
+            this.currentFuture = None
+            None
         }
     }
 
@@ -284,6 +591,7 @@ public class LispInterpreter {
 
         // 重新注册标准桥接函数
         this.bridge = BridgeManager(this.env)
+        this.bridge.setInterpreter(this)
         this.bridge.registerStdIO()
         this.bridge.registerStdFS()
 
@@ -297,9 +605,23 @@ public class LispInterpreter {
  */
 public class BridgeManager {
     private var env: Environment
+    private var interpreter: ?LispInterpreter  // 改为可选，避免循环依赖
 
     internal init(env: Environment) {
         this.env = env
+        this.interpreter = None
+    }
+
+    internal init(env: Environment, interpreter: LispInterpreter) {
+        this.env = env
+        this.interpreter = Some(interpreter)
+    }
+
+    /**
+     * 设置解释器引用
+     */
+    internal func setInterpreter(interpreter: LispInterpreter) {
+        this.interpreter = Some(interpreter)
     }
 
     /**
@@ -333,13 +655,23 @@ public class BridgeManager {
      * 批量注册 std.io 模块
      */
     public func registerStdIO(): Unit {
-        Bridge.registerStdIO(this.env)
+        // 创建路径权限检查回调
+        match (this.interpreter) {
+            case Some(interp) =>
+                let checker: (String, Bool) -> Bool = { path, isWrite =>
+                    interp.isPathAllowed(path, isWrite)
+                }
+                Bridge.registerStdIO(this.env, Some(checker))
+            case None =>
+                Bridge.registerStdIO(this.env)
+        }
     }
 
     /**
      * 批量注册 std.fs 模块
      */
     public func registerStdFS(): Unit {
+        // FS 模块暂时不需要权限检查，如果需要可以类似处理
         Bridge.registerStdFS(this.env)
     }
 }

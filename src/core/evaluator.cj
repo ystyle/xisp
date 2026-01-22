@@ -7,9 +7,27 @@ import std.collection.ArrayList
  */
 public class Evaluator {
     private var env: Environment
+    private var stackDepth: Int64 = 0
+    private var maxStackDepth: Int64 = 1000  // 默认栈深度限制
+    private var funcChecker: ?((String) -> Bool) = None  // 函数权限检查回调
 
     public init(env: Environment) {
         this.env = env
+    }
+
+    /**
+     * 设置最大栈深度
+     */
+    public func setMaxStackDepth(depth: Int64) {
+        this.maxStackDepth = depth
+    }
+
+    /**
+     * 设置函数权限检查回调
+     * @param checker 检查函数，返回 true 表示允许调用，false 表示禁止
+     */
+    public func setFuncChecker(checker: (String) -> Bool) {
+        this.funcChecker = Some(checker)
     }
 
     /**
@@ -43,6 +61,27 @@ public class Evaluator {
             return Nil
         }
 
+        // 沙箱检查：栈深度
+        if (this.stackDepth > this.maxStackDepth) {
+            return Str("Error: Maximum stack depth exceeded (limit: ${this.maxStackDepth})")
+        }
+
+        // 增加栈深度
+        this.stackDepth = this.stackDepth + 1
+
+        // 执行求值
+        let result = this.evalListInternal(cell)
+
+        // 减少栈深度
+        this.stackDepth = this.stackDepth - 1
+
+        result
+    }
+
+    /**
+     * evalList 的内部实现（不管理栈深度）
+     */
+    private func evalListInternal(cell: ConsCell): LispValue {
         let first = cell.car
         let rest = cell.cdr
 
@@ -471,6 +510,19 @@ public class Evaluator {
      * 函数调用
      */
     private func evalFunctionCall(first: LispValue, rest: LispValue): LispValue {
+        // 检查函数权限（如果是符号）
+        match (first) {
+            case Symbol(funcName) =>
+                match (this.funcChecker) {
+                    case Some(checker) =>
+                        if (!checker(funcName)) {
+                            return Str("Error: Function '${funcName}' is not allowed")
+                        }
+                    case None => ()
+                }
+            case _ => ()
+        }
+
         // 求值函数
         let funcValue = this.eval(first)
 

@@ -263,7 +263,7 @@ public open class ConsCell {
  *
  * 支持递归定义，可以包含 ConsCell（它又包含 LispValue）
  */
-public enum LispValue {
+public enum LispValue <: ToString {
     /**
      * 空值
      */

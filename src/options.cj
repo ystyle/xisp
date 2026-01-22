@@ -194,3 +194,163 @@ public func withDebugMode(): InterpreterOption {
 public func withOutputFn(fn: (String) -> Unit): InterpreterOption {
     { interpreter => interpreter.setOutputFn(fn) }
 }
+
+// ==================== 沙箱安全选项 ====================
+
+/**
+ * 启用沙箱模式（严格安全）
+ *
+ * 限制：
+ * - 调用栈深度：500
+ * - 执行时间：30 秒
+ * - 禁止文件写入
+ * - 禁止危险函数（eval, apply）
+ *
+ * 示例：
+ * ```cangjie
+ * let interpreter = LispInterpreter([
+ *     withSandbox(),
+ *     withStdIO()  // 但会被沙箱限制
+ * ])
+ * ```
+ */
+public func withSandbox(): InterpreterOption {
+    { interpreter =>
+        interpreter.enableSandbox()
+        interpreter.setMaxStackDepth(500)
+        interpreter.setTimeout(Some(Duration.second * 30))
+        interpreter.blockFileWrite()
+        interpreter.blockFunctions(["eval", "apply"])
+    }
+}
+
+/**
+ * 沙箱 - 懒惰模式（开发调试）
+ *
+ * 限制：
+ * - 调用栈深度：5000
+ * - 无执行时间限制
+ * - 允许文件读写
+ *
+ * 示例：
+ * ```cangjie
+ * let interpreter = LispInterpreter([
+ *     withSandboxLenient()
+ * ])
+ * ```
+ */
+public func withSandboxLenient(): InterpreterOption {
+    { interpreter =>
+        interpreter.enableSandbox()
+        interpreter.setMaxStackDepth(5000)
+        interpreter.setTimeout(None)
+    }
+}
+
+/**
+ * 设置执行超时
+ * @param timeout 超时时间，None 表示无限制
+ *
+ * 示例：
+ * ```cangjie
+ * let interpreter = LispInterpreter([
+ *     withTimeout(Some(Duration.second * 10))
+ * ])
+ * ```
+ */
+public func withTimeout(timeout: Option<Duration>): InterpreterOption {
+    { interpreter => interpreter.setTimeout(timeout) }
+}
+
+/**
+ * 设置调用栈深度限制
+ * @param depth 最大栈深度，默认 1000
+ *
+ * 示例：
+ * ```cangjie
+ * let interpreter = LispInterpreter([
+ *     withMaxStackDepth(2000)
+ * ])
+ * ```
+ */
+public func withMaxStackDepth(depth: Int64): InterpreterOption {
+    { interpreter => interpreter.setMaxStackDepth(depth) }
+}
+
+/**
+ * 设置内存限制
+ * @param bytes 最大内存（字节），None 表示无限制
+ *
+ * 示例：
+ * ```cangjie
+ * let interpreter = LispInterpreter([
+ *     withMaxMemory(Some(100 * 1024 * 1024))  // 100MB
+ * ])
+ * ```
+ */
+public func withMaxMemory(bytes: Option<Int64>): InterpreterOption {
+    { interpreter => interpreter.setMaxMemory(bytes) }
+}
+
+/**
+ * 禁止指定函数（黑名单）
+ * @param funcNames 函数名列表
+ *
+ * 示例：
+ * ```cangjie
+ * let interpreter = LispInterpreter([
+ *     withBlockedFunctions(["eval", "apply", "load"])
+ * ])
+ * ```
+ */
+public func withBlockedFunctions(funcNames: Array<String>): InterpreterOption {
+    { interpreter =>
+        for (funcName in funcNames) {
+            interpreter.blockFunction(funcName)
+        }
+    }
+}
+
+/**
+ * 只允许指定函数（白名单）
+ * @param funcNames 函数名列表
+ *
+ * 示例：
+ * ```cangjie
+ * let interpreter = LispInterpreter([
+ *     withAllowedFunctions(["+", "-", "*", "/", "println"])
+ * ])
+ * ```
+ */
+public func withAllowedFunctions(funcNames: Array<String>): InterpreterOption {
+    { interpreter => interpreter.setAllowedFunctions(funcNames) }
+}
+
+/**
+ * 禁止文件写入
+ *
+ * 示例：
+ * ```cangjie
+ * let interpreter = LispInterpreter([
+ *     withNoFileWrite()
+ * ])
+ * ```
+ */
+public func withNoFileWrite(): InterpreterOption {
+    { interpreter => interpreter.blockFileWrite() }
+}
+
+/**
+ * 限制文件访问路径（白名单）
+ * @param paths 允许的路径前缀
+ *
+ * 示例：
+ * ```cangjie
+ * let interpreter = LispInterpreter([
+ *     withAllowedPaths(["/tmp/", "./user-data/"])
+ * ])
+ * ```
+ */
+public func withAllowedPaths(paths: Array<String>): InterpreterOption {
+    { interpreter => interpreter.setAllowedPaths(paths) }
+}
