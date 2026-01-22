@@ -1,5 +1,7 @@
 package ystyle::xisp.core
 
+import std.collection.ArrayList
+
 /**
  * 列表操作扩展
  * 包含 cons, car, cdr, list, length 等列表操作
@@ -54,31 +56,34 @@ extend BuiltinFunctions {
 
         // (append list1 list2 ...) - 连接多个列表
         env.define("append", NativeFunc({ args =>
-            // 从后往前构建结果列表
-            var result: LispValue = Nil
-            var i = args.size - 1
-            while (i >= 0) {
+            // 从前往后收集所有元素
+            var elements = ArrayList<LispValue>()
+            var i = 0
+            while (i < args.size) {
                 let lst = args[i]
                 match (lst) {
                     case Cons(cell) =>
-                        // 遍历列表，将每个元素添加到结果前面
                         var current: LispValue = Cons(cell)
                         while (!current.isNil()) {
                             if (let Cons(currCell) <- current) {
-                                result = consValue(currCell.car, result)
+                                elements.add(currCell.car)
                                 current = currCell.cdr
                             } else {
                                 break
                             }
                         }
-                    case Nil =>
-                        // 空列表，跳过
-                        ()
-                    case _ =>
-                        // 非列表参数，忽略或返回错误
-                        return Nil
+                    case Nil => ()
+                    case _ => return Nil
                 }
-                i = i - 1
+                i = i + 1
+            }
+
+            // 构建列表（从 ArrayList 的末尾开始，保持顺序）
+            var result: LispValue = Nil
+            var j = elements.size - 1
+            while (j >= 0) {
+                result = consValue(elements[j], result)
+                j = j - 1
             }
             result
         }))

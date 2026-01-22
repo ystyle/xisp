@@ -60,29 +60,44 @@ extend BuiltinFunctions {
             Number(total)
         }))
 
-        // (max lst) - 最大值
+        // (max lst) - 最大值，支持两种调用方式：
+        // - (max '(1 2 3)) - 传入列表
+        // - (apply max '(1 2 3)) - 通过 apply 传入多个参数
         env.define("max", NativeFunc({ args =>
-            if (args.size != 1) {
-                return Nil
-            }
-
             var maxValue: ?Float64 = None
-            if (let Cons(cell) <- args[0]) {
-                var current: LispValue = Cons(cell)
-                while (!current.isNil()) {
-                    if (let Cons(currCell) <- current) {
-                        if (let Number(n) <- currCell.car) {
-                            if (let Some(m) <- maxValue) {
-                                if (n > m) {
+
+            // 情况 1: 单个列表参数 (max '(1 2 3))
+            if (args.size == 1) {
+                if (let Cons(cell) <- args[0]) {
+                    var current: LispValue = Cons(cell)
+                    while (!current.isNil()) {
+                        if (let Cons(currCell) <- current) {
+                            if (let Number(n) <- currCell.car) {
+                                if (let Some(m) <- maxValue) {
+                                    if (n > m) {
+                                        maxValue = Some(n)
+                                    }
+                                } else {
                                     maxValue = Some(n)
                                 }
-                            } else {
+                            }
+                            current = currCell.cdr
+                        } else {
+                            break
+                        }
+                    }
+                }
+            } else {
+                // 情况 2: 多个参数 (apply max '(1 2 3)) -> args = [1, 2, 3]
+                for (arg in args) {
+                    if (let Number(n) <- arg) {
+                        if (let Some(m) <- maxValue) {
+                            if (n > m) {
                                 maxValue = Some(n)
                             }
+                        } else {
+                            maxValue = Some(n)
                         }
-                        current = currCell.cdr
-                    } else {
-                        break
                     }
                 }
             }
@@ -94,29 +109,44 @@ extend BuiltinFunctions {
             }
         }))
 
-        // (min lst) - 最小值
+        // (min lst) - 最小值，支持两种调用方式：
+        // - (min '(1 2 3)) - 传入列表
+        // - (apply min '(1 2 3)) - 通过 apply 传入多个参数
         env.define("min", NativeFunc({ args =>
-            if (args.size != 1) {
-                return Nil
-            }
-
             var minValue: ?Float64 = None
-            if (let Cons(cell) <- args[0]) {
-                var current: LispValue = Cons(cell)
-                while (!current.isNil()) {
-                    if (let Cons(currCell) <- current) {
-                        if (let Number(n) <- currCell.car) {
-                            if (let Some(m) <- minValue) {
-                                if (n < m) {
+
+            // 情况 1: 单个列表参数 (min '(1 2 3))
+            if (args.size == 1) {
+                if (let Cons(cell) <- args[0]) {
+                    var current: LispValue = Cons(cell)
+                    while (!current.isNil()) {
+                        if (let Cons(currCell) <- current) {
+                            if (let Number(n) <- currCell.car) {
+                                if (let Some(m) <- minValue) {
+                                    if (n < m) {
+                                        minValue = Some(n)
+                                    }
+                                } else {
                                     minValue = Some(n)
                                 }
-                            } else {
+                            }
+                            current = currCell.cdr
+                        } else {
+                            break
+                        }
+                    }
+                }
+            } else {
+                // 情况 2: 多个参数 (apply min '(1 2 3)) -> args = [1, 2, 3]
+                for (arg in args) {
+                    if (let Number(n) <- arg) {
+                        if (let Some(m) <- minValue) {
+                            if (n < m) {
                                 minValue = Some(n)
                             }
+                        } else {
+                            minValue = Some(n)
                         }
-                        current = currCell.cdr
-                    } else {
-                        break
                     }
                 }
             }

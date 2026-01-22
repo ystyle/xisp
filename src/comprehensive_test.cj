@@ -378,4 +378,82 @@ class ComprehensiveTest {
             case _ => @Fail("Nested dot-pair destruct should return a list")
         }
     }
+
+    @TestCase
+    func testMaxMinWithApply() {
+        println("\n=== 测试 max/min 支持 apply ===")
+        let env = Environment()
+        BuiltinFunctions.registerAll(env)
+        Bridge.registerStdCollection(env)
+        let evaluator = Evaluator(env)
+
+        // 测试直接调用 max
+        let expr1 = Parser.parseSingleFromString("(max (quote (1 2 3 4 5)))")
+        let result1 = evaluator.eval(expr1)
+        println("max '(1 2 3 4 5) result: ${result1.toString()}")
+        match (result1) {
+            case Number(n) => @Assert(n == 5.0)
+            case _ => @Fail("max should return Number 5.0")
+        }
+
+        // 测试 apply max
+        let expr2 = Parser.parseSingleFromString("(apply max (quote (1 2 3 4 5)))")
+        let result2 = evaluator.eval(expr2)
+        println("apply max result: ${result2.toString()}")
+        match (result2) {
+            case Number(n) => @Assert(n == 5.0)
+            case _ => @Fail("apply max should return Number 5.0")
+        }
+
+        // 测试直接调用 min
+        let expr3 = Parser.parseSingleFromString("(min (quote (1 2 3 4 5)))")
+        let result3 = evaluator.eval(expr3)
+        println("min '(1 2 3 4 5) result: ${result3.toString()}")
+        match (result3) {
+            case Number(n) => @Assert(n == 1.0)
+            case _ => @Fail("min should return Number 1.0")
+        }
+
+        // 测试 apply min
+        let expr4 = Parser.parseSingleFromString("(apply min (quote (1 2 3 4 5)))")
+        let result4 = evaluator.eval(expr4)
+        println("apply min result: ${result4.toString()}")
+        match (result4) {
+            case Number(n) => @Assert(n == 1.0)
+            case _ => @Fail("apply min should return Number 1.0")
+        }
+    }
+
+    @TestCase
+    func testAppendOrder() {
+        println("\n=== 测试 append 顺序 ===")
+        let env = Environment()
+        BuiltinFunctions.registerAll(env)
+        Bridge.registerStdCollection(env)
+        let evaluator = Evaluator(env)
+
+        // 测试基本 append 的顺序
+        let expr1 = Parser.parseSingleFromString("(append (quote (1 2)) (quote (3 4)))")
+        let result1 = evaluator.eval(expr1)
+        println("append '(1 2) '(3 4) result: ${result1.toString()}")
+        match (result1) {
+            case Cons(cell) => match (cell.car) {
+                case Number(n) => @Assert(n == 1.0)
+                case _ => @Fail("first element should be 1.0")
+            }
+            case _ => @Fail("append should return a list")
+        }
+
+        // 测试 apply append 的顺序
+        let expr2 = Parser.parseSingleFromString("(apply append (quote ((1 2) (3 4) (5 6))))")
+        let result2 = evaluator.eval(expr2)
+        println("apply append result: ${result2.toString()}")
+        match (result2) {
+            case Cons(cell) => match (cell.car) {
+                case Number(n) => @Assert(n == 1.0)
+                case _ => @Fail("first element should be 1.0")
+            }
+            case _ => @Fail("apply append should return a list")
+        }
+    }
 }
