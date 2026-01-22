@@ -55,7 +55,7 @@ Lisp 语法、语义和现代化特性：
 2. 查看 [src/examples/](../src/examples/) 运行示例代码
 3. 参考 [选项系统](integration/options_system.md) 配置解释器
 
-### 国际化开发者
+### 国际化
 
 1. 阅读 [中文快速开始](unicode/chinese_quickstart.md)
 2. 查看 [examples/chinese_demo.lisp](../examples/chinese_demo.lisp)
