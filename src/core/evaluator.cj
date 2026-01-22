@@ -71,6 +71,12 @@ public class Evaluator {
                     return this.evalApply(rest)
                 } else if (actualSym == "->") {
                     return this.evalThreadFirst(rest)
+                } else if (actualSym == "map") {
+                    return this.evalMap(rest)
+                } else if (actualSym == "filter") {
+                    return this.evalFilter(rest)
+                } else if (actualSym == "reduce") {
+                    return this.evalReduce(rest)
                 } else {
                     // 函数调用：使用映射后的符号
                     // 如果符号被映射（如 "打印" -> "println"），使用映射后的符号
@@ -716,5 +722,144 @@ public class Evaluator {
         }
 
         result
+    }
+
+    /**
+     * 特殊形式：map
+     * (map func list) - 对列表中每个元素应用函数，支持 lambda
+     */
+    private func evalMap(expr: LispValue): LispValue {
+        if (let Cons(cell) <- expr && cell.length() == 2) {
+            let funcValue = this.eval(cell.car)
+
+            // 提取列表参数
+            let lst = if (let Cons(cdrCell) <- cell.cdr) {
+                this.eval(cdrCell.car)
+            } else {
+                Nil
+            }
+
+            var result = ArrayList<LispValue>()
+            var current: LispValue = lst
+
+            while (!current.isNil()) {
+                if (let Cons(currCell) <- current) {
+                    let args = ArrayList<LispValue>()
+                    args.add(currCell.car)
+
+                    // 应用函数（支持 Procedure 和 NativeFunc）
+                    let mapped = match (funcValue) {
+                        case Procedure(_, _, _) => this.applyProcedure(funcValue, args)
+                        case NativeFunc(f) => f(args)
+                        case _ => Nil
+                    }
+                    result.add(mapped)
+                    current = currCell.cdr
+                } else {
+                    break
+                }
+            }
+
+            list(result)
+        } else {
+            Nil
+        }
+    }
+
+    /**
+     * 特殊形式：filter
+     * (filter pred list) - 过滤列表，支持 lambda
+     */
+    private func evalFilter(expr: LispValue): LispValue {
+        if (let Cons(cell) <- expr && cell.length() == 2) {
+            let pred = this.eval(cell.car)
+
+            // 提取列表参数
+            let lst = if (let Cons(cdrCell) <- cell.cdr) {
+                this.eval(cdrCell.car)
+            } else {
+                Nil
+            }
+
+            var result = ArrayList<LispValue>()
+            var current: LispValue = lst
+
+            while (!current.isNil()) {
+                if (let Cons(currCell) <- current) {
+                    let args = ArrayList<LispValue>()
+                    args.add(currCell.car)
+
+                    // 应用谓词函数
+                    let testResult = match (pred) {
+                        case Procedure(_, _, _) => this.applyProcedure(pred, args)
+                        case NativeFunc(f) => f(args)
+                        case _ => Boolean(false)
+                    }
+
+                    if (testResult.isTruthy()) {
+                        result.add(currCell.car)
+                    }
+                    current = currCell.cdr
+                } else {
+                    break
+                }
+            }
+
+            list(result)
+        } else {
+            Nil
+        }
+    }
+
+    /**
+     * 特殊形式：reduce
+     * (reduce func init list) - 归约操作，支持 lambda
+     */
+    private func evalReduce(expr: LispValue): LispValue {
+        if (let Cons(cell) <- expr && cell.length() == 3) {
+            let funcValue = this.eval(cell.car)
+
+            // 提取初始值
+            var acc = if (let Cons(cdrCell) <- cell.cdr) {
+                this.eval(cdrCell.car)
+            } else {
+                Nil
+            }
+
+            // 提取列表
+            let lst = if (let Cons(cdrCell) <- cell.cdr) {
+                if (let Cons(cdr2Cell) <- cdrCell.cdr) {
+                    this.eval(cdr2Cell.car)
+                } else {
+                    Nil
+                }
+            } else {
+                Nil
+            }
+
+            var current: LispValue = lst
+
+            while (!current.isNil()) {
+                if (let Cons(currCell) <- current) {
+                    let args = ArrayList<LispValue>()
+                    args.add(acc)
+                    args.add(currCell.car)
+
+                    // 应用函数
+                    acc = match (funcValue) {
+                        case Procedure(_, _, _) => this.applyProcedure(funcValue, args)
+                        case NativeFunc(f) => f(args)
+                        case _ => acc
+                    }
+                    current = currCell.cdr
+                } else {
+                    break
+                }
+            }
+
+            acc
+        } else {
+            Nil
+        }
     }
 }
