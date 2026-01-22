@@ -158,10 +158,41 @@ public class Bridge {
     }
 
     /**
+     * 批量注册 std.collection 模块（现代化语法支持）
+     */
+    public static func registerStdCollection(env: Environment) {
+        // 向量字面量 [1 2 3] → list
+        registerFuncWithNS(env, "cangjie", "vector", { args =>
+            // 直接返回列表形式的向量
+            list(args)
+        })
+
+        // 哈希映射字面量 {:a 1 :b 2} → alist (关联列表)
+        registerFuncWithNS(env, "cangjie", "hashmap", { args =>
+            // 转换为关联列表 ((key1 . val1) (key2 . val2) ...)
+            let result = ArrayList<LispValue>()
+            var i = 0
+            while (i < args.size - 1) {
+                let pair = consValue(args[i], consValue(args[i + 1], Nil))
+                result.add(pair)
+                i = i + 2
+            }
+            list(result)
+        })
+
+        // 哈希集合字面量 #{1 2 3} → list (列表形式)
+        registerFuncWithNS(env, "cangjie", "hashset", { args =>
+            // 返回列表形式（暂时不去重，后续可以实现去重）
+            list(args)
+        })
+    }
+
+    /**
      * 注册所有桥接函数
      */
     public static func registerAll(env: Environment) {
         registerStdIO(env)
         registerStdFS(env)
+        registerStdCollection(env)  // 注册现代化语法支持
     }
 }

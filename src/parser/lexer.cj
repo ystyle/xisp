@@ -144,8 +144,8 @@ public class Lexer {
         r == r'_' || r == r'+' || r == r'-' || r == r'*' || r == r'/' ||
         r == r'<' || r == r'>' || r == r'=' || r == r'!' || r == r'?' ||
         r == r'%' || r == r'$' || r == r'#' || r == r'@' || r == r':' ||
-        r == r'[' || r == r']' ||
         r.isAsciiNumber() || r.isLetter()  // 使用 isLetter() 支持 Unicode（包括中文）
+        // 移除了 []{} 因为它们是独立的 token
     }
 
     /**
@@ -238,6 +238,42 @@ public class Lexer {
                 Token.Quote
             } else if (r == r'"') {
                 this.readString()
+            } else if (r == r'[') {
+                this.advance()
+                Token.VectorStart
+            } else if (r == r']') {
+                this.advance()
+                Token.VectorEnd
+            } else if (r == r'{') {
+                this.advance()
+                Token.HashMapStart
+            } else if (r == r'}') {
+                this.advance()
+                Token.HashMapEnd
+            } else if (r == r'#') {
+                this.advance()
+                // 检查下一个字符
+                if (let Some(nextR) <- this.peek()) {
+                    if (nextR == r'{') {
+                        this.advance()
+                        Token.HashSetStart
+                    } else if (nextR == r'"') {
+                        this.advance()
+                        Token.InterpolateString
+                    } else if (nextR == r't' || nextR == r'f') {
+                        // 布尔值 #t #f 或 #true #false
+                        this.pos = this.pos - 1  // 回退到 #
+                        this.readSymbol()
+                    } else {
+                        // 其他情况，将 # 和后续字符作为符号
+                        this.pos = this.pos - 1  // 回退
+                        this.readSymbol()
+                    }
+                } else {
+                    // 只有 #，作为符号
+                    this.pos = this.pos - 1
+                    this.readSymbol()
+                }
             } else if (r.isAsciiNumber()) {
                 this.readNumber()
             } else if (r == r'-') {

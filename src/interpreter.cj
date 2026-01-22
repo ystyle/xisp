@@ -51,6 +51,7 @@ public class LispInterpreter {
         // 注册标准桥接函数
         this.bridge.registerStdIO()
         this.bridge.registerStdFS()
+        Bridge.registerStdCollection(this.env)  // 注册现代化语法支持
     }
 
     /**

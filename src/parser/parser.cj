@@ -106,6 +106,12 @@ public class Parser {
             consValue(Symbol("quote"), consValue(expr, Nil))
         } else if (token == Token.LeftParen) {
             this.parseList()
+        } else if (token == Token.VectorStart) {
+            this.parseVector()
+        } else if (token == Token.HashMapStart) {
+            this.parseHashMap()
+        } else if (token == Token.HashSetStart) {
+            this.parseHashSet()
         } else {
             this.parseAtom()
         }
@@ -151,6 +157,123 @@ public class Parser {
             let rest = this.parseListBody()
             consValue(first, rest)
         }
+    }
+
+    /**
+     * 解析向量
+     * [1 2 3] → (cangjie:vector 1 2 3)
+     */
+    private func parseVector(): LispValue {
+        this.advance()  // 消费 VectorStart [
+
+        // 收集所有元素
+        let elements = ArrayList<LispValue>()
+        while (this.peek() != Token.VectorEnd && this.peek() != Token.EOF) {
+            elements.add(this.parseExpression())
+        }
+
+        if (this.peek() == Token.VectorEnd) {
+            this.advance()  // 消费 VectorEnd ]
+        }
+
+        // 创建 (cangjie:vector elem1 elem2 ...)
+        let result = consValue(Symbol("cangjie:vector"), Nil)
+        var current = result
+        for (elem in elements) {
+            let newCell = Cons(ConsCell(elem, Nil))
+            match (current) {
+                case Cons(cell) => cell.cdr = newCell
+                case _ => ()
+            }
+            current = newCell
+        }
+
+        result
+    }
+
+    /**
+     * 解析哈希映射
+     * {:a 1 :b 2} → (cangjie:hashmap (quote :a) 1 (quote :b) 2)
+     *
+     * 注意：键（特别是符号）需要被 quote，防止被求值为 nil
+     */
+    private func parseHashMap(): LispValue {
+        this.advance()  // 消费 HashMapStart {
+
+        // 收集所有键值对
+        let pairs = ArrayList<LispValue>()
+        var isKey = true
+        while (this.peek() != Token.HashMapEnd && this.peek() != Token.EOF) {
+            let expr = this.parseExpression()
+            // 对键进行 quote，防止符号被求值为 nil
+            if (isKey) {
+                // 创建 (quote expr)
+                let quotedExpr = consValue(Symbol("quote"), consValue(expr, Nil))
+                pairs.add(quotedExpr)
+            } else {
+                pairs.add(expr)
+            }
+            isKey = !isKey  // 切换键/值状态
+        }
+
+        if (this.peek() == Token.HashMapEnd) {
+            this.advance()  // 消费 HashMapEnd }
+        }
+
+        // 创建 (cangjie:hashmap (quote key1) val1 (quote key2) val2 ...)
+        let result = consValue(Symbol("cangjie:hashmap"), Nil)
+        var current = result
+        for (pair in pairs) {
+            let newCell = Cons(ConsCell(pair, Nil))
+            match (current) {
+                case Cons(cell) => cell.cdr = newCell
+                case _ => ()
+            }
+            current = newCell
+        }
+
+        result
+    }
+
+    /**
+     * 解析哈希集合
+     * #{1 2 3} → (cangjie:hashset 1 2 3)
+     * #{:red :green} → (cangjie:hashset (quote :red) (quote :green))
+     *
+     * 注意：符号元素需要被 quote，防止被求值为 nil
+     */
+    private func parseHashSet(): LispValue {
+        this.advance()  // 消费 HashSetStart #{
+
+        // 收集所有元素
+        let elements = ArrayList<LispValue>()
+        while (this.peek() != Token.HashMapEnd && this.peek() != Token.EOF) {
+            let expr = this.parseExpression()
+            // 对符号元素进行 quote，防止被求值为 nil
+            let finalExpr = match (expr) {
+                case Symbol(s) => consValue(Symbol("quote"), consValue(expr, Nil))  // quote 符号
+                case _ => expr  // 非符号直接使用
+            }
+            elements.add(finalExpr)
+        }
+
+        if (this.peek() == Token.HashMapEnd) {
+            this.advance()  // 消费 HashMapEnd }
+        }
+
+        // 创建 (cangjie:hashset elem1 elem2 ...)
+        let result = consValue(Symbol("cangjie:hashset"), Nil)
+        var current = result
+        for (elem in elements) {
+            let newCell = Cons(ConsCell(elem, Nil))
+            match (current) {
+                case Cons(cell) => cell.cdr = newCell
+                case _ => ()
+            }
+            current = newCell
+        }
+
+        result
     }
 
     /**

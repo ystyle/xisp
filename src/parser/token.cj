@@ -47,6 +47,36 @@ public enum Token <: Equatable<Token> {
     | Boolean(Bool)
 
     /**
+     * 向量开始 [
+     */
+    | VectorStart
+
+    /**
+     * 向量结束 ]
+     */
+    | VectorEnd
+
+    /**
+     * 哈希集合开始 #{
+     */
+    | HashSetStart
+
+    /**
+     * 哈希映射开始 {
+     */
+    | HashMapStart
+
+    /**
+     * 哈希映射结束 }
+     */
+    | HashMapEnd
+
+    /**
+     * 字符串插值标记 #"
+     */
+    | InterpolateString
+
+    /**
      * 文件结束
      */
     | EOF
@@ -64,6 +94,12 @@ public enum Token <: Equatable<Token> {
             case (Number(n1), Number(n2)) => n1 == n2
             case (String(s1), String(s2)) => s1 == s2
             case (Boolean(b1), Boolean(b2)) => b1 == b2
+            case (VectorStart, VectorStart) => true
+            case (VectorEnd, VectorEnd) => true
+            case (HashSetStart, HashSetStart) => true
+            case (HashMapStart, HashMapStart) => true
+            case (HashMapEnd, HashMapEnd) => true
+            case (InterpolateString, InterpolateString) => true
             case (EOF, EOF) => true
             case _ => false
         }
@@ -82,6 +118,12 @@ public enum Token <: Equatable<Token> {
             case Number(n) => "<number: ${n}>"
             case String(s) => "<string: \"${s}\">"
             case Boolean(b) => if (b) { "#t" } else { "#f" }
+            case VectorStart => "["
+            case VectorEnd => "]"
+            case HashSetStart => "#{"
+            case HashMapStart => "{"
+            case HashMapEnd => "}"
+            case InterpolateString => "#\""
             case EOF => "<EOF>"
         }
     }
