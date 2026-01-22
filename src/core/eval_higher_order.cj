@@ -226,7 +226,19 @@ extend Evaluator {
 
         while (!current.isNil()) {
             if (let Cons(cell) <- current) {
-                result.add(this.eval(cell.car))
+                let evaluated = this.eval(cell.car)
+                // 检查是否有错误
+                match (evaluated) {
+                    case Str(s) =>
+                        if (s.startsWith("Error:")) {
+                            // 返回包含错误的结果（这里不能用 ArrayList，所以先添加）
+                            result.add(evaluated)
+                            return result
+                        } else {
+                            result.add(evaluated)
+                        }
+                    case _ => result.add(evaluated)
+                }
                 current = cell.cdr
             } else {
                 break
@@ -242,6 +254,12 @@ extend Evaluator {
     func applyProcedure(procValue: LispValue, args: ArrayList<LispValue>): LispValue {
         match (procValue) {
             case Procedure(params, body, procEnv) =>
+                // 检查栈深度（在增加之前检查）
+                if (this.stackDepth >= this.maxStackDepth) {
+                    return Str("Error: Maximum stack depth exceeded (limit: ${this.maxStackDepth})")
+                }
+
+                this.stackDepth = this.stackDepth + 1
                 let newEnv = procEnv.createChild()
 
                 for (i in 0..params.size) {
@@ -256,6 +274,7 @@ extend Evaluator {
                 let result = this.evalBegin(body)
 
                 this.env = oldEnv
+                this.stackDepth = this.stackDepth - 1
 
                 result
             case _ => Nil

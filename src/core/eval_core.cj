@@ -110,7 +110,27 @@ extend Evaluator {
         match (funcValue) {
             case Procedure(_, _, _) =>
                 let args = this.evalArguments(rest)
-                this.applyProcedure(funcValue, args)
+                // 检查参数中是否有错误
+                for (arg in args) {
+                    match (arg) {
+                        case Str(s) =>
+                            if (s.startsWith("Error:")) {
+                                return arg
+                            }
+                        case _ => ()
+                    }
+                }
+                let result = this.applyProcedure(funcValue, args)
+                // 检查是否返回错误
+                match (result) {
+                    case Str(s) =>
+                        if (s.startsWith("Error:")) {
+                            result  // 传播错误
+                        } else {
+                            result
+                        }
+                    case _ => result
+                }
             case NativeFunc(f) =>
                 let args = this.evalArguments(rest)
                 f(args)
