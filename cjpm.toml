@@ -42,3 +42,6 @@ output-type = "executable"
 
 [package.package-configuration."ystyle::xisp.examples.guard_test"]
 output-type = "executable"
+
+[package.package-configuration."ystyle::xisp.examples.quick_test"]
+output-type = "executable"

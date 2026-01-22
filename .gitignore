@@ -1,6 +1,7 @@
 target
 .claude
 .cache
+.vscode
 xisp
 test.sh
 *.cj.macrocall
