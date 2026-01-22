@@ -185,6 +185,39 @@ public class Bridge {
             // 返回列表形式（暂时不去重，后续可以实现去重）
             list(args)
         })
+
+        // 字符串插值 #"Hello #{name}" → 拼接字符串
+        registerFuncWithNS(env, "cangjie", "interpolate", { args =>
+            // 将所有参数转换为字符串并拼接
+            var result = ""
+            for (arg in args) {
+                result += argToStringForInterpolation(arg)
+            }
+            Str(result)
+        })
+    }
+
+    /**
+     * 将 LispValue 转换为字符串用于插值
+     * 字符串类型直接返回内容，其他类型转换为字符串并去掉引号
+     */
+    private static func argToStringForInterpolation(arg: LispValue): String {
+        match (arg) {
+            case Str(s) => s
+            case _ => removeQuotesFromString(arg.toString())
+        }
+    }
+
+    /**
+     * 去掉字符串两端的引号
+     */
+    private static func removeQuotesFromString(str: String): String {
+        if (str.startsWith("\"") && str.endsWith("\"") && str.size > 1) {
+            let runes = str.toRuneArray()
+            String(runes[1..runes.size - 1])
+        } else {
+            str
+        }
     }
 
     /**

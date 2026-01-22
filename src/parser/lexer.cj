@@ -218,6 +218,104 @@ public class Lexer {
     }
 
     /**
+     * 读取插值字符串
+     * 格式：#"text #{expr} more text"
+     * 返回包含字符串片段和插值表达式的标记列表
+     */
+    private func readInterpolateString(): Token {
+        this.advance()  // 跳过开始的 '"'
+
+        var parts = ArrayList<String>()
+        var hasInterpolation = false
+
+        while (let Some(r) <- this.peek()) {
+            if (r == r'"') {
+                this.advance()  // 跳过结束的 '"'
+                break
+            }
+
+            // 检查插值开始标记 #{
+            if (r == r'#') {
+                if (let Some(nextR) <- this.peekAhead(1) && nextR == r'{') {
+                    // 保存之前的字符串片段
+                    parts.add("")
+                    hasInterpolation = true
+
+                    // 跳过 #{
+                    this.advance()
+                    this.advance()
+
+                    // 读取插值表达式直到 }
+                    var exprDepth = 1
+                    var exprStr = ""
+                    while (exprDepth > 0 && let Some(er) <- this.peek()) {
+                        this.advance()
+                        if (er == r'{') {
+                            exprDepth = exprDepth + 1
+                            exprStr += er.toString()
+                        } else if (er == r'}') {
+                            exprDepth = exprDepth - 1
+                            if (exprDepth > 0) {
+                                exprStr += er.toString()
+                            }
+                        } else {
+                            exprStr += er.toString()
+                        }
+                    }
+                    parts.add("#{" + exprStr + "}")
+
+                    // 继续读取字符串
+                    var remainingStr = ""
+                    while (let Some(rr) <- this.peek() && rr != r'"' && rr != r'#') {
+                        this.advance()
+                        remainingStr += rr.toString()
+                    }
+                    parts.add(remainingStr)
+                    continue
+                }
+            }
+
+            this.advance()
+            if (r == r'\\') {
+                let nextR = this.advance()
+                if (let Some(nr) <- nextR) {
+                    // 处理转义字符
+                    if (nr == r'n') {
+                        parts[parts.size - 1] += "\n"
+                    } else if (nr == r't') {
+                        parts[parts.size - 1] += "\t"
+                    } else if (nr == r'r') {
+                        parts[parts.size - 1] += "\r"
+                    } else if (nr == r'"') {
+                        parts[parts.size - 1] += "\""
+                    } else if (nr == r'\\') {
+                        parts[parts.size - 1] += "\\"
+                    } else {
+                        parts[parts.size - 1] += nr.toString()
+                    }
+                }
+            } else {
+                if (parts.size == 0) {
+                    parts.add(r.toString())
+                } else {
+                    parts[parts.size - 1] += r.toString()
+                }
+            }
+        }
+
+        // 将所有部分组合成一个特殊标记的字符串
+        // 格式: ::INTERPOLATE::part1::#{expr1}::part2::#{expr2}::part3
+        var combined = "::INTERPOLATE::"
+        for (i in 0..parts.size) {
+            combined += parts[i]
+            if (i < parts.size - 1) {
+                combined += "::"
+            }
+        }
+        Token.String(combined)
+    }
+
+    /**
      * 读取下一个 Token
      */
     public func nextToken(): Token {
@@ -258,8 +356,7 @@ public class Lexer {
                         this.advance()
                         Token.HashSetStart
                     } else if (nextR == r'"') {
-                        this.advance()
-                        Token.InterpolateString
+                        this.readInterpolateString()
                     } else if (nextR == r't' || nextR == r'f') {
                         // 布尔值 #t #f 或 #true #false
                         this.pos = this.pos - 1  // 回退到 #

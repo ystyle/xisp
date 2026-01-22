@@ -85,10 +85,79 @@ public class Parser {
 
         match (token) {
             case Token.Number(n) => Number(n)
-            case Token.String(s) => Str(s)
+            case Token.String(s) => this.parseStringOrInterpolation(s)
             case Token.Boolean(b) => Boolean(b)
             case Token.Symbol(s) => Symbol(s)
             case _ => Nil  // 错误情况
+        }
+    }
+
+    /**
+     * 解析字符串或插值字符串
+     * 如果是普通字符串，返回 Str
+     * 如果是插值字符串（以 ::INTERPOLATE:: 开头），转换为 (cangjie:interpolate ...)
+     */
+    private func parseStringOrInterpolation(s: String): LispValue {
+        if (s.startsWith("::INTERPOLATE::")) {
+            // 插值字符串，解析并转换为函数调用
+            // 格式: ::INTERPOLATE::part1::#{expr1}::part2::#{expr2}::part3
+            let runeArray = s.toRuneArray()
+            let prefixLen = 15  // "::INTERPOLATE::" 的长度
+            let contentRunes = runeArray[prefixLen..runeArray.size]
+            let content = String(contentRunes)
+            let parts = content.split("::")
+
+            // 创建 (cangjie:interpolate ...)
+            let result = consValue(Symbol("cangjie:interpolate"), Nil)
+            var current = result
+
+            for (part in parts) {
+                if (part.startsWith("#{") && part.endsWith("}")) {
+                    // 这是插值表达式，提取 #{...} 内的表达式
+                    let partRunes = part.toRuneArray()
+                    let exprStr = String(partRunes[2..partRunes.size - 1])
+
+                    // 递归解析表达式
+                    let exprLexer = Lexer(exprStr)
+                    let exprTokens = exprLexer.tokenize()
+
+                    // 如果有多个 token 且不以括号开头，自动包裹在括号中
+                    let finalExprStr = if (exprTokens.size > 1 && !exprStr.startsWith("(")) {
+                        "(${exprStr})"
+                    } else {
+                        exprStr
+                    }
+
+                    // 重新解析
+                    let finalLexer = Lexer(finalExprStr)
+                    let finalTokens = finalLexer.tokenize()
+                    if (finalTokens.size > 0) {
+                        let exprParser = Parser(finalTokens)
+                        let parsedExpr = exprParser.parseExpression()
+
+                        // 添加到结果列表
+                        let newCell = Cons(ConsCell(parsedExpr, Nil))
+                        match (current) {
+                            case Cons(cell) => cell.cdr = newCell
+                            case _ => ()
+                        }
+                        current = newCell
+                    }
+                } else {
+                    // 普通字符串片段
+                    let newCell = Cons(ConsCell(Str(part), Nil))
+                    match (current) {
+                        case Cons(cell) => cell.cdr = newCell
+                        case _ => ()
+                    }
+                    current = newCell
+                }
+            }
+
+            result
+        } else {
+            // 普通字符串
+            Str(s)
         }
     }
 
