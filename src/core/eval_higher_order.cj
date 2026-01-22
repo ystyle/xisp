@@ -95,8 +95,17 @@ extend Evaluator {
         if (let Cons(cell) <- expr && cell.length() == 2) {
             let funcValue = this.eval(cell.car)
 
+            // 提取第二个参数
             let lst = if (let Cons(cdrCell) <- cell.cdr) {
-                this.eval(cdrCell.car)
+                let arg = cdrCell.car
+                // 检查是否是值列表（来自管道，已经求值）
+                match (arg) {
+                    case Cons(argCell) => match (argCell.car) {
+                        case Number(_) | Str(_) | Boolean(_) | Nil => arg
+                        case _ => this.eval(arg)
+                    }
+                    case _ => this.eval(arg)
+                }
             } else {
                 Nil
             }
@@ -135,7 +144,14 @@ extend Evaluator {
             let pred = this.eval(cell.car)
 
             let lst = if (let Cons(cdrCell) <- cell.cdr) {
-                this.eval(cdrCell.car)
+                let arg = cdrCell.car
+                match (arg) {
+                    case Cons(argCell) => match (argCell.car) {
+                        case Number(_) | Str(_) | Boolean(_) | Nil => arg
+                        case _ => this.eval(arg)
+                    }
+                    case _ => this.eval(arg)
+                }
             } else {
                 Nil
             }
@@ -177,14 +193,28 @@ extend Evaluator {
             let funcValue = this.eval(cell.car)
 
             var acc = if (let Cons(cdrCell) <- cell.cdr) {
-                this.eval(cdrCell.car)
+                let arg = cdrCell.car
+                match (arg) {
+                    case Cons(argCell) => match (argCell.car) {
+                        case Number(_) | Str(_) | Boolean(_) | Nil => arg
+                        case _ => this.eval(arg)
+                    }
+                    case _ => this.eval(arg)
+                }
             } else {
                 Nil
             }
 
             let lst = if (let Cons(cdrCell) <- cell.cdr) {
                 if (let Cons(cdr2Cell) <- cdrCell.cdr) {
-                    this.eval(cdr2Cell.car)
+                    let arg = cdr2Cell.car
+                    match (arg) {
+                        case Cons(argCell) => match (argCell.car) {
+                            case Number(_) | Str(_) | Boolean(_) | Nil => arg
+                            case _ => this.eval(arg)
+                        }
+                        case _ => this.eval(arg)
+                    }
                 } else {
                     Nil
                 }
@@ -282,43 +312,46 @@ extend Evaluator {
     }
 
     /**
+     * Thread-first 步骤 - 辅助方法：构造符号调用
+     */
+    func threadFirstSymbol(sym: String, value: LispValue): LispValue {
+        let args = ArrayList<LispValue>()
+        args.add(value)
+        let cell = ConsCell(Symbol(sym), list(args))
+        this.eval(Cons(cell))
+    }
+
+    /**
+     * Thread-first 步骤 - 辅助方法：构造列表调用
+     */
+    func threadFirstList(fn: LispValue, restArgs: LispValue, value: LispValue): LispValue {
+        let args = ArrayList<LispValue>()
+
+        // 先添加 restArgs 中的参数（需要求值）
+        var argCurrent: LispValue = restArgs
+        while (!argCurrent.isNil()) {
+            if (let Cons(argCell) <- argCurrent) {
+                args.add(this.eval(argCell.car))
+                argCurrent = argCell.cdr
+            } else {
+                break
+            }
+        }
+
+        // 添加 value（已经求值过了，直接使用）
+        args.add(value)
+
+        let cell = ConsCell(fn, list(args))
+        this.eval(Cons(cell))
+    }
+
+    /**
      * Thread-first 步骤
      */
     func threadFirstStep(value: LispValue, form: LispValue): LispValue {
         match (form) {
-            case Symbol(sym) =>
-                let funcValue = this.env.lookup(sym)
-                let args = ArrayList<LispValue>()
-                args.add(value)
-
-                match (funcValue) {
-                    case Procedure(_, _, _) => this.applyProcedure(funcValue, args)
-                    case NativeFunc(f) => f(args)
-                    case _ => Nil
-                }
-            case Cons(formCell) =>
-                let fn = formCell.car
-                let restArgs = formCell.cdr
-
-                let args = ArrayList<LispValue>()
-                args.add(value)
-
-                var argCurrent: LispValue = restArgs
-                while (!argCurrent.isNil()) {
-                    if (let Cons(argCell) <- argCurrent) {
-                        args.add(this.eval(argCell.car))
-                        argCurrent = argCell.cdr
-                    } else {
-                        break
-                    }
-                }
-
-                let funcValue = this.eval(fn)
-                match (funcValue) {
-                    case Procedure(_, _, _) => this.applyProcedure(funcValue, args)
-                    case NativeFunc(f) => f(args)
-                    case _ => Nil
-                }
+            case Symbol(sym) => this.threadFirstSymbol(sym, value)
+            case Cons(formCell) => this.threadFirstList(formCell.car, formCell.cdr, value)
             case _ => this.eval(form)
         }
     }
