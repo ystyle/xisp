@@ -315,4 +315,40 @@ class ComprehensiveTest {
             case _ => @Fail("append with apply should return a list")
         }
     }
+
+    @TestCase
+    func testModernVectorDestructuring() {
+        println("\n=== 测试现代向量解构 ===")
+        let env = Environment()
+        BuiltinFunctions.registerAll(env)
+        Bridge.registerStdCollection(env)
+        let evaluator = Evaluator(env)
+
+        // 测试基础向量解构 [x y]
+        let expr1 = Parser.parseSingleFromString("(let [[x y] (quote (1 2 3))] x)")
+        let result1 = evaluator.eval(expr1)
+        println("Vector destruct [x y] x result: ${result1.toString()}")
+        match (result1) {
+            case Number(n) => @Assert(n == 1.0)
+            case _ => @Fail("Vector destruct should return Number 1.0")
+        }
+
+        // 测试 & rest 语法
+        let expr2 = Parser.parseSingleFromString("(let [[x y & rest] (quote (1 2 3 4 5))] rest)")
+        let result2 = evaluator.eval(expr2)
+        println("Vector destruct [x y & rest] rest result: ${result2.toString()}")
+        match (result2) {
+            case Cons(_) => @Assert(result2.isList())
+            case _ => @Fail("& rest should return a list")
+        }
+
+        // 测试嵌套向量解构
+        let expr3 = Parser.parseSingleFromString("(let [[[a b] c] (quote ((1 2) 3))] (list a b c))")
+        let result3 = evaluator.eval(expr3)
+        println("Nested vector destruct result: ${result3.toString()}")
+        match (result3) {
+            case Cons(_) => @Assert(result3.isList())
+            case _ => @Fail("Nested destruct should return a list")
+        }
+    }
 }
