@@ -211,6 +211,18 @@ public open class ConsCell {
     }
 
     /**
+     * 判断是否为正规列表（proper list）
+     * 正规列表的 cdr 必须是 Nil 或另一个 ConsCell
+     */
+    public func isProperList(): Bool {
+        match (this.cdr) {
+            case Nil => true
+            case Cons(_) => true
+            case _ => false
+        }
+    }
+
+    /**
      * 转换为字符串表示
      */
     public func toString(): String {
@@ -361,12 +373,23 @@ public enum LispValue <: ToString {
     }
 
     /**
-     * 判断是否为列表
+     * 判断是否为列表（不包括点对）
      */
     public func isList(): Bool {
         match (this) {
             case Nil => true
-            case Cons(_) => true
+            case Cons(cell) => cell.isProperList()
+            case _ => false
+        }
+    }
+
+    /**
+     * 判断是否为点对结构
+     * 点对是指 cdr 不是 Nil 且不是列表的 ConsCell
+     */
+    public func isDottedPair(): Bool {
+        match (this) {
+            case Cons(cell) => !cell.isProperList()
             case _ => false
         }
     }
