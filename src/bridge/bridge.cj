@@ -188,12 +188,12 @@ public class Bridge {
 
         // 字符串插值 #"Hello #{name}" → 拼接字符串
         registerFuncWithNS(env, "cangjie", "interpolate", { args =>
-            // 将所有参数转换为字符串并拼接
-            var result = ""
+            // 使用 StringBuilder 高效拼接字符串
+            let sb = StringBuilder()
             for (arg in args) {
-                result += argToStringForInterpolation(arg)
+                sb.append(argToStringForInterpolation(arg))
             }
-            Str(result)
+            Str(sb.toString())
         })
     }
 
