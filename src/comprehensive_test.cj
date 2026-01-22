@@ -351,4 +351,31 @@ class ComprehensiveTest {
             case _ => @Fail("Nested destruct should return a list")
         }
     }
+
+    @TestCase
+    func testTraditionalDotPairDestructuring() {
+        println("\n=== 测试传统点对解构 ===")
+        let env = Environment()
+        BuiltinFunctions.registerAll(env)
+        Bridge.registerStdCollection(env)
+        let evaluator = Evaluator(env)
+
+        // 测试基础点对解构 (x . y)
+        let expr1 = Parser.parseSingleFromString("(let ((x . y) (quote (1 2 3))) x)")
+        let result1 = evaluator.eval(expr1)
+        println("Dot-pair (x . y) x result: ${result1.toString()}")
+        match (result1) {
+            case Number(n) => @Assert(n == 1.0)
+            case _ => @Fail("Dot-pair destruct should return Number 1.0")
+        }
+
+        // 测试嵌套点对解构 ((x . y) . z)
+        let expr2 = Parser.parseSingleFromString("(let (((x . y) . z) (quote ((1 2) 3 4))) (list x y z))")
+        let result2 = evaluator.eval(expr2)
+        println("Nested dot-pair ((x . y) . z) result: ${result2.toString()}")
+        match (result2) {
+            case Cons(_) => @Assert(result2.isList())
+            case _ => @Fail("Nested dot-pair destruct should return a list")
+        }
+    }
 }

@@ -48,7 +48,7 @@
 (println "=== 测试 6：传统嵌套点对解构 ===")
 (define result6 (let (((x . y) . z) (quote ((1 2) 3 4))) (list x y z)))
 (println "(let (((x . y) . z) '((1 2) 3 4)) (list x y z))")
-(println "结果: (1 2 (3 4))")
+(println "结果: (1 (2) (3 4))")
 (println result6)
 (println)
 
