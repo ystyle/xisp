@@ -607,6 +607,74 @@ public class BuiltinFunctions {
             Number(total)
         }))
 
+        // (max lst) - 最大值
+        env.define("max", NativeFunc({ args =>
+            if (args.size != 1) {
+                return Nil
+            }
+
+            var maxValue: ?Float64 = None
+            if (let Cons(cell) <- args[0]) {
+                var current: LispValue = Cons(cell)
+                while (!current.isNil()) {
+                    if (let Cons(currCell) <- current) {
+                        if (let Number(n) <- currCell.car) {
+                            if (let Some(m) <- maxValue) {
+                                if (n > m) {
+                                    maxValue = Some(n)
+                                }
+                            } else {
+                                maxValue = Some(n)
+                            }
+                        }
+                        current = currCell.cdr
+                    } else {
+                        break
+                    }
+                }
+            }
+
+            if (let Some(m) <- maxValue) {
+                Number(m)
+            } else {
+                Nil
+            }
+        }))
+
+        // (min lst) - 最小值
+        env.define("min", NativeFunc({ args =>
+            if (args.size != 1) {
+                return Nil
+            }
+
+            var minValue: ?Float64 = None
+            if (let Cons(cell) <- args[0]) {
+                var current: LispValue = Cons(cell)
+                while (!current.isNil()) {
+                    if (let Cons(currCell) <- current) {
+                        if (let Number(n) <- currCell.car) {
+                            if (let Some(m) <- minValue) {
+                                if (n < m) {
+                                    minValue = Some(n)
+                                }
+                            } else {
+                                minValue = Some(n)
+                            }
+                        }
+                        current = currCell.cdr
+                    } else {
+                        break
+                    }
+                }
+            }
+
+            if (let Some(m) <- minValue) {
+                Number(m)
+            } else {
+                Nil
+            }
+        }))
+
         // (reverse lst) - 反转列表
         env.define("reverse", NativeFunc({ args =>
             if (args.size != 1) {
