@@ -4,109 +4,13 @@ import std.collection.ArrayList
 
 /**
  * 高阶函数扩展
- * 包含 map, filter, reduce 等函数式编程工具
+ * 包含 apply, sum, product, max, min, reverse, range 等工具函数
+ *
+ * 注意：map, filter, reduce 已作为特殊形式实现，不在这里注册
  */
 extend BuiltinFunctions {
     static func registerHigherOrder(env: Environment) {
-        // (map func lst) - 对列表中每个元素应用函数
-        env.define("map", NativeFunc({ args =>
-            if (args.size != 2) {
-                return Nil
-            }
-
-            let funcValue = args[0]
-            var result = ArrayList<LispValue>()
-
-            match (args[1]) {
-                case Cons(cell) =>
-                    var current: LispValue = Cons(cell)
-                    while (!current.isNil()) {
-                        if (let Cons(currCell) <- current) {
-                            // 调用函数（暂时只支持原生函数）
-                            if (let NativeFunc(f) <- funcValue) {
-                                let argList = ArrayList<LispValue>()
-                                argList.add(currCell.car)
-                                result.add(f(argList))
-                            } else {
-                                result.add(currCell.car)
-                            }
-                            current = currCell.cdr
-                        } else {
-                            break
-                        }
-                    }
-                    list(result)
-                case _ => Nil
-            }
-        }))
-
-        // (filter pred lst) - 过滤列表
-        env.define("filter", NativeFunc({ args =>
-            if (args.size != 2) {
-                return Nil
-            }
-
-            let pred = args[0]
-            let result = ArrayList<LispValue>()
-
-            match (args[1]) {
-                case Cons(cell) =>
-                    var current: LispValue = Cons(cell)
-                    while (!current.isNil()) {
-                        if (let Cons(currCell) <- current) {
-                            let testResult = if (let NativeFunc(f) <- pred) {
-                                let argList = ArrayList<LispValue>()
-                                argList.add(currCell.car)
-                                f(argList)
-                            } else {
-                                Boolean(false)
-                            }
-
-                            if (testResult.isTruthy()) {
-                                result.add(currCell.car)
-                            }
-                            current = currCell.cdr
-                        } else {
-                            break
-                        }
-                    }
-                    list(result)
-                case _ => Nil
-            }
-        }))
-
-        // (reduce func init lst) - 归约操作
-        env.define("reduce", NativeFunc({ args =>
-            if (args.size != 3) {
-                return Nil
-            }
-
-            let `func` = args[0]
-            var acc = args[1]
-
-            match (args[2]) {
-                case Cons(cell) =>
-                    var current: LispValue = Cons(cell)
-                    while (!current.isNil()) {
-                        if (let Cons(currCell) <- current) {
-                            let argList = ArrayList<LispValue>()
-                            argList.add(acc)
-                            argList.add(currCell.car)
-
-                            acc = if (let NativeFunc(f) <- `func`) {
-                                f(argList)
-                            } else {
-                                acc
-                            }
-                            current = currCell.cdr
-                        } else {
-                            break
-                        }
-                    }
-                    acc
-                case _ => acc
-            }
-        }))
+        // map, filter, reduce 已作为特殊形式实现，见 eval_higher_order.cj
 
         // (sum lst) - 求和
         env.define("sum", NativeFunc({ args =>

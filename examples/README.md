@@ -28,13 +28,6 @@
 | `thread_macro.lisp` | 管道操作符深入展示 |
 | `guard_clauses.lisp` | 守卫条件深入展示 |
 
-### 文档
-
-| 文件 | 说明 |
-|------|------|
-| `README_EXAMPLES.md` | 详细示例说明 |
-| `README.md` | 本文件 |
-
 ## 🚀 快速开始
 
 ### 1. 运行所有测试
