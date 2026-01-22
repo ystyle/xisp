@@ -14,7 +14,7 @@ import ystyle::xisp.bridge.*
 class ComprehensiveTest {
 
     @TestCase
-    func testMaxMinFunctions() {
+    func testBugMaxMinFunctions() {
         println("\n=== 测试 max/min 函数 ===")
         let env = Environment()
         BuiltinFunctions.registerAll(env)
@@ -102,7 +102,7 @@ class ComprehensiveTest {
     }
 
     @TestCase
-    func testDestructuringLet() {
+    func testBugDestructuringLet() {
         println("\n=== 测试解构绑定 ===")
         let env = Environment()
         BuiltinFunctions.registerAll(env)
@@ -286,6 +286,33 @@ class ComprehensiveTest {
         match (result) {
             case Number(n) => @Assert(n == 15.0)
             case _ => @Fail("reduce should return Number")
+        }
+    }
+
+    @TestCase
+    func testAppendFunction() {
+        println("\n=== 测试 append 函数 ===")
+        let env = Environment()
+        BuiltinFunctions.registerAll(env)
+        Bridge.registerStdCollection(env)
+        let evaluator = Evaluator(env)
+
+        // 测试基本 append
+        let expr1 = Parser.parseSingleFromString("(append (quote (1 2)) (quote (3 4)))")
+        let result1 = evaluator.eval(expr1)
+        println("Append (1 2) (3 4) result: ${result1.toString()}")
+        match (result1) {
+            case Cons(_) => @Assert(result1.isList())
+            case _ => @Fail("append should return a list")
+        }
+
+        // 测试 append with apply
+        let expr2 = Parser.parseSingleFromString("(apply append (quote ((1 2) (3 4) (5 6))))")
+        let result2 = evaluator.eval(expr2)
+        println("Append with apply result: ${result2.toString()}")
+        match (result2) {
+            case Cons(_) => @Assert(result2.isList())
+            case _ => @Fail("append with apply should return a list")
         }
     }
 }
