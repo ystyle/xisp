@@ -1,62 +1,61 @@
 ;; ======================================
 ;; 模式匹配 (Pattern Matching) 示例
 ;; ======================================
-;; 模式匹配是 Xisp 的强大功能，可以优雅地解构和匹配数据
 
-;; ==================== 1. 常量匹配 ====================
-;; 匹配数字、字符串、布尔值等常量
-(match 5
-  1 "one"
-  2 "two"
-  5 "five"
-  _ "other")
-;; => "five"
+(println "=== Xisp 模式匹配演示 ===")
+(println "")
 
-;; ==================== 2. 变量绑定 ====================
-;; 符号可以匹配任何值并绑定到该值
-(match 42
-  x (str "Value is: " x))
-;; => "Value is: 42.000000"
+(println "1. 常量匹配")
+(println "代码: (match 5 1 \"one\" 2 \"two\" 5 \"five\" _ \"other\")")
+(define r1 (match 5 1 "one" 2 "two" 5 "five" _ "other"))
+(println #"结果: #{r1}")
+(println "期望: \"five\"")
+(println "")
 
-;; ==================== 3. 列表模式匹配 ====================
-;; 解构绑定列表元素
-(match (quote (1 2 3))
-  (x y z) (str "x=" x ", y=" y ", z=" z)
-  _ "not a list of 3")
-;; => "x=1.000000, y=2.000000, z=3.000000"
+(println "2. 变量绑定")
+(println "代码: (match 42 x (str \"Value is: \" x))")
+(define r2 (match 42 x (str "Value is: " x)))
+(println #"结果: #{r2}")
+(println "期望: \"Value is: 42.000000\"")
+(println "")
 
-;; ==================== 4. 通配符 ====================
-;; _ 匹配任何值但不绑定
-(match "hello"
-  _ "matched anything")
-;; => "matched anything"
+(println "3. 列表模式匹配")
+(println "代码: (match (quote (1 2 3)) (x y z) (str \"x=\" x \", y=\" y \", z=\" z) _ \"not a list of 3\")")
+(define r3 (match (quote (1 2 3)) (x y z) (str "x=" x ", y=" y ", z=" z) _ "not a list of 3"))
+(println #"结果: #{r3}")
+(println "期望: 解构绑定 x=1, y=2, z=3")
+(println "")
 
-;; ==================== 5. 嵌套列表匹配 ====================
-;; 匹配嵌套的数据结构
-(match (quote ((1 2) (3 4)))
-  ((a b) (c d)) (str "a=" a ", b=" b ", c=" c ", d=" d)
-  _ "no match")
-;; => "a=1.000000, b=2.000000, c=3.000000, d=4.000000"
+(println "4. 通配符")
+(println "代码: (match \"hello\" _ \"matched anything\")")
+(define r4 (match "hello" _ "matched anything"))
+(println #"结果: #{r4}")
+(println "期望: \"matched anything\"")
+(println "")
 
-;; ==================== 6. Rest 参数 ====================
-;; 使用 & 绑定剩余元素
-(match (quote (1 2 3 4 5))
-  (x y & rest) (str "first: " x ", second: " y ", rest: " rest)
-  _ "no match")
-;; => "first: 1.000000, second: 2.000000, rest: (3.000000 4.000000 5.000000)"
+(println "5. 守卫条件")
+(println "代码: (match 15 (x when (> x 10) (str \"large: \" x)) (x when (< x 10) (str \"small: \" x)) _ \"medium\")")
+(define r5 (match 15 (x when (> x 10) (str "large: " x)) (x when (< x 10) (str "small: " x)) _ "medium"))
+(println #"结果: #{r5}")
+(println "期望: \"large: 15.000000\"")
+(println "")
 
-;; ==================== 7. 递归函数中使用 ====================
-;; 在递归函数中使用模式匹配
-(define (my-length lst)
-  (match lst
-    () 0
-    (head & tail) (+ 1 (my-length tail))))
+(println "6. 嵌套列表匹配")
+(println "代码: (match (quote ((1 2) (3 4))) ((a b) (c d)) (str \"a=\" a \", b=\" b \", c=\" c \", d=\" d) _ \"no match\")")
+(define r6 (match (quote ((1 2) (3 4))) ((a b) (c d)) (str "a=" a ", b=" b ", c=" c ", d=" d) _ "no match"))
+(println #"结果: #{r6}")
+(println "期望: 解构嵌套列表")
+(println "")
 
-(my-length (quote (1 2 3 4 5)))
-;; => 5.000000
+(println "7. Rest 参数")
+(println "代码: (match (quote (1 2 3 4 5)) (x & rest) (str \"first: \" x \", rest: \" rest) _ \"no match\")")
+(define r7 (match (quote (1 2 3 4 5)) (x & rest) (str "first: " x ", rest: " rest) _ "no match"))
+(println #"结果: #{r7}")
+(println "期望: \"first: 1.000000, rest: (2 3 4 5)\"")
+(println "")
 
-;; ==================== 8. 复杂模式组合 ====================
-;; 在实际函数中使用多种模式
+(println "8. 复杂模式组合")
+(println "代码: (define (describe-data data) (match data 0 \"zero\" 1 \"one\" (x y) (str \"Pair: \" x \", \" y) (x y z) (str \"Triple: \" x \", \" y \", \" z) _ \"unknown\"))")
 (define (describe-data data)
   (match data
     0 "zero"
@@ -65,5 +64,8 @@
     (x y z) (str "Triple: " x ", " y ", " z)
     _ "unknown"))
 
-(describe-data (quote (1 2)))
-;; => "Pair: 1.000000, 2.000000"
+(println "测试 (describe-data (quote (1 2))):")
+(define r8 (describe-data (quote (1 2))))
+(println #"结果: #{r8}")
+(println "期望: \"Pair: 1.000000, 2.000000\"")
+
