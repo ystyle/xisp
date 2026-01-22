@@ -144,6 +144,89 @@ Xisp 支持现代化的语法特性，让代码更简洁、更易读。
 
 ---
 
+## 解构绑定
+
+Xisp 支持现代化的向量解构语法，使用 `[]` 和 `&` 符号让代码更简洁。
+
+### 语法
+
+```lisp
+(let [pattern value] body...)
+```
+
+### 基础解构
+
+```lisp
+; 解构列表元素
+(let [[x y] '(1 2 3 4)]
+  (list x y))
+; => (1 2)
+
+; 使用 & 收集剩余元素
+(let [[x y & rest] '(1 2 3 4 5)]
+  (list x y rest))
+; => (1 2 (3 4 5))
+```
+
+### 嵌套解构
+
+```lisp
+; 嵌套列表解构
+(let [[[a b] c] '((1 2) 3)]
+  (list a b c))
+; => (1 2 3)
+
+; 复杂嵌套
+(let [[[a b] [c d & rest]] '((1 2) (3 4 5 6))]
+  (list a b c d rest))
+; => (1 2 3 4 (5 6))
+```
+
+### 多个绑定
+
+```lisp
+; 混合使用解构和普通绑定
+(let [[x y] data
+      z 10]
+  (list x y z))
+```
+
+### 实际应用
+
+```lisp
+; 解析配置
+(define config '(("localhost" 8080) ("example.com" 80)))
+
+(let [[[host port] & rest] config]
+  (println "Host: " host)
+  (println "Port: " port))
+
+; 分离头部和尾部
+(let [[first & rest] numbers]
+  (list "First is" first
+        "Rest is" rest))
+```
+
+### 传统语法（向后兼容）
+
+传统点对语法继续有效：
+
+```lisp
+; 传统点对解构
+(let ((x . y) '(1 2 3))
+  x)
+; => 1
+
+; 传统嵌套点对解构
+(let (((x . y) . z) '((1 2) 3 4))
+  (list x y z))
+; => (1 2 (3 4))
+```
+
+**建议**：新代码推荐使用现代向量语法，更清晰直观。
+
+---
+
 ## 与传统语法的对比
 
 ### 列表操作
@@ -287,6 +370,7 @@ Xisp 支持现代化的语法特性，让代码更简洁、更易读。
 
 ## 相关资源
 
+- **解构绑定详细文档**：`docs/syntax/destructuring.md`
 - **示例程序**：`src/examples/modern_syntax/main.cj`
-- **测试文件**：运行 `./target/release/bin/ystyle::xisp.examples.modern_syntax`
-- **设计文档**：`docs/design.md`
+- **解构测试**：运行 `./target/release/bin/ystyle::xisp.examples.test_destruct`
+- **设计文档**：`docs/syntax/design.md`
