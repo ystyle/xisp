@@ -164,4 +164,56 @@ class EvaluatorTest {
             case _ => @Fail("Expected Number")
         }
     }
+
+    @TestCase
+    func testMatchListPattern() {
+        // 测试match表达式的列表模式匹配（复现match_demo test 3的问题）
+        let env = Environment()
+        BuiltinFunctions.registerAll(env)  // 注册基础函数
+        let evaluator = Evaluator(env)
+
+        let code3 = "(match (quote (1 2 3)) (x y z) (str \"x=\" x \", y=\" y \", z=\" z) _ \"not a list of 3\")"
+
+        println("[MATCH TEST] Testing: ${code3}")
+
+        // 先测试lexer
+        let lexer = Lexer(code3)
+        let tokens = lexer.tokenize()
+        println("[MATCH TEST] Tokenized ${tokens.size} tokens")
+
+        // 解析表达式
+        let exprs = Parser.parseFromString(code3)
+
+        println("[MATCH TEST] Parsed ${exprs.size} expressions")
+
+        // 应该只解析出1个表达式
+        if (exprs.size != 1) {
+            @Fail("Expected 1 expression, got ${exprs.size}")
+        }
+
+        // 第一个表达式不应该是nil
+        match (exprs[0]) {
+            case Nil => @Fail("First expression should not be Nil")
+            case _ => ()
+        }
+
+        // 求值
+        var result: LispValue = Nil
+        for (j in 0..exprs.size) {
+            result = evaluator.eval(exprs[j])
+        }
+
+        let resultStr = result.toString()
+        println("[MATCH TEST] result: ${resultStr}")
+
+        // 结果不应该包含"nil"错误
+        if (resultStr == "nil") {
+            @Fail("Match expression should not return nil")
+        }
+
+        // 结果应该包含期望的字符串
+        if (!resultStr.contains("x=") && !resultStr.contains("1.000000")) {
+            @Fail("Expected result to contain pattern match results, got: ${resultStr}")
+        }
+    }
 }

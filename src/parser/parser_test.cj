@@ -34,6 +34,10 @@ var parserTests = ArrayList<ParserTestItem>([
     ParserTestItem("'foo", "(quote foo)"),
     // 复杂表达式
     ParserTestItem("(define square (lambda (x) (* x x)))", "(define square (lambda (x) (* x x)))"),
+    // match 表达式 - 验证嵌套列表解析正确
+    ParserTestItem("(match 5 1 \"one\" 5 \"five\")", "(match 5.000000 1.000000 \"one\" 5.000000 \"five\")"),
+    // match 嵌套列表
+    ParserTestItem("(match (quote (1 2 3)) (x y z) \"ok\")", "(match (quote (1.000000 2.000000 3.000000)) (x y z) \"ok\")"),
 ])
 
 /**
@@ -116,5 +120,41 @@ class ParserTest {
                 @Assert(cell.cdr.toString(), "b")
             case _ => @Fail("Expected Cons cell")
         }
+    }
+
+    @TestCase
+    func testMatchExpressionNoExtraTokens() {
+        // 测试match表达式解析后没有多余的nil token
+        let input = "(match (quote (1 2 3)) (x y z) (str \"x=\" x) _ \"default\")"
+        let exprs = Parser.parseFromString(input)
+
+        println("Parsed ${exprs.size} expressions from: ${input}")
+
+        // 应该只解析出1个表达式
+        if (exprs.size != 1) {
+            @Fail("Expected 1 expression, got ${exprs.size}")
+        }
+
+        // 第一个表达式不应该是nil
+        match (exprs[0]) {
+            case Nil => @Fail("First expression should not be Nil")
+            case _ => ()
+        }
+
+        println("Successfully parsed match expression without extra tokens")
+    }
+
+    @TestCase
+    func testParseRestParameter() {
+        println("=== Test: Parse & (rest parameter) ===")
+
+        // 最简单的测试：只解析 & 符号
+        let input = "&"
+        println("Parsing: ${input}")
+
+        let exprs = Parser.parseFromString(input)
+
+        println("Parsed ${exprs.size} expression(s)")
+        println("SUCCESS")
     }
 }

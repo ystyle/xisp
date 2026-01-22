@@ -673,6 +673,18 @@ public class BuiltinFunctions {
      * 打印和输出函数
      */
     private static func registerPrint(env: Environment) {
+        // (str x1 x2 ...) - 字符串拼接（将所有参数转换为字符串并拼接）
+        env.define("str", NativeFunc({ args =>
+            let sb = StringBuilder()
+            for (i in 0..args.size) {
+                match (args[i]) {
+                    case Str(s) => sb.append(s)  // 字符串直接使用内容，不加引号
+                    case _ => sb.append(args[i].toString())
+                }
+            }
+            Str(sb.toString())
+        }))
+
         // (print x1 x2 ...) - 打印值（不换行，参数间用空格分隔）
         env.define("print", NativeFunc({ args =>
             for (i in 0..args.size) {

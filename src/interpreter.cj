@@ -389,7 +389,7 @@ public class LispInterpreter {
      */
     private func printBanner() {
         this.outputFn("╔═══════════════════════════════════════════════════════════╗")
-        this.outputFn("║           星枢 - 仓颉嵌入式 Lisp 脚本语言          ║")
+        this.outputFn("║           星枢 - 仓颉嵌入式 Lisp 脚本语言                 ║")
         this.outputFn("║                   版本 0.1.0 - MVP                        ║")
         this.outputFn("╚═══════════════════════════════════════════════════════════╝")
     }
@@ -422,10 +422,13 @@ public class LispInterpreter {
                 let exprs = parser.parse()
 
                 if (exprs.size > 0) {
+
                     // 执行所有表达式，返回最后一个结果
                     var result: LispValue = Nil
+                    var i = 0
                     for (expr in exprs) {
                         result = evaluator.eval(expr)
+                        i = i + 1
                     }
                     result
                 } else {

@@ -8,18 +8,25 @@
 
 | 文件 | 说明 | 运行方式 |
 |------|------|----------|
-| `print_test.lisp` | 打印功能完整测试 | `./xisp < examples/print_test.lisp` |
-| `tutorial.lisp` | 基础教程（12个主题） | `./xisp < examples/tutorial.lisp` |
-| `advanced.lisp` | 高级特性展示 | `./xisp < examples/advanced.lisp` |
-| `quick_test.lisp` | 快速功能验证 | `./xisp < examples/quick_test.lisp` |
-| `bridge_test.lisp` | 仓颉桥接功能测试 | `./xisp < examples/bridge_test.lisp` |
-| `file_io_test.lisp` | 文件 I/O 完整测试 | `./xisp < examples/file_io_test.lisp` |
+| `print_test.lisp` | 打印功能完整测试 | `./xisp examples/print_test.lisp` |
+| `tutorial.lisp` | 基础教程（12个主题） | `./xisp examples/tutorial.lisp` |
+| `advanced.lisp` | 高级特性展示 | `./xisp examples/advanced.lisp` |
+| `quick_test.lisp` | 快速功能验证 | `./xisp examples/quick_test.lisp` |
+| `bridge_test.lisp` | 仓颉桥接功能测试 | `./xisp examples/bridge_test.lisp` |
+| `file_io_test.lisp` | 文件 I/O 完整测试 | `./xisp examples/file_io_test.lisp` |
+| `apply_demo.lisp` | apply 函数演示 | `./xisp examples/apply_demo.lisp` |
+| `apply_test.lisp` | apply 函数测试 | `./xisp examples/apply_test.lisp` |
+| `destruct_test.lisp` | 解构绑定测试 | `./xisp examples/destruct_test.lisp` |
 
-### 仓颉程序
+### 新增示例（现代化语法）
 
-| 文件 | 说明 | 运行方式 |
-|------|------|----------|
-| `extension_demo` | LispConvertible 扩展示例 | `cjpm run --name "ystyle::xisp.examples.extension_demo"` |
+| 文件 | 说明 |
+|------|------|
+| `pattern_matching.lisp` | 模式匹配完整教程（含 rest 参数、守卫条件） |
+| `modern_syntax.lisp` | 现代化语法特性（字面量、插值、解构、管道） |
+| `destructuring.lisp` | 解构绑定深入展示 |
+| `thread_macro.lisp` | 管道操作符深入展示 |
+| `guard_clauses.lisp` | 守卫条件深入展示 |
 
 ### 文档
 
@@ -47,16 +54,16 @@
 
 ```bash
 # 打印功能测试
-./xisp < examples/print_test.lisp
+./xisp examples/print_test.lisp
 
 # 基础教程
-./xisp < examples/tutorial.lisp
+./xisp examples/tutorial.lisp
 
 # 高级特性
-./xisp < examples/advanced.lisp
+./xisp examples/advanced.lisp
 
 # 快速验证
-./xisp < examples/quick_test.lisp
+./xisp examples/quick_test.lisp
 ```
 
 ### 3. 交互式运行
@@ -186,7 +193,7 @@ cjpm run --name "ystyle::xisp.examples.extension_demo"
 
 **运行方式**:
 ```bash
-./xisp < examples/file_io_test.lisp
+./xisp examples/file_io_test.lisp
 ```
 
 **特性**:
@@ -245,10 +252,32 @@ xisp>                                <- 下一个提示符
 
 ## 📖 更多资源
 
-- 项目根目录: `README.md`
-- 任务追踪: `task.md`
-- 核心设计: `docs/core.md`
-- 设计文档: `docs/design.md`
+- 项目根目录: `../README.md`
+- 任务追踪: `../task.md`
+- 核心设计: `../docs/core.md`
+- 设计文档: `../docs/design.md`
+
+### 仓颉示例程序
+
+如需运行仓颉示例程序（用于演示特定功能或 API 用法），请查看 `src/examples/` 目录：
+
+```bash
+# 编译所有示例程序
+cjpm build
+
+# 运行仓颉示例程序（例如模式匹配演示）
+./target/release/bin/ystyle::xisp.examples.match_demo
+```
+
+可用的仓颉示例程序：
+- `match_demo` - 模式匹配完整演示
+- `modern_syntax` - 现代化语法演示
+- `test_destruct` - 解构绑定测试
+- `test_pipeline` - 管道操作符测试
+- `guard_test` - 守卫条件测试
+- `sandbox_demo` - 沙箱系统演示
+- `options_usage` - 选项系统使用示例
+- `extension_demo` - 仓颉扩展功能演示
 
 ## 🐛 问题反馈
 

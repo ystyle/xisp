@@ -1,3 +1,6 @@
 target
 .claude
+.cache
 xisp
+test.sh
+*.cj.macrocall

@@ -125,6 +125,17 @@ var lexerTests = ArrayList<LexerTestItem>([
         "test测试 変数foo 변수bar",
         [Token.Symbol("test测试"), Token.Symbol("変数foo"), Token.Symbol("변수bar")]
     ),
+    // 测试 match 表达式 - 简化版，验证括号匹配
+    LexerTestItem(
+        "(match 5 1 \"one\" 5 \"five\")",
+        [
+            Token.LeftParen, Token.Symbol("match"),
+            Token.Number(5.0),
+            Token.Number(1.0), Token.String("one"),
+            Token.Number(5.0), Token.String("five"),
+            Token.RightParen
+        ]
+    ),
 ])
 
 /**

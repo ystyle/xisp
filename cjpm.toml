@@ -36,3 +36,9 @@ output-type = "executable"
 
 [package.package-configuration."ystyle::xisp.examples.sandbox_demo"]
 output-type = "executable"
+
+[package.package-configuration."ystyle::xisp.examples.match_demo"]
+output-type = "executable"
+
+[package.package-configuration."ystyle::xisp.examples.guard_test"]
+output-type = "executable"

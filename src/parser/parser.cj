@@ -198,7 +198,12 @@ public class Parser {
             this.advance()  // 消费 RightParen
             Nil
         } else {
-            this.parseListBody()
+            let result = this.parseListBody()
+            // 消费外层的 RightParen（parseListBody 只负责解析内容，不消费外层的括号）
+            if (this.peek() == Token.RightParen) {
+                this.advance()
+            }
+            result
         }
     }
 
@@ -212,14 +217,10 @@ public class Parser {
         if (this.peek() == Token.Dot) {
             this.advance()  // 消费 Dot
             let cdr = this.parseExpression()
-            if (this.peek() == Token.RightParen) {
-                this.advance()  // 消费 RightParen
-            }
             // 创建点对
             Cons(ConsCell(first, cdr))
         } else if (this.peek() == Token.RightParen) {
-            this.advance()  // 消费 RightParen
-            // 单元素列表
+            // 单元素列表，不消费 RightParen，由 parseList() 消费
             consValue(first, Nil)
         } else {
             // 递归解析剩余元素
@@ -350,9 +351,12 @@ public class Parser {
      */
     public func parse(): ArrayList<LispValue> {
         let exprs = ArrayList<LispValue>()
+        var i = 0
 
         while (this.peek() != Token.EOF) {
-            exprs.add(this.parseExpression())
+            let expr = this.parseExpression()
+            exprs.add(expr)
+            i = i + 1
         }
 
         exprs
