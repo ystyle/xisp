@@ -51,5 +51,36 @@ extend BuiltinFunctions {
                 case _ => Number(0.0)
             }
         }))
+
+        // (append list1 list2 ...) - 连接多个列表
+        env.define("append", NativeFunc({ args =>
+            // 从后往前构建结果列表
+            var result: LispValue = Nil
+            var i = args.size - 1
+            while (i >= 0) {
+                let lst = args[i]
+                match (lst) {
+                    case Cons(cell) =>
+                        // 遍历列表，将每个元素添加到结果前面
+                        var current: LispValue = Cons(cell)
+                        while (!current.isNil()) {
+                            if (let Cons(currCell) <- current) {
+                                result = consValue(currCell.car, result)
+                                current = currCell.cdr
+                            } else {
+                                break
+                            }
+                        }
+                    case Nil =>
+                        // 空列表，跳过
+                        ()
+                    case _ =>
+                        // 非列表参数，忽略或返回错误
+                        return Nil
+                }
+                i = i - 1
+            }
+            result
+        }))
     }
 }
