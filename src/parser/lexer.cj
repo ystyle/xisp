@@ -335,6 +335,18 @@ public class Lexer {
             } else if (r == r'\'') {
                 this.advance()
                 Token.Quote
+            } else if (r == r'`') {
+                this.advance()
+                Token.Backquote
+            } else if (r == r',') {
+                this.advance()
+                // 检查是否是 ,@
+                if (let Some(nextR) <- this.peek() && nextR == r'@') {
+                    this.advance()
+                    Token.CommaAt
+                } else {
+                    Token.Comma
+                }
             } else if (r == r'"') {
                 this.readString()
             } else if (r == r'[') {

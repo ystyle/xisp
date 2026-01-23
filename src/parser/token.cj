@@ -27,6 +27,21 @@ public enum Token <: Equatable<Token> {
     | Quote
 
     /**
+     * 反引用符号 `
+     */
+    | Backquote
+
+    /**
+     * 逗号 ,
+     */
+    | Comma
+
+    /**
+     * 逗号-at ,@
+     */
+    | CommaAt
+
+    /**
      * 符号（变量名、函数名等）
      */
     | Symbol(String)
@@ -90,6 +105,9 @@ public enum Token <: Equatable<Token> {
             case (RightParen, RightParen) => true
             case (Dot, Dot) => true
             case (Quote, Quote) => true
+            case (Backquote, Backquote) => true
+            case (Comma, Comma) => true
+            case (CommaAt, CommaAt) => true
             case (Symbol(s1), Symbol(s2)) => s1 == s2
             case (Number(n1), Number(n2)) => n1 == n2
             case (String(s1), String(s2)) => s1 == s2
@@ -114,6 +132,9 @@ public enum Token <: Equatable<Token> {
             case RightParen => ")"
             case Dot => "."
             case Quote => "'"
+            case Backquote => "`"
+            case Comma => ","
+            case CommaAt => ",@"
             case Symbol(s) => "<symbol: ${s}>"
             case Number(n) => "<number: ${n}>"
             case String(s) => "<string: \"${s}\">"

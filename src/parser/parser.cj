@@ -173,6 +173,21 @@ public class Parser {
             let expr = this.parseExpression()
             // 创建 (quote expr) 的等价形式
             consValue(Symbol("quote"), consValue(expr, Nil))
+        } else if (token == Token.Backquote) {
+            this.advance()  // 消费 Backquote
+            let expr = this.parseExpression()
+            // 创建 (backquote expr) 的等价形式
+            consValue(Symbol("backquote"), consValue(expr, Nil))
+        } else if (token == Token.Comma) {
+            this.advance()  // 消费 Comma
+            let expr = this.parseExpression()
+            // 创建 (comma expr) 的等价形式
+            consValue(Symbol("comma"), consValue(expr, Nil))
+        } else if (token == Token.CommaAt) {
+            this.advance()  // 消费 CommaAt
+            let expr = this.parseExpression()
+            // 创建 (comma-at expr) 的等价形式
+            consValue(Symbol("comma-at"), consValue(expr, Nil))
         } else if (token == Token.LeftParen) {
             this.parseList()
         } else if (token == Token.VectorStart) {

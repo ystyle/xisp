@@ -77,6 +77,12 @@ extend Evaluator {
 
                 if (actualSym == "quote") {
                     return this.evalQuote(rest)
+                } else if (actualSym == "backquote") {
+                    return this.evalBackquote(rest)
+                } else if (actualSym == "comma") {
+                    return this.evalComma(rest)
+                } else if (actualSym == "comma-at") {
+                    return this.evalCommaAt(rest)
                 } else if (actualSym == "define") {
                     return this.evalDefine(rest)
                 } else if (actualSym == "defmacro") {

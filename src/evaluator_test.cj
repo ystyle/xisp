@@ -379,5 +379,66 @@ class MacroTest {
             case _ => @Fail("negate should return negative number")
         }
     }
+
+    @TestCase
+    func testBackquote() {
+        // 测试反引号 (backquote) 语法
+        let env = Environment()
+        BuiltinFunctions.registerAll(env)
+
+        // 测试简单的 backquote（类似 quote）
+        let result1 = evalCode("`(a b c)", env)
+        match (result1) {
+            case Cons(cell) => @Assert(cell.toString() == "(a b c)")
+            case _ => @Fail("backquote should return list")
+        }
+
+        // 测试 comma（取消引用）
+        evalCode("(define x 2)", env)
+        let result2 = evalCode("`(a ,x c)", env)
+        match (result2) {
+            case Cons(cell) => @Assert(cell.toString().contains("2.000000"))
+            case _ => @Fail("backquote with comma should evaluate x")
+        }
+
+        // 测试嵌套的 comma
+        evalCode("(define y 3)", env)
+        let result3 = evalCode("`(a ,x ,y)", env)
+        match (result3) {
+            case Cons(cell) => @Assert(cell.toString().contains("2.000000") || cell.toString().contains("3.000000"))
+            case _ => @Fail("backquote with multiple commas should work")
+        }
+    }
+
+    @TestCase
+    func testBackquoteWithCommaAt() {
+        // 测试 comma-at（列表拼接）
+        let env = Environment()
+        BuiltinFunctions.registerAll(env)
+
+        evalCode("(define lst '(b c))", env)
+        let result = evalCode("`(a ,@lst d)", env)
+
+        // 应该得到 (a b c d)
+        match (result) {
+            case Cons(cell) => @Assert(cell.toString().contains("a") && cell.toString().contains("b"))
+            case _ => @Fail("backquote with comma-at should splice list")
+        }
+    }
+
+    @TestCase
+    func testCommaOutsideBackquote() {
+        // 测试 comma 在 backquote 外使用时返回错误
+        let env = Environment()
+        BuiltinFunctions.registerAll(env)
+
+        evalCode("(define x 1)", env)
+        let result = evalCode(",x", env)
+
+        match (result) {
+            case Str(msg) => @Assert(msg.contains("Error"))
+            case _ => @Fail("comma outside backquote should return error")
+        }
+    }
 }
 
