@@ -1,0 +1,312 @@
+package ystyle::xisp.core
+
+import ystyle::xisp.types.*
+import ystyle::xisp.parser.*
+import std.collection.ArrayList
+import std.collection.HashMap
+import std.fs.*
+
+/**
+ * 模块文件加载器
+ *
+ * 负责从文件系统加载模块文件，处理文件忽略规则
+ */
+public class ModuleLoader {
+    private var evaluator: Evaluator
+    private var loadedFiles: HashMap<String, Bool>  // 已加载的文件，防止重复加载
+
+    public init(evaluator: Evaluator) {
+        this.evaluator = evaluator
+        this.loadedFiles = HashMap<String, Bool>()
+    }
+
+    /**
+     * 加载包目录下的所有 .lisp 文件
+     * @param packagePath 包目录路径
+     * @param env 模块环境
+     * @return 是否成功加载
+     */
+    public func loadPackage(packagePath: String, env: Environment): Bool {
+        if (!exists(packagePath)) {
+            return false
+        }
+
+        let pathObj = Path(packagePath)
+        let fileInfo = FileInfo(pathObj)
+
+        if (!fileInfo.isDirectory()) {
+            return false
+        }
+
+        // 列出目录下所有文件
+        let files = this.listLispFiles(packagePath)
+
+        if (files.isEmpty()) {
+            return true  // 空包也算加载成功
+        }
+
+        // 按文件名排序加载
+        let sortedFiles = this.sortFiles(files)
+
+        // 依次加载每个文件
+        var success = true
+        for (fileName in sortedFiles) {
+            let filePath = Path(packagePath).join(fileName).toString()
+
+            if (!this.loadFile(filePath, env)) {
+                success = false
+            }
+        }
+
+        success
+    }
+
+    /**
+     * 列出目录下的所有 .lisp 文件（忽略以 . 开头的文件）
+     */
+    private func listLispFiles(directory: String): ArrayList<String> {
+        let files = ArrayList<String>()
+
+        // TODO: 仓颉的文件遍历 API
+        // 这里需要实际的目录遍历实现
+        // 伪代码：
+        // for (entry in FileSystem.listEntries(directory)) {
+        //     if (entry.isFile() && entry.name.endsWith(".lisp")) {
+        //         if (!entry.name.startsWith(".")) {
+        //             files.add(entry.name)
+        //         }
+        //     }
+        // }
+
+        files
+    }
+
+    /**
+     * 按文件名排序
+     */
+    private func sortFiles(files: ArrayList<String>): ArrayList<String> {
+        // 简单的字母排序
+        let sorted = ArrayList<String>()
+        for (file in files) {
+            sorted.add(file)
+        }
+        // TODO: 实现排序逻辑
+        sorted
+    }
+
+    /**
+     * 加载单个文件
+     * @param filePath 文件路径
+     * @param env 环境
+     * @return 是否成功
+     */
+    public func loadFile(filePath: String, env: Environment): Bool {
+        // 检查是否已加载
+        if (this.isLoaded(filePath)) {
+            return true  // 已加载，跳过
+        }
+
+        // 检查文件是否存在
+        if (!exists(filePath)) {
+            return false
+        }
+
+        // 检查是否应该忽略
+        if (this.shouldIgnore(filePath)) {
+            return true  // 忽略的文件不算失败
+        }
+
+        // 读取文件内容
+        try {
+            let bytes = File.readFrom(filePath)
+            let content = String.fromUtf8(bytes)
+            this.evalContent(content, filePath, env)
+        } catch (_: FSException) {
+            false
+        } catch (_: Exception) {
+            false
+        }
+    }
+
+    /**
+     * 检查文件是否已加载
+     */
+    private func isLoaded(filePath: String): Bool {
+        let normalizedPath = canonicalize(filePath).toString()
+        if (this.loadedFiles.contains(normalizedPath)) {
+            return true
+        } else {
+            false
+        }
+    }
+
+    /**
+     * 标记文件为已加载
+     */
+    private func markLoaded(filePath: String) {
+        let normalizedPath = canonicalize(filePath).toString()
+        this.loadedFiles[normalizedPath] = true
+    }
+
+    /**
+     * 检查文件是否应该被忽略
+     * 忽略规则：
+     * - 以 . 开头的文件（如：.backup.lisp）
+     */
+    public func shouldIgnore(filePath: String): Bool {
+        let pathObj = Path(filePath)
+        let fullPath = pathObj.toString()
+        // 获取路径的最后部分（文件名）
+        let parts = fullPath.split("/")
+        let fileName = if (parts.size > 0) {
+            parts[parts.size - 1]
+        } else {
+            fullPath
+        }
+        fileName.startsWith(".")
+    }
+
+    /**
+     * 执行文件内容
+     */
+    private func evalContent(content: String, filePath: String, env: Environment): Bool {
+        // 使用词法分析器和语法分析器
+        let lexer = Lexer(content)
+        let tokens = lexer.tokenize()
+        let parser = Parser(tokens)
+
+        var hasError = false
+
+        // 解析所有表达式
+        let exprs = parser.parse()
+
+        // 逐个求值表达式
+        for (expr in exprs) {
+            // 保存当前环境
+            let oldEnv = this.evaluator.env
+            this.evaluator.env = env
+
+            // 求值
+            let result = this.evaluator.eval(expr)
+
+            // 恢复环境
+            this.evaluator.env = oldEnv
+
+            // 检查是否有错误
+            match (result) {
+                case Str(msg) =>
+                    if (msg.startsWith("Error:")) {
+                        hasError = true
+                    }
+                case _ => ()
+            }
+        }
+
+        if (!hasError) {
+            this.markLoaded(filePath)
+            true
+        } else {
+            false
+        }
+    }
+
+    /**
+     * 清空已加载文件缓存
+     */
+    public func clearCache() {
+        this.loadedFiles.clear()
+    }
+
+    /**
+     * 获取已加载文件列表
+     */
+    public func getLoadedFiles(): ArrayList<String> {
+        let files = ArrayList<String>()
+        for ((path, _) in this.loadedFiles) {
+            files.add(path)
+        }
+        files
+    }
+}
+
+/**
+ * 文件路径工具类
+ */
+public class ModulePathUtils {
+    /**
+     * 解析模块路径
+     * 从模块名生成文件系统路径
+     */
+    public static func moduleToPath(moduleName: String, searchPath: String): String {
+        // 解析模块名：org::package.subpkg
+        let parts = moduleName.split("::")
+        let (org, packageName) = if (parts.size == 2) {
+            // 有组织前缀：ystyle::log.zlog
+            (parts[0], parts[1])
+        } else if (parts.size == 1) {
+            // 无组织前缀（标准库）：io
+            ("", parts[0])
+        } else {
+            // 格式错误
+            ("", moduleName)
+        }
+
+        if (org.isEmpty()) {
+            // 标准库：searchPath/packageName/
+            Path(searchPath).join(packageName).toString()
+        } else {
+            // 带组织前缀：searchPath/org/packageName/
+            Path(searchPath).join(org).join(packageName).toString()
+        }
+    }
+
+    /**
+     * 查找模块的实际路径
+     * 在多个搜索路径中查找模块
+     */
+    public static func findModulePath(moduleName: String, searchPaths: ArrayList<String>): Option<String> {
+        for (searchPath in searchPaths) {
+            let modulePath = moduleToPath(moduleName, searchPath)
+
+            if (exists(modulePath)) {
+                let pathObj = Path(modulePath)
+                let fileInfo = FileInfo(pathObj)
+
+                if (fileInfo.isDirectory()) {
+                    // 检查是否有 package.lisp
+                    let packageFile = Path(modulePath).join("package.lisp").toString()
+                    if (exists(packageFile)) {
+                        return Some(modulePath)
+                    }
+                }
+            }
+        }
+
+        None
+    }
+
+    /**
+     * 解析相对路径导入
+     * 例如：./lib.utils -> /current/dir/lib/utils/
+     */
+    public static func resolveRelativePath(relativePath: String, basePath: String): String {
+        if (relativePath.startsWith("./") || relativePath.startsWith("../")) {
+            let path = Path(basePath).parent.toString()
+            Path(path).join(relativePath).toString()
+        } else {
+            relativePath
+        }
+    }
+
+    /**
+     * 将相对路径转换为模块名
+     * 例如：./lib.utils -> lib.utils
+     */
+    public static func relativePathToModuleName(relativePath: String): String {
+        // 移除 ./ 或 ../ 前缀
+        let cleaned = relativePath.replace("./", "").replace("../", "")
+
+        // 将路径分隔符转换为点号
+        cleaned.replace("/", ".").replace("\\", ".")
+    }
+}
