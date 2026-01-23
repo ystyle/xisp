@@ -9,13 +9,13 @@ import std.collection.ArrayList
  */
 extend Evaluator {
     /**
-     * 检查是否为向量解构模式 (cangjie:vector ...)
+     * 检查是否为向量解构模式 (cangjie::vector ...)
      */
     func isVectorDestructurePattern(value: LispValue): Bool {
         match (value) {
             case Cons(cell) =>
                 match (cell.car) {
-                    case Symbol("cangjie:vector") => true
+                    case Symbol("cangjie::vector") => true
                     case _ => false
                 }
             case _ => false

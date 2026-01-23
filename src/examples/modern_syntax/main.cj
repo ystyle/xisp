@@ -86,15 +86,15 @@ main(): Int64 {
     println("设计说明")
     println("=" * 60)
     println("""
-• 向量字面量 [1 2 3] 被转换为 (cangjie:vector 1 2 3)
+• 向量字面量 [1 2 3] 被转换为 (cangjie::vector 1 2 3)
   - 当前实现：返回列表形式
   - 未来：可扩展为真正的向量（随机访问 O(1)）
 
-• 哈希映射字面量 {:a 1 :b 2} 被转换为 (cangjie:hashmap :a 1 :b 2)
+• 哈希映射字面量 {:a 1 :b 2} 被转换为 (cangjie::hashmap :a 1 :b 2)
   - 当前实现：返回关联列表 ((:a . 1) (:b . 2))
   - 未来：可扩展为真正的 HashMap
 
-• 哈希集合字面量 #{1 2 3} 被转换为 (cangjie:hashset 1 2 3)
+• 哈希集合字面量 #{1 2 3} 被转换为 (cangjie::hashset 1 2 3)
   - 当前实现：返回列表形式
   - 未来：可扩展为真正的 HashSet（自动去重）
 

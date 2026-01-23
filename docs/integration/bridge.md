@@ -142,6 +142,10 @@ public func registerBridgeFunctionWithNS(
 )
 ```
 
+**命名空间命名规则**：
+- **命名空间本身不能包含 `::`**
+- **命名空间和函数名用 `::` 连接**：生成的完整符号是 `命名空间::函数名`
+
 **示例**：
 
 ```cangjie
@@ -154,8 +158,7 @@ interpreter.registerBridgeFunctionWithNS("mycalc", "add", { args =>
     }
 })
 
-// 在 Lisp 中使用
-// interpreter.eval("(mycalc:add 3 4)")  // => 7.0
+// 在 Lisp 中使用：(mycalc::add 3 4)  // => 7.0
 ```
 
 ### BridgeManager
@@ -417,7 +420,7 @@ Bridge.registerFunc(env, "my-func", { args =>
 
 // 带命名空间
 Bridge.registerFuncWithNS(env, "mymodule", "func", { args =>
-    // 函数名将是 mymodule:func
+    // 函数名将是 mymodule::func
     Number(42.0)
 })
 ```
@@ -445,38 +448,38 @@ Bridge.registerFuncWithNS(env, "myapi", "operation", { args =>
 
 ### std.io 模块
 
-文件操作函数，命名空间前缀：`cangjie:io:`
+文件操作函数，命名空间：`cangjie::`
 
-#### cangjie:io:read-file
+#### cangjie::read-file
 
 读取文件内容。
 
 ```lisp
-(cangjie:io:read-file "path/to/file.txt")
+(cangjie::io::read-file "path/to/file.txt")
 ```
 
 **返回值**：
 - 成功：文件内容的字符串
 - 失败：`"Error: ..."` 错误信息字符串
 
-#### cangjie:io:write-file
+#### cangjie::write-file
 
 写入文件（覆盖模式）。
 
 ```lisp
-(cangjie:io:write-file "path/to/file.txt" "Hello, World!")
+(cangjie::write-file "path/to/file.txt" "Hello, World!")
 ```
 
 **返回值**：
 - 成功：`"Success: written to path/to/file.txt"`
 - 失败：`"Error: ..."` 错误信息字符串
 
-#### cangjie:io:append-file
+#### cangjie::append-file
 
 追加内容到文件。
 
 ```lisp
-(cangjie:io:append-file "path/to/file.txt" "\nNew line")
+(cangjie::append-file "path/to/file.txt" "\nNew line")
 ```
 
 **返回值**：
@@ -485,50 +488,50 @@ Bridge.registerFuncWithNS(env, "myapi", "operation", { args =>
 
 ### std.fs 模块
 
-文件系统操作函数，命名空间前缀：`cangjie:fs:`
+文件系统操作函数，命名空间：`cangjie::`
 
-#### cangjie:fs:exists?
+#### cangjie::exists?
 
 检查文件或目录是否存在。
 
 ```lisp
-(cangjie:fs:exists? "path/to/file.txt")
+(cangjie::exists? "path/to/file.txt")
 ```
 
 **返回值**：
 - 存在：`true`
 - 不存在：`false`
 
-#### cangjie:fs:file?
+#### cangjie::file?
 
 判断是否为文件。
 
 ```lisp
-(cangjie:fs:file? "path/to/file.txt")
+(cangjie::file? "path/to/file.txt")
 ```
 
 **返回值**：
 - 是文件：`true`
 - 不是文件：`false`
 
-#### cangjie:fs:directory?
+#### cangjie::directory?
 
 判断是否为目录。
 
 ```lisp
-(cangjie:fs:directory? "path/to/dir")
+(cangjie::directory? "path/to/dir")
 ```
 
 **返回值**：
 - 是目录：`true`
 - 不是目录：`false`
 
-#### cangjie:fs:list-dir
+#### cangjie::list-dir
 
 列出目录内容。
 
 ```lisp
-(cangjie:fs:list-dir "path/to/dir")
+(cangjie::list-dir "path/to/dir")
 ```
 
 **返回值**：
@@ -543,19 +546,19 @@ Bridge.registerFuncWithNS(env, "myapi", "operation", { args =>
 
 ```lisp
 ; 写入配置文件
-(cangjie:io:write-file "config.txt" "name=Xisp\nversion=0.1.0")
+(cangjie::write-file "config.txt" "name=Xisp\nversion=0.1.0")
 
 ; 读取配置
-(define config (cangjie:io:read-file "config.txt"))
+(define config (cangjie::read-file "config.txt"))
 (println config)
 
 ; 检查文件是否存在
-(if (cangjie:fs:exists? "config.txt")
+(if (cangjie::exists? "config.txt")
     (println "配置文件存在")
     (println "配置文件不存在"))
 
 ; 列出当前目录
-(define files (cangjie:fs:list-dir "."))
+(define files (cangjie::list-dir "."))
 (println "文件列表:")
 (define (print-files lst)
   (if (not (null? lst))
@@ -607,10 +610,10 @@ public class MyCustomBridge {
 然后在 REPL 中使用：
 
 ```lisp
-xisp> (mycalc:add 1 2)
+xisp> (mycalc::add 1 2)
 3.000000
 
-xisp> (mycalc:concat "Hello" " World")
+xisp> (mycalc::concat "Hello" " World")
 "Hello World"
 ```
 

@@ -342,7 +342,7 @@ extend Evaluator {
                 }
 
             // 向量模式 [x y z]
-            // 注意：向量在解析时转换为 (cangjie:vector ...)
+            // 注意：向量在解析时转换为 (cangjie::vector ...)
             // 这里需要特殊处理
             case _ =>
                 // 尝试作为值直接匹配
@@ -366,7 +366,7 @@ extend Evaluator {
         // 检查是否是向量语法
         let isVector = if (let Cons(p) <- patternList) {
             match (p.car) {
-                case Symbol("cangjie:vector") => true
+                case Symbol("cangjie::vector") => true
                 case _ => false
             }
         } else {
@@ -376,19 +376,19 @@ extend Evaluator {
         if (isVector) {
             // 向量模式：提取向量元素
             if (let Cons(vecCall) <- patternList) {
-                // 向量参数列表是vecCall.cdr（去掉cangjie:vector后的部分）
+                // 向量参数列表是vecCall.cdr（去掉cangjie::vector后的部分）
                 patternList = vecCall.cdr
 
-                // 值也应该是向量，或者是普通列表（因为cangjie:vector函数返回列表）
+                // 值也应该是向量，或者是普通列表（因为cangjie::vector函数返回列表）
                 if (let Cons(valueVecCall) <- value) {
                     match (valueVecCall.car) {
-                        case Symbol("cangjie:vector") =>
+                        case Symbol("cangjie::vector") =>
                             // 值是向量形式，提取参数
                             if (let Cons(valueVecArgs) <- valueVecCall.cdr) {
                                 valueList = valueVecArgs.car
                             }
                         case _ =>
-                            // 值不是向量形式，可能是普通列表（cangjie:vector函数返回的）
+                            // 值不是向量形式，可能是普通列表（cangjie::vector函数返回的）
                             // 直接使用这个值作为valueList
                             valueList = value
                     }
