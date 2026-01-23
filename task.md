@@ -402,10 +402,10 @@
   - [x] 递归展开处理
   - [x] 错误处理（单独使用 comma 时返回错误）
   - [x] 单元测试（3 个测试全部通过）
-- [ ] 高级宏特性 (P2)
-  - [ ] let* - 顺序绑定
-  - [ ] when-let* - 条件+绑定组合
-  - [ ] if-let - 条件+解构组合
+- [x] 高级宏特性 (P2) ✅ 2026-01-23
+  - [x] let* - 顺序绑定
+  - [x] when-let* - 条件+顺序绑定
+  - [x] if-let - 条件+解构组合
   - [ ] condb - 增强 cond（支持 :let 绑定）
 
 **关键文件**:
@@ -1643,5 +1643,121 @@ docs/
 
 ---
 
-**最后更新**: 2026-01-22
+## 最新更新记录 (2026-01-23)
+
+### ✅ 高级宏特性完成 (模块 8 扩展)
+
+**提交**: `82683ec - fix(macro): 修复 when-let* 实现并添加完整测试`
+
+**主要成果**:
+- ✅ let* - 顺序绑定宏（6 个单元测试）
+- ✅ if-let - 条件+解构绑定宏（4 个单元测试）
+- ✅ when-let* - 条件+顺序绑定宏（10 个单元测试）
+- ✅ 宏系统文档完整更新（docs/syntax/macros.md）
+- ✅ 高级宏特性示例文件（examples/advanced_macros.lisp）
+
+**测试覆盖**:
+- 总测试数: 137
+- 通过: 137 (100%)
+- let*: 6 个测试 (LetStarTest + AdvancedMacroTest)
+- if-let: 4 个测试 (AdvancedMacroTest)
+- when-let*: 10 个测试 (AdvancedMacroTest + LetStarTest)
+
+**核心修复**:
+
+1. **when-let* 重写** (src/core/eval_special_forms.cj)
+   ```cangjie
+   // 从基于展开的实现改为直接执行
+   func evalWhenLetStar(expr: LispValue): LispValue {
+       // 创建新作用域
+       // 按顺序绑定变量
+       // 检查最后一个值是否为真
+       // 执行 body 或返回 nil
+   }
+   ```
+
+2. **let* 实现** (src/core/eval_special_forms.cj)
+   ```cangjie
+   // 递归展开为嵌套的 let
+   ((a 1) (b 2)) → (let ((a 1)) (let* ((b 2)) body))
+   ```
+
+3. **if-let 实现** (src/core/eval_special_forms.cj)
+   ```cangjie
+   // 展开为 (let ((var value)) (if var then else))
+   ```
+
+**文档更新** (docs/syntax/macros.md):
+- 新增三个宏的完整文档
+- 每个宏包含语法、示例、提示
+- 更新相关资源链接
+
+**示例文件** (examples/advanced_macros.lisp):
+- 16 个详细示例
+- 覆盖所有使用场景
+- 包含实际应用演示
+
+**技术亮点**:
+- **when-let***: 链式处理，任何一步失败都会中断
+- **let***: 词法作用域，后面绑定可引用前面变量
+- **if-let**: 类似三元运算符，支持 then/else 分支
+
+**提交记录**:
+- `de63bd9` - 实现高级宏特性 let* 和 if-let
+- `82683ec` - 修复 when-let* 实现并添加完整测试
+
+**待完成**:
+- ⏳ condb 宏 - 增强 cond（支持 :let 绑定）
+
+---
+
+## 进度更新 (2026-01-23)
+
+### 宏系统模块状态
+- ✅ 8.1 宏展开机制
+- ✅ 8.2 defmacro 特殊形式
+- ✅ 8.3 macroexpand/macroexpand-all 函数
+- ✅ 8.4 常用内置宏（when/unless/incf/decf/swap/push/pop/negate）
+- ✅ 8.5 反引号语法（backquote/comma/comma-at）
+- ✅ 8.6 高级宏特性（let*/if-let/when-let*）
+- ⏳ 8.7 condb 宏（待实现）
+
+**总计**: 20/21 宏系统任务完成 (95.2%)
+
+### 下一步建议
+
+#### 选项 1: 完成 condb 宏（推荐 ⭐）
+- 优先级: P2
+- 工作量: 2-3 小时
+- 价值: 完善宏系统，提供更强大的条件分支能力
+- 语法: `(cond (:let x value) ...)` - 支持在 cond 分支中绑定变量
+
+#### 选项 2: 实现模块与包管理系统（重要）
+- 优先级: P1
+- 工作量: 2-3 周
+- 价值: 支持代码模块化，便于大型项目组织
+- 包含: import/require/define-module/cjlpm
+
+#### 选项 3: 实现 async/await 支持（高级）
+- 优先级: P1
+- 工作量: 1-2 周
+- 价值: 支持异步编程，与仓颉 async4j 深度集成
+- 包含: async/await 语法、Promise 类型、并发原语
+
+#### 选项 4: REPL 功能增强（实用）
+- 优先级: P1
+- 工作量: 3-5 天
+- 价值: 改善开发体验
+- 包含: 命令历史、错误提示、pretty-print
+
+#### 选项 5: 性能优化和调试工具（生产级）
+- 优先级: P0/P1
+- 工作量: 1-2 周
+- 价值: 提升性能，方便调试
+- 包含: 字节码缓存、AST 可视化、调试器
+
+---
+
+**最后更新**: 2026-01-23
 **更新者**: Claude (AI Assistant)
+**当前进度**: M1 ✅ 完成 - M2 ✅ 完成 - M3 ✅ 完成 - M4 🚧 部分完成（宏系统 95%，安全沙箱 100%）

@@ -103,6 +103,8 @@ extend Evaluator {
                     return this.evalWhenLetStar(rest)
                 } else if (actualSym == "if-let") {
                     return this.evalIfLet(rest)
+                } else if (actualSym == "condb") {
+                    return this.evalCondb(rest)
                 } else if (actualSym == "apply") {
                     return this.evalApply(rest)
                 } else if (actualSym == "->") {
