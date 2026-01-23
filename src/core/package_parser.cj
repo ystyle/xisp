@@ -53,12 +53,36 @@ public class PackageParser {
         // 解析所有表达式
         let exprs = parser.parse()
 
-        // 处理第一个表达式（应该是 package 表达式）
+        // 处理所有表达式，找到 package 和 export 声明
         if (exprs.isEmpty()) {
             None
         } else {
-            this.extractPackageInfo(exprs[0], packagePath)
+            this.extractPackageInfoFromExprs(exprs, packagePath)
         }
+    }
+
+    /**
+     * 从多个表达式提取包信息
+     */
+    private func extractPackageInfoFromExprs(exprs: ArrayList<LispValue>, packagePath: String): Option<PackageInfo> {
+        var packageInfo: Option<PackageInfo> = None
+
+        for (expr in exprs) {
+            match (expr) {
+                case Cons(cell) =>
+                    let item = cell.car
+
+                    match (item) {
+                        case Symbol("package") =>
+                            // 处理 (package "package.name" ...)
+                            packageInfo = this.parsePackageDeclaration(cell, packagePath)
+                        case _ => ()
+                    }
+                case _ => ()
+            }
+        }
+
+        packageInfo
     }
 
     /**
@@ -96,13 +120,8 @@ public class PackageParser {
                         case Cons(itemCell) =>
                             match (itemCell.car) {
                                 case Symbol("package") =>
-                                    // 处理 (package org.name ...)
+                                    // 处理 (package "package.name" ...)
                                     packageInfo = this.parsePackageDeclaration(itemCell, packagePath)
-                                case Symbol("export") =>
-                                    // 处理 (export sym1 sym2 ...)
-                                    if (let Some(info) <- packageInfo) {
-                                        this.parseExportDeclaration(itemCell, info)
-                                    }
                                 case _ => ()
                             }
                         case _ => ()
@@ -117,7 +136,8 @@ public class PackageParser {
     }
 
     /**
-     * 解析 (package org.name ...) 声明
+     * 解析 (package "package.name" ...) 声明
+     * 注意：包名可以是字符串或符号，组织从 organization 字段读取
      */
     private func parsePackageDeclaration(expr: ConsCell, packagePath: String): Option<PackageInfo> {
         let rest = expr.cdr
@@ -127,26 +147,12 @@ public class PackageParser {
                 let packageName = restCell.car
 
                 match (packageName) {
+                    case Str(name) =>
+                        // 包名是字符串形式
+                        this.parsePackageWithName(name, restCell.cdr, packagePath)
                     case Symbol(name) =>
-                        // 解析包名：org.name 或 name
-                        let parts = name.split('.')
-                        let (org, pkg) = if (parts.size >= 2) {
-                            (parts[0], name)
-                        } else {
-                            ("", name)
-                        }
-
-                        let packageInfo = PackageInfo(
-                            name,
-                            org,
-                            pkg,
-                            packagePath
-                        )
-
-                        // 解析元数据字段
-                        this.parsePackageMetadata(restCell.cdr, packageInfo)
-
-                        Some(packageInfo)
+                        // 包名是符号形式（不含 . 的简单包名）
+                        this.parsePackageWithName(name, restCell.cdr, packagePath)
                     case _ => None
                 }
             case _ => None
@@ -154,8 +160,62 @@ public class PackageParser {
     }
 
     /**
+     * 使用包名创建 PackageInfo
+     */
+    private func parsePackageWithName(name: String, metadata: LispValue, packagePath: String): Option<PackageInfo> {
+        // 先扫描元数据找到 organization
+        let org = this.extractOrganization(metadata)
+
+        // 创建 PackageInfo
+        let packageInfo = PackageInfo(
+            name,   // 完整包名（不含组织前缀）
+            org,    // 从 organization 字段解析
+            name,   // packageName
+            packagePath
+        )
+
+        // 解析其他元数据字段
+        this.parsePackageMetadata(metadata, packageInfo)
+
+        Some(packageInfo)
+    }
+
+    /**
+     * 从元数据中提取 organization 字段
+     */
+    private func extractOrganization(expr: LispValue): String {
+        var current: LispValue = expr
+
+        while (!current.isNil()) {
+            match (current) {
+                case Cons(currCell) =>
+                    let item = currCell.car
+
+                    match (item) {
+                        case Cons(itemCell) =>
+                            match (itemCell.car) {
+                                case Symbol("organization") =>
+                                    match (this.parseStringField(itemCell.cdr)) {
+                                        case Some(value) => return value
+                                        case None => ()
+                                    }
+                                case _ => ()
+                            }
+                        case _ => ()
+                    }
+
+                    current = currCell.cdr
+                case _ => break
+            }
+        }
+
+        ""  // 默认空组织
+    }
+
+    /**
      * 解析包元数据字段
      * 处理 (version "0.1.0")、(description "...") 等
+     * 注意：organization 已经在创建 PackageInfo 之前处理
      */
     private func parsePackageMetadata(expr: LispValue, packageInfo: PackageInfo) {
         var current: LispValue = expr
@@ -257,27 +317,6 @@ public class PackageParser {
                     }
                 }
             case _ => ()
-        }
-    }
-
-    /**
-     * 解析 (export sym1 sym2 ...) 声明
-     */
-    private func parseExportDeclaration(expr: ConsCell, packageInfo: PackageInfo) {
-        let rest = expr.cdr
-        var current: LispValue = rest
-
-        while (!current.isNil()) {
-            match (current) {
-                case Cons(currCell) =>
-                    match (currCell.car) {
-                        case Symbol(symName) =>
-                            packageInfo.exports.add(symName)
-                        case _ => ()
-                    }
-                    current = currCell.cdr
-                case _ => break
-            }
         }
     }
 

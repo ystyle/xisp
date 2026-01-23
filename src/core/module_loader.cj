@@ -5,6 +5,7 @@ import ystyle::xisp.parser.*
 import std.collection.ArrayList
 import std.collection.HashMap
 import std.fs.*
+import std.sort.*
 
 /**
  * 模块文件加载器
@@ -67,16 +68,28 @@ public class ModuleLoader {
     private func listLispFiles(directory: String): ArrayList<String> {
         let files = ArrayList<String>()
 
-        // TODO: 仓颉的文件遍历 API
-        // 这里需要实际的目录遍历实现
-        // 伪代码：
-        // for (entry in FileSystem.listEntries(directory)) {
-        //     if (entry.isFile() && entry.name.endsWith(".lisp")) {
-        //         if (!entry.name.startsWith(".")) {
-        //             files.add(entry.name)
-        //         }
-        //     }
-        // }
+        try {
+            // 使用 Directory.readFrom 遍历目录
+            let fileInfos = Directory.readFrom(directory)
+
+            for (fileInfo in fileInfos) {
+                let fileName = fileInfo.name
+
+                // 忽略以 . 开头的文件
+                if (fileName.startsWith(".")) {
+                    continue
+                }
+
+                // 只处理 .lisp 文件
+                if (fileName.endsWith(".lisp")) {
+                    files.add(fileName)
+                }
+            }
+        } catch (e: FSException) {
+            // 目录不存在或无法访问，返回空列表
+        } catch (e: Exception) {
+            // 其他异常，返回空列表
+        }
 
         files
     }
@@ -85,13 +98,9 @@ public class ModuleLoader {
      * 按文件名排序
      */
     private func sortFiles(files: ArrayList<String>): ArrayList<String> {
-        // 简单的字母排序
-        let sorted = ArrayList<String>()
-        for (file in files) {
-            sorted.add(file)
-        }
-        // TODO: 实现排序逻辑
-        sorted
+        // 使用仓颉的 sort 函数排序
+        sort(files)
+        files
     }
 
     /**

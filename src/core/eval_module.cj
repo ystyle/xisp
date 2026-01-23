@@ -325,24 +325,9 @@ extend Evaluator {
      * @return 解析的包信息，失败返回 None
      */
     private func parsePackageFile(packagePath: String): Option<PackageInfo> {
-        let packageFilePath = Path(packagePath).join("package.lisp").toString()
-
-        // 读取文件内容
-        if (!exists(packageFilePath)) {
-            return None
-        }
-
-        // TODO: 实际解析 Lisp 文件
-        // 暂时返回基本的包信息
-        let (org, packageName) = this.getModuleRegistry().parseModuleName(packagePath)
-        let packageInfo = PackageInfo(
-            packageName,
-            org,
-            packageName,
-            packagePath
-        )
-
-        Some(packageInfo)
+        // 使用 PackageParser 解析 package.lisp
+        let parser = this.getPackageParser()
+        parser.parse(packagePath)
     }
 
     /**
@@ -352,13 +337,11 @@ extend Evaluator {
      * @return 是否成功加载
      */
     private func loadPackageFiles(packagePath: String, env: Environment): Bool {
-        // TODO: 实现文件遍历和加载逻辑
-        // 1. 列出目录下所有 .lisp 文件
-        // 2. 忽略以 . 开头的文件
-        // 3. 按文件名排序
-        // 4. 依次加载每个文件
+        // 使用 ModuleLoader 加载包
+        let loader = ModuleLoader(this)
 
-        true  // 暂时返回 true
+        // 加载包目录下的所有文件
+        loader.loadPackage(packagePath, env)
     }
 
     /**
