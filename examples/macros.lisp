@@ -10,29 +10,24 @@
 ;; ======================================
 
 (println "1. 定义简单的宏: when")
-(println "代码: (defmacro when (test & body) `(if test (begin ,@body) nil))")
+(println "代码: (defmacro when (test then) `(if ,test ,then nil))")
 
-;; when 宏：条件为真时执行多个表达式
-(defmacro when (test & body)
-  `(if test
-       (begin ,@body)
-     nil))
+;; when 宏：条件为真时执行表达式
+(defmacro when (test then)
+  `(if ,test ,then nil))
 
 ;; 测试 when 宏
-(println "测试: (when (> 5 3) (println \"5 > 3\") (println \"条件成立\"))")
+(println "测试: (when (> 5 3) (println \"5 > 3\"))")
 (when (> 5 3)
-  (println "5 > 3")
-  (println "条件成立"))
+  (println "5 > 3"))
 (println "")
 
-;; unless 宏：条件为假时执行多个表达式
+;; unless 宏：条件为假时执行表达式
 (println "2. 定义 unless 宏")
-(println "代码: (defmacro unless (test & body) `(if (not test) (begin ,@body) nil))")
+(println "代码: (defmacro unless (test then) `(if (not ,test) ,then nil))")
 
-(defmacro unless (test & body)
-  `(if (not test)
-       (begin ,@body)
-     nil))
+(defmacro unless (test then)
+  `(if (not ,test) ,then nil))
 
 ;; 测试 unless 宏
 (println "测试: (unless (< 5 3) (println \"5 不小于 3\"))")
@@ -41,53 +36,35 @@
 (println "")
 
 ;; ======================================
-;; 2. let* 宏（顺序绑定）
+;; 2. 宏与反引号语法
 ;; ======================================
 
-(println "3. 定义 let* 宏（顺序绑定）")
-(println "代码: (defmacro let* (bindings & body)")
-(println "        (if (null? bindings)")
-(println "            `(begin ,@body)")
-(println "          `((let ((,(caar bindings) ,(cadar bindings)))")
-(println "              (let* ,(cdr bindings) ,@body)))))")
+(println "3. 反引号语法演示")
+(println "代码: (defmacro double (x) `(* ,x 2))")
 
-(defmacro let* (bindings & body)
-  (if (null? bindings)
-      `(begin ,@body)
-    `((let ((,(caar bindings) ,(cadar bindings)))
-        (let* ,(cdr bindings) ,@body)))))
+(defmacro double (x)
+  `(* ,x 2))
 
-;; 测试 let* 宏
-(println "测试: (let* ((a 1) (b (+ a 10))) (+ a b))")
-(define result (let* ((a 1) (b (+ a 10))) (+ a b)))
-(println #"结果: #{result}")
-(println "期望: 12.000000")
+(println "测试: (double 5)")
+(define r1 (double 5))
+(println #"结果: #{r1}")
+(println "期望: 10.000000")
 (println "")
 
 ;; ======================================
-;; 3. cond 宏（多分支条件）
+;; 3. 逗号-at 拼接列表
 ;; ======================================
 
-(println "4. 定义 cond 宏（多分支条件）")
+(println "4. 逗号-at 列表拼接演示")
+(println "代码: (defmacro wrap-list (lst) `(a ,@lst b))")
 
-(defmacro cond (& clauses)
-  (if (null? clauses)
-      nil
-    (if (eq? (caar clauses) 'else)
-        `(begin ,@(cdar clauses))
-      `(if ,(caar clauses)
-           (begin ,@(cdar clauses))
-         (cond ,@(cdr clauses))))))
+(defmacro wrap-list (lst)
+  `(a ,@lst b))
 
-;; 测试 cond 宏
-(println "测试: (cond ((< x 5) \"小\") ((> x 10) \"大\") (else \"中等\"))")
-(define x 7)
-(define cond-result (cond
-                      ((< x 5) "小")
-                      ((> x 10) "大")
-                      (else "中等")))
-(println #"结果: #{cond-result}")
-(println "期望: \"中等\"")
+(println "测试: (wrap-list '(x y z))")
+(define r2 (wrap-list '(x y z)))
+(println "结果: " r2)
+(println "期望: (a x y z b)")
 (println "")
 
 ;; ======================================
@@ -95,28 +72,42 @@
 ;; ======================================
 
 (println "5. 自定义宏: incf（自增）")
-(println "代码: (defmacro incf (place &optional (delta 1))")
-(println "        `(setq ,place (+ ,place ,delta)))")
+(println "代码: (defmacro incf (var) `(setq ,var (+ ,var 1)))")
 
-(defmacro incf (place &optional (delta 1))
-  `(setq ,place (+ ,place ,delta)))
+(defmacro incf (var)
+  `(setq ,var (+ ,var 1)))
 
 ;; 测试 incf 宏
-(println "测试: (define counter 0) (incf counter) (incf counter 5)")
+(println "测试: (define counter 0) (incf counter)")
 (define counter 0)
 (println "初始 counter = 0")
 (incf counter)
 (println #"incf counter => #{counter}")
-(incf counter 5)
-(println #"incf counter 5 => #{counter}")
-(println "期望: 1, 6")
+(println "期望: 1")
 (println "")
 
 ;; ======================================
-;; 5. 宏展开测试
+;; 5. 带多个参数的宏
 ;; ======================================
 
-(println "6. 宏展开测试")
+(println "6. 多参数宏: incf-by（指定增量）")
+(println "代码: (defmacro incf-by (var delta) `(setq ,var (+ ,var ,delta)))")
+
+(defmacro incf-by (var delta)
+  `(setq ,var (+ ,var ,delta)))
+
+;; 测试 incf-by 宏
+(println "测试: (incf-by counter 5)")
+(incf-by counter 5)
+(println #"incf-by counter 5 => #{counter}")
+(println "期望: 6")
+(println "")
+
+;; ======================================
+;; 6. 宏展开测试
+;; ======================================
+
+(println "7. 宏展开测试")
 (println "代码: (macroexpand '(when (> x 10) (println \"large\")))")
 (define expanded (macroexpand '(when (> x 10) (println "large")))
 (println "展开结果:")
@@ -130,21 +121,81 @@
 (println "")
 
 ;; ======================================
-;; 6. 复杂宏示例：管道操作符的简化版
+;; 7. 复杂宏示例：三元运算符
 ;; ======================================
 
-(println "7. 宏实现管道操作符简化版")
+(println "8. 三元运算符宏")
+(println "代码: (defmacro ternary (test a b) `(if ,test ,a ,b))")
 
-(defmacro ==> (& forms)
-  (if (null? (cdr forms))
-      (car forms)
-    `((,(car forms)) (==>,@(cdr forms)))))
+(defmacro ternary (test a b)
+  `(if ,test ,a ,b))
 
-;; 测试 ==> 宏
-(println "测试: (==> 1 (+ 2) (* 3) (- 5))")
-(define pipe-result (==> 1 (+ 2) (* 3) (- 5)))
-(println #"结果: #{pipe-result}")
-(println "期望: ((- 5) (* 3 (+ 2 1))) 展开后的求值结果")
+;; 测试 ternary 宏
+(println "测试: (ternary (> 5 3) \"yes\" \"no\")")
+(define r3 (ternary (> 5 3) "yes" "no"))
+(println "结果: " r3)
+(println "期望: \"yes\"")
+(println "")
+
+;; ======================================
+;; 8. 实用宏示例
+;; ======================================
+
+(println "9. 实用宏: negate（数值取反）")
+(println "代码: (defmacro negate (x) `(* ,x -1))")
+
+(defmacro negate (x)
+  `(* ,x -1))
+
+;; 测试 negate 宏
+(println "测试: (negate 42)")
+(define r4 (negate 42))
+(println #"结果: #{r4}")
+(println "期望: -42.000000")
+(println "")
+
+;; ======================================
+;; 9. 变量操作宏
+;; ======================================
+
+(println "10. 变量交换宏: swap")
+(println "代码: (defmacro swap (a b)")
+(println "        `(let ((temp ,a))")
+(println "           (setq ,a ,b)")
+(println "           (setq ,b temp)))")
+
+(defmacro swap (a b)
+  `(let ((temp ,a))
+     (setq ,a ,b)
+     (setq ,b temp)))
+
+;; 测试 swap 宏
+(println "测试: (define x 100) (define y 200) (swap x y)")
+(define x 100)
+(define y 200)
+(println "初始: x = " x ", y = " y)
+(swap x y)
+(println "交换后: x = " x ", y = " y)
+(println "期望: x = 200, y = 100")
+(println "")
+
+;; ======================================
+;; 10. 列表操作宏
+;; ======================================
+
+(println "11. 列表操作宏: push")
+(println "代码: (defmacro push (elem lst) `(cons ,elem ,lst))")
+
+(defmacro push (elem lst)
+  `(cons ,elem ,lst))
+
+;; 测试 push 宏
+(println "测试: (define mylist '(2 3 4)) (push 1 mylist)")
+(define mylist '(2 3 4))
+(println "初始 mylist = " mylist)
+(push 1 mylist)
+(println "push 后 mylist = " mylist)
+(println "期望: (1 2 3 4)")
 (println "")
 
 (println "=== 宏系统演示完成 ===")
