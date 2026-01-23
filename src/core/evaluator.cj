@@ -10,6 +10,8 @@ public class Evaluator {
     var stackDepth: Int64 = 0
     var maxStackDepth: Int64 = 1000  // 默认栈深度限制
     var funcChecker: ?((String) -> Bool) = None  // 函数权限检查回调
+    var macroExpandDepth: Int64 = 0  // 宏展开深度
+    var maxMacroExpandDepth: Int64 = 100  // 最大宏展开深度
 
     public init(env: Environment) {
         this.env = env
