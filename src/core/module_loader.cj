@@ -63,28 +63,34 @@ public class ModuleLoader {
     }
 
     /**
-     * 列出目录下的所有 .lisp 文件（忽略以 . 开头的文件）
+     * 列出目录下的所有 .lisp 文件（递归，忽略以 . 开头的文件）
      */
     private func listLispFiles(directory: String): ArrayList<String> {
         let files = ArrayList<String>()
 
         try {
-            // 使用 Directory.readFrom 遍历目录
-            let fileInfos = Directory.readFrom(directory)
-
-            for (fileInfo in fileInfos) {
+            // 使用 Directory.walk 递归遍历目录
+            Directory.walk(Path(directory), { fileInfo =>
                 let fileName = fileInfo.name
 
-                // 忽略以 . 开头的文件
+                // 忽略以 . 开头的文件和目录
                 if (fileName.startsWith(".")) {
-                    continue
+                    return true  // 继续遍历
+                }
+
+                // 如果是目录，继续遍历
+                if (fileInfo.isDirectory()) {
+                    return true
                 }
 
                 // 只处理 .lisp 文件
                 if (fileName.endsWith(".lisp")) {
-                    files.add(fileName)
+                    // 获取完整路径并添加到列表
+                    files.add(fileInfo.path.toString())
                 }
-            }
+
+                true  // 继续遍历
+            })
         } catch (e: FSException) {
             // 目录不存在或无法访问，返回空列表
         } catch (e: Exception) {
