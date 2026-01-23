@@ -287,18 +287,20 @@
 - [x] 7.5.1 修复哈希集合元素显示问题（自动 quote 符号）✅ 2026-01-22
 - [x] 7.6 实现字符串插值 #"" (P1) ✅ 2026-01-22
 - [x] 7.6.1 智能表达式包裹：多 token 插值自动转换为函数调用 ✅ 2026-01-22
-- [ ] 7.7 实现模式匹配 match (P2)
+- [x] 7.7 实现模式匹配 match (P2) ✅ 2026-01-22
 
 **关键文件**:
 - `src/core/evaluator.cj` - 解构绑定、高阶函数 lambda 支持实现 ✅
+- `src/core/eval_pattern_match.cj` - 模式匹配实现（497 行）✅
 - `src/parser/token.cj` - Token 类型（新增 VectorStart/End, HashMapStart/End, HashSetStart, InterpolateString）✅
-- `src/parser/lexer.cj` - 词法分析（识别 []{}#{}#"" 语法，插值字符串解析）✅
+- `src/parser/lexer.cj` - 词法分析（识别 []{}#{}#"" 语法，插值字符串解析，& 符号）✅
 - `src/parser/parser.cj` - 语法分析（解析字面量为函数调用，自动 quote 键和符号，智能包裹插值表达式）✅
 - `src/bridge/bridge.cj` - 桥接函数（cangjie:vector/hashmap/hashset/interpolate）✅
 - `src/interpreter.cj` - 注册现代化语法模块 ✅
 - `src/examples/test_destruct/main.cj` - 解构测试示例 ✅
 - `src/examples/test_pipeline/main.cj` - 管道测试示例 ✅
 - `src/examples/modern_syntax/main.cj` - 现代化语法演示 ✅
+- `src/examples/match_demo/main.cj` - 模式匹配演示 ✅
 - `docs/modern_syntax.md` - 现代化语法文档 ✅
 
 **实现总结**：
@@ -907,7 +909,7 @@ Closes #1
 - ✅ 模块 6: 仓颉桥接层 (11/11)
 - ✅ 模块 6.5: 选项系统 (9/9)
 - ✅ 模块 6.6: 中文支持优化 (6/6)
-- ✅ 模块 7: 现代化语法 (10/10)
+- ✅ 模块 7: 现代化语法 (11/11) - 包含模式匹配
 - ✅ 模块 7.5: 高阶函数增强 (3/3)
 - 🚧 模块 8: 宏系统 (3/5) - 基础框架完成，backquote/comma 语法待实现
 - ⏳ 模块 8.5: 异步/await 支持 (0/5)
@@ -952,7 +954,7 @@ Closes #1
 - ⏳ 调试工具完善
 - ⏳ 性能优化（字节码缓存）
 
-**总计**: 88/110 任务完成 (80.0%)
+**总计**: 89/110 任务完成 (80.9%)
 
 **M4 扩展** (2026-01-23):
 - ✅ 宏系统基础框架（模块 8 部分完成 - 3/5 子任务）
@@ -1469,7 +1471,7 @@ while (!patternList.isNil()) {  // ✅ 只检查 patternList
 - ✅ 模块 6: 仓颉桥接层 (11/11)
 - ✅ 模块 6.5: 选项系统 (9/9)
 - ✅ 模块 6.6: 中文支持优化 (6/6)
-- ✅ 模块 7: 现代化语法 (10/10)
+- ✅ 模块 7: 现代化语法 (11/11) - 包含模式匹配
 - ✅ 模块 7.5: 高阶函数增强 (3/3)
 - ⏳ 模块 8: 宏系统 (0/5)
 - ⏳ 模块 8.5: 异步/await 支持 (0/5)
