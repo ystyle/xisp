@@ -16,6 +16,9 @@ public class Evaluator {
     var macroExpandDepth: Int64 = 0  // 宏展开深度
     var maxMacroExpandDepth: Int64 = 100  // 最大宏展开深度
 
+    // 当前执行的文件路径（用于相对路径导入）
+    public var currentFilePath: Option<String> = None
+
     // 模块系统相关字段（延迟初始化以避免循环依赖）
     public var moduleRegistry: Option<ModuleRegistry> = None
     public var moduleLoader: Option<ModuleLoader> = None

@@ -54,6 +54,11 @@ extend Evaluator {
      * (import ../parent.module)
      */
     func evalImport(expr: LispValue): LispValue {
+        // 确保模块系统已初始化
+        if (this.moduleRegistry.isNone()) {
+            this.initModuleSystem()
+        }
+
         // 检查模块加载权限
         match (this.moduleLoadChecker) {
             case Some(checker) =>
@@ -203,9 +208,191 @@ extend Evaluator {
      * 导入相对路径模块：("./local.module") 或 ("../parent.module")
      */
     private func importRelativeModule(relativePath: String): LispValue {
-        // 获取当前文件的路径（从环境或 evaluator 获取）
-        // 暂时返回错误，等文件系统集成
-        Str("Error: relative import not yet implemented")
+        // 获取当前文件路径
+        match (this.currentFilePath) {
+            case Some(filePath) =>
+                // 获取当前文件所在目录
+                let currentDir = Path(filePath).parent.toString()
+
+                // 解析相对路径
+                let modulePath = this.resolveRelativePath(currentDir, relativePath)
+
+                match (modulePath) {
+                    case Some(path) =>
+                        // 查找路径对应的包
+                        match (this.findPackageByPath(path)) {
+                            case Some(moduleName) =>
+                                // 导入找到的模块
+                                this.importModuleByName(moduleName, None, ArrayList<String>())
+                            case None =>
+                                Str("Error: module not found at path '${path}'")
+                        }
+                    case None =>
+                        Str("Error: invalid relative path '${relativePath}'")
+                }
+            case None =>
+                Str("Error: cannot resolve relative import: no current file context")
+        }
+    }
+
+    /**
+     * 解析相对路径
+     * @param baseDir 基础目录（当前文件所在目录）
+     * @param relativePath 相对路径（如 "./lib.utils" 或 "../lib.parser"）
+     * @return 解析后的绝对路径，或 None 如果路径无效
+     */
+    private func resolveRelativePath(baseDir: String, relativePath: String): Option<String> {
+        // 标准化相对路径
+        var normalizedPath = relativePath
+
+        // 处理 ./ 开头
+        if (normalizedPath.startsWith("./")) {
+            // 去掉 ./（从索引2开始到结尾）
+            normalizedPath = normalizedPath[2..normalizedPath.size]
+        }
+
+        // 处理 ../ 开头
+        if (normalizedPath.startsWith("../")) {
+            // 获取上级目录
+            let parentDir = Path(baseDir).parent.toString()
+            // 去掉 ../（从索引3开始到结尾）
+            normalizedPath = normalizedPath[3..normalizedPath.size]
+            // 拼接路径
+            let fullPath = Path(parentDir).join(normalizedPath).toString()
+
+            // 将路径转换为模块名
+            this.pathToModuleName(fullPath)
+        } else {
+            // 当前目录下的路径
+            let fullPath = Path(baseDir).join(normalizedPath).toString()
+            this.pathToModuleName(fullPath)
+        }
+    }
+
+    /**
+     * 将文件路径转换为模块名
+     * @param path 文件路径（如：/path/to/ystyle/log）
+     * @return 模块名或 None
+     */
+    private func pathToModuleName(path: String): Option<String> {
+        // 规范化路径
+        let normalizedPath = canonicalize(path).toString()
+
+        // 遍历所有搜索路径，找到匹配的包
+        for (searchPath in this.getModuleRegistry().getSearchPaths()) {
+            // 检查路径是否在搜索路径下
+            if (normalizedPath.startsWith(searchPath)) {
+                // 获取相对部分
+                var relativePart = normalizedPath[searchPath.size..normalizedPath.size]
+
+                // 去掉开头的 /
+                if (relativePart.startsWith("/")) {
+                    relativePart = relativePart[1..relativePart.size]
+                }
+
+                // 查找该路径的包目录（向上查找包含 package.lisp 的目录）
+                match (this.findPackageDirectory(normalizedPath)) {
+                    case Some(packagePath) =>
+                        // 将包路径转换为模块名
+                        let moduleName = this.packagePathToModuleName(packagePath)
+                        return Some(moduleName)
+                    case None =>
+                        // 直接使用路径转换（作为备用方案）
+                        return Some(this.convertPathToModuleName(relativePart))
+                }
+            }
+        }
+
+        None
+    }
+
+    /**
+     * 向上查找包含 package.lisp 的目录
+     * @param path 文件路径
+     * @return 包目录路径，或 None
+     */
+    private func findPackageDirectory(path: String): Option<String> {
+        var currentPath = path
+
+        while (!currentPath.isEmpty()) {
+            // 检查当前目录是否有 package.lisp
+            let packageFile = Path(currentPath).join("package.lisp").toString()
+
+            if (exists(packageFile)) {
+                // 找到了包目录
+                return Some(currentPath)
+            }
+
+            // 向上一级目录
+            let parent = Path(currentPath).parent.toString()
+
+            // 如果已经到达根目录，停止
+            if (parent == currentPath) {
+                break
+            }
+
+            currentPath = parent
+        }
+
+        None
+    }
+
+    /**
+     * 将包路径转换为模块名
+     * @param packagePath 包目录路径
+     * @return 模块名
+     */
+    private func packagePathToModuleName(packagePath: String): String {
+        // 遍历所有搜索路径，找到匹配的
+        for (searchPath in this.getModuleRegistry().getSearchPaths()) {
+            if (packagePath.startsWith(searchPath)) {
+                // 获取相对部分
+                var relativePart = packagePath[searchPath.size..packagePath.size]
+
+                // 去掉开头的 /
+                if (relativePart.startsWith("/")) {
+                    relativePart = relativePart[1..relativePart.size]
+                }
+
+                // 将 / 替换为 ::
+                return relativePart.replace("/", "::")
+            }
+        }
+
+        // 如果没有找到，使用默认转换
+        packagePath.replace("/", "::")
+    }
+
+    /**
+     * 将路径字符串转换为模块名
+     * @param path 路径（如：ystyle/log/zlog）
+     * @return 模块名（如：ystyle::log.zlog）
+     */
+    private func convertPathToModuleName(path: String): String {
+        // 简单的路径到模块名转换
+        // 假设路径是相对于搜索路径的
+        // 将 / 替换为 ::
+        path.replace("/", "::")
+    }
+
+    /**
+     * 根据路径查找对应的包
+     * @param path 文件系统路径
+     * @return 模块名或 None
+     */
+    private func findPackageByPath(path: String): Option<String> {
+        // 向上查找包含 package.lisp 的目录
+        match (this.findPackageDirectory(path)) {
+            case Some(packageDir) =>
+                // 使用 PackageParser 解析包目录获取模块名
+                match (this.getPackageParser().parse(packageDir)) {
+                    case Some(packageInfo) =>
+                        // 构建模块名：org::packageName
+                        Some(ModuleNamespace.buildModuleName(packageInfo.org, packageInfo.packageName))
+                    case None => None
+                }
+            case None => None
+        }
     }
 
     /**
@@ -254,12 +441,12 @@ extend Evaluator {
 
         if (symbols.isEmpty()) {
             // 导入所有导出的符号到包命名空间
-            // 例如：(import ystyle::log.zlog) -> (zlog::init ...)
+            // 例如：(import ystyle::log.zlog) -> (zlog.init ...)
             for (symbolName in module.getAllExportedSymbols()) {
                 match (module.getExportedSymbol(symbolName)) {
                     case Some(value) =>
-                        // 使用 bindingName::symbolName 的形式
-                        let qualifiedName = "${bindingName}::${symbolName}"
+                        // 使用 bindingName.symbolName 的形式（用 . 连接）
+                        let qualifiedName = "${bindingName}.${symbolName}"
                         this.env.define(qualifiedName, value)
                     case None => ()
                 }
@@ -271,8 +458,8 @@ extend Evaluator {
             for (symbolName in symbols) {
                 match (module.getExportedSymbol(symbolName)) {
                     case Some(value) =>
-                        // 使用 bindingName::symbolName 的形式
-                        let qualifiedName = "${bindingName}::${symbolName}"
+                        // 使用 bindingName.symbolName 的形式（用 . 连接）
+                        let qualifiedName = "${bindingName}.${symbolName}"
                         this.env.define(qualifiedName, value)
                     case None =>
                         // 符号未导出，忽略或报错
