@@ -442,3 +442,155 @@ class MacroTest {
     }
 }
 
+/**
+ * 高级宏特性测试
+ */
+@Test
+class AdvancedMacroTest {
+    func evalCode(code: String, env: Environment): LispValue {
+        let exprs = Parser.parseFromString(code)
+        var result: LispValue = Nil
+        let evaluator = Evaluator(env)
+        for (i in 0..exprs.size) {
+            result = evaluator.eval(exprs[i])
+        }
+        result
+    }
+
+    @TestCase
+    func testLetStarBasic() {
+        let env = Environment()
+        BuiltinFunctions.registerAll(env)
+
+        // (let* ((a 1) (b (+ a 10))) (+ a b))
+        let result = evalCode("(let* ((a 1) (b (+ a 10))) (+ a b))", env)
+
+        match (result) {
+            case Number(n) => @Assert(n > 11.0 && n < 13.0)  // 应该是 12
+            case _ => @Fail("let* basic should return number")
+        }
+    }
+
+    @TestCase
+    func testLetStarMultipleBindings() {
+        let env = Environment()
+        BuiltinFunctions.registerAll(env)
+
+        // (let* ((a 1) (b (+ a 2)) (c (* b 3))) c)
+        let result = evalCode("(let* ((a 1) (b (+ a 2)) (c (* b 3))) c)", env)
+
+        match (result) {
+            case Number(n) => @Assert(n > 8.0 && n < 10.0)  // 应该是 9
+            case _ => @Fail("let* with multiple bindings should work")
+        }
+    }
+
+    @TestCase
+    func testLetStarSingleBinding() {
+        let env = Environment()
+        BuiltinFunctions.registerAll(env)
+
+        // (let* ((a 5)) (* a a))
+        let result = evalCode("(let* ((a 5)) (* a a))", env)
+
+        match (result) {
+            case Number(n) => @Assert(n > 24.0 && n < 26.0)  // 应该是 25
+            case _ => @Fail("let* with single binding should work")
+        }
+    }
+
+    @TestCase
+    func testLetStarNoBindings() {
+        let env = Environment()
+        BuiltinFunctions.registerAll(env)
+
+        // (let* () (+ 1 2))
+        let result = evalCode("(let* () (+ 1 2))", env)
+
+        match (result) {
+            case Number(n) => @Assert(n > 2.0 && n < 4.0)  // 应该是 3
+            case _ => @Fail("let* with no bindings should execute body")
+        }
+    }
+
+    @TestCase
+    func testLetStarLexicalScope() {
+        let env = Environment()
+        BuiltinFunctions.registerAll(env)
+
+        // 在外层定义 x
+        evalCode("(define x 100)", env)
+
+        // let* 中的 x 应该遮蔽外层的 x
+        let result = evalCode("(let* ((x 1) (y (+ x 10))) y)", env)
+
+        match (result) {
+            case Number(n) => @Assert(n > 10.0 && n < 12.0)  // 应该是 11
+            case _ => @Fail("let* should create lexical scope")
+        }
+
+        // 外层的 x 不应该被修改
+        let outerX = evalCode("x", env)
+        match (outerX) {
+            case Number(n) => @Assert(n > 99.0 && n < 101.0)  // 应该还是 100
+            case _ => @Fail("outer x should not be modified")
+        }
+    }
+
+    @TestCase
+    func testIfLetBasic() {
+        let env = Environment()
+        BuiltinFunctions.registerAll(env)
+
+        // (if-let (x 5) x nil)
+        let result = evalCode("(if-let (x 5) x nil)", env)
+
+        match (result) {
+            case Number(n) => @Assert(n > 4.0 && n < 6.0)  // 应该是 5
+            case _ => @Fail("if-let should return bound value when true")
+        }
+    }
+
+    @TestCase
+    func testIfLetFalseCondition() {
+        let env = Environment()
+        BuiltinFunctions.registerAll(env)
+
+        // (if-let (x 0) x nil)
+        let result = evalCode("(if-let (x 0) x nil)", env)
+
+        match (result) {
+            case Nil => ()  // 期望返回 nil
+            case _ => @Fail("if-let should return nil when false")
+        }
+    }
+
+    @TestCase
+    func testIfLetWithExpression() {
+        let env = Environment()
+        BuiltinFunctions.registerAll(env)
+
+        // (if-let (x (+ 2 3)) (* x x) nil)
+        let result = evalCode("(if-let (x (+ 2 3)) (* x x) nil)", env)
+
+        match (result) {
+            case Number(n) => @Assert(n > 24.0 && n < 26.0)  // 应该是 25
+            case _ => @Fail("if-let should work with expressions")
+        }
+    }
+
+    @TestCase
+    func testIfLetWithElse() {
+        let env = Environment()
+        BuiltinFunctions.registerAll(env)
+
+        // (if-let (x 0) x 100)
+        let result = evalCode("(if-let (x 0) x 100)", env)
+
+        match (result) {
+            case Number(n) => @Assert(n > 99.0 && n < 101.0)  // 应该返回 else 分支的 100
+            case _ => @Fail("if-let should execute else branch when false")
+        }
+    }
+}
+

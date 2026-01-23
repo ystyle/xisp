@@ -324,4 +324,155 @@ extend Evaluator {
             case _ => Nil
         }
     }
+
+    /**
+     * 特殊形式：let* (顺序绑定)
+     * 将嵌套的 let* 展开为嵌套的 let
+     */
+    func evalLetStar(expr: LispValue): LispValue {
+        match (expr) {
+            case Cons(cell) =>
+                let bindingsExpr = cell.car
+                let body = cell.cdr
+
+                match (bindingsExpr) {
+                    case Nil =>
+                        // 没有绑定，直接执行 body
+                        this.evalBegin(body)
+                    case Cons(bindingsCell) =>
+                        this.expandLetStar(bindingsCell, body)
+                    case _ =>
+                        Nil
+                }
+            case _ => Nil
+        }
+    }
+
+    /**
+     * 展开 let* 绑定
+     * 递归地将 ((a 1) (b 2)) 展开为 (let ((a 1)) (let* ((b 2)) body))
+     */
+    private func expandLetStar(bindingsCell: ConsCell, body: LispValue): LispValue {
+        let firstBinding = bindingsCell.car
+        let restBindings = bindingsCell.cdr
+
+        if (restBindings.isNil()) {
+            // 最后一个绑定，直接返回 let
+            let bindingsList = consValue(firstBinding, Nil)
+            let letExpr = consValue(Symbol("let"), consValue(bindingsList, body))
+            this.eval(letExpr)
+        } else {
+            // 还有更多绑定，创建嵌套的 let*
+            // 外层 let 绑定第一个变量
+            let bindingsList = consValue(firstBinding, Nil)
+            // 内层 let* 处理剩余的绑定
+            let innerLetStar = consValue(Symbol("let*"), consValue(restBindings, body))
+            let innerBody = consValue(innerLetStar, Nil)
+            let letExpr = consValue(Symbol("let"), consValue(bindingsList, innerBody))
+            this.eval(letExpr)
+        }
+    }
+
+    /**
+     * 特殊形式：when-let* (条件+顺序绑定)
+     * 如果所有绑定成功（最后一个值为真），则执行 body
+     */
+    func evalWhenLetStar(expr: LispValue): LispValue {
+        match (expr) {
+            case Cons(cell) =>
+                let bindingsExpr = cell.car
+                let body = cell.cdr
+
+                match (bindingsExpr) {
+                    case Nil =>
+                        // 没有绑定，返回 nil
+                        Nil
+                    case Cons(bindingsCell) =>
+                        // 检查最后一个绑定，提取其变量名
+                        let lastBinding = this.getLastBinding(bindingsCell)
+                        match (lastBinding) {
+                            case Cons(bindingCell) =>
+                                match (bindingCell.car) {
+                                    case Symbol(lastVar) =>
+                                        // 展开为 (let* bindings (if lastVar (begin body) nil))
+                                        // 使用 if 而不是 when，因为 when 只支持单个表达式
+                                        let beginBody = consValue(Symbol("begin"), body)
+                                        let ifThen = consValue(beginBody, Nil)
+                                        let ifExpr = consValue(Symbol("if"), consValue(Symbol(lastVar), consValue(ifThen, Nil)))
+                                        let letStarExpr = consValue(Symbol("let*"), consValue(bindingsExpr, consValue(ifExpr, Nil)))
+                                        // DEBUG: print expanded form
+                                        // println("Expanded: " + letStarExpr.toString())
+                                        // 直接求值展开后的表达式
+                                        this.eval(letStarExpr)
+                                    case _ => Nil
+                                }
+                            case _ => Nil
+                        }
+                    case _ => Nil
+                }
+            case _ => Nil
+        }
+    }
+
+    /**
+     * 获取绑定列表中的最后一个绑定
+     */
+    private func getLastBinding(bindingsCell: ConsCell): LispValue {
+        var current: LispValue = Cons(bindingsCell)
+        var lastBinding: LispValue = Nil
+
+        while (!current.isNil()) {
+            match (current) {
+                case Cons(currCell) =>
+                    lastBinding = currCell.car
+                    current = currCell.cdr
+                case _ => break
+            }
+        }
+
+        lastBinding
+    }
+
+    /**
+     * 特殊形式：if-let (条件+解构绑定)
+     * 如果绑定成功且值为真，则执行 then，否则执行 else
+     * 语法：(if-let (var value) then else)
+     */
+    func evalIfLet(expr: LispValue): LispValue {
+        match (expr) {
+            case Cons(cell) =>
+                // (if-let (var value) then else)
+                let binding = cell.car      // (var value)
+                let rest = cell.cdr
+
+                match (binding) {
+                    case Cons(bindingCell) =>
+                        let varSymbol = bindingCell.car      // var
+                        let valueExpr = bindingCell.cdr     // (value) - should be single value
+
+                        match (valueExpr) {
+                            case Cons(valueCell) =>
+                                let value = valueCell.car  // value
+
+                                // 提取 then 和 else 分支
+                                match (rest) {
+                                    case Cons(restCell) =>
+                                        let thenExpr = restCell.car
+                                        let elseExpr = restCell.cdr
+
+                                        // 展开为 (let ((var value)) (if var then else))
+                                        let bindingsList = consValue(consValue(varSymbol, consValue(value, Nil)), Nil)
+                                        let ifExpr = consValue(Symbol("if"), consValue(varSymbol, consValue(thenExpr, elseExpr)))
+                                        let letExpr = consValue(Symbol("let"), consValue(bindingsList, consValue(ifExpr, Nil)))
+
+                                        this.eval(letExpr)
+                                    case _ => Nil
+                                }
+                            case _ => Nil
+                        }
+                    case _ => Nil
+                }
+            case _ => Nil
+        }
+    }
 }

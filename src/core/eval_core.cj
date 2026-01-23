@@ -97,6 +97,12 @@ extend Evaluator {
                     return this.evalBegin(rest)
                 } else if (actualSym == "let") {
                     return this.evalLet(rest)
+                } else if (actualSym == "let*") {
+                    return this.evalLetStar(rest)
+                } else if (actualSym == "when-let*") {
+                    return this.evalWhenLetStar(rest)
+                } else if (actualSym == "if-let") {
+                    return this.evalIfLet(rest)
                 } else if (actualSym == "apply") {
                     return this.evalApply(rest)
                 } else if (actualSym == "->") {
