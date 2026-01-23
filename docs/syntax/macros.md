@@ -358,6 +358,99 @@ Xisp 提供了多个常用内置宏，它们在启动时自动注册到环境中
   (handle result))
 ```
 
+### condb - 增强的条件表达式
+
+```lisp
+(condb (:let 变量 值) ... 条件 结果 ... else 默认值)
+```
+
+增强版的 `cond`，支持在条件分支前绑定变量。使用 `:let` 关键字声明绑定，后面的条件可以使用这些变量。
+
+**语法**：
+```lisp
+(condb
+  (:let 变量1 值1)
+  (:let 变量2 值2)
+  条件1 结果1
+  条件2 结果2
+  ...
+  else 默认值)
+```
+
+**基础用法**：
+```lisp
+; 单个绑定
+(condb
+  (:let x 5)
+  (> x 3) "large"
+  else "small")
+; => "large"
+
+; 多个绑定（后面的绑定可以使用前面的）
+(condb
+  (:let x 5)
+  (:let y (* x 2))
+  (> y 8) "large"
+  else "small")
+; => "large" (y = 10, 10 > 8)
+
+; 多个条件分支
+(condb
+  (:let x 10)
+  (= x 5) "five"
+  (= x 10) "ten"
+  else "other")
+; => "ten"
+```
+
+**高级用法**：
+```lisp
+; 没有绑定时的行为（退化为普通 cond）
+(condb
+  (= 1 1) "true"
+  else "false")
+; => "true"
+
+; 复杂条件计算
+(condb
+  (:let base 100)
+  (:let rate 0.05)
+  (:let years 3)
+  (> years 5) "long term"
+  (= years 3) "medium term"
+  else "short term")
+; => "medium term"
+
+; 链式数据处理
+(condb
+  (:let data (get-user-input))
+  (:let validated (validate data))
+  (validated.success) validated.result
+  else "validation failed")
+```
+
+**特点**：
+- ✅ **变量绑定**：使用 `:let` 在条件判断前绑定变量
+- ✅ **顺序绑定**：后面的绑定可以使用前面的变量（类似 `let*`）
+- ✅ **多分支**：支持多个条件分支和 `else` 默认分支
+- ✅ **作用域隔离**：所有绑定在独立作用域中，不影响外部环境
+- ✅ **向后兼容**：没有绑定时退化为普通 `cond` 行为
+
+**提示**：`condb` 适合需要临时计算值并在多个条件中使用的场景：
+```lisp
+; 场景：根据用户角色和权限判断操作
+(condb
+  (:let user (current-user))
+  (:let role (user.role))
+  (:let permissions (get-permissions role))
+  (and (has-permission? permissions "admin") (action.needs-admin))
+    "允许管理员操作"
+  (has-permission? permissions "user")
+    "允许普通用户操作"
+  else
+    "权限不足")
+```
+
 ---
 
 ## 高级宏示例
@@ -521,10 +614,10 @@ Reader（词法分析器）将特殊语法转换为 S-表达式：
   - `examples/macro_simple.lisp` - 简单宏演示
   - `examples/macros.lisp` - 完整宏系统演示
   - `examples/macro_test.lisp` - 宏功能测试
-  - `examples/advanced_macros.lisp` - 高级宏特性演示（let*, if-let, when-let*）
+  - `examples/advanced_macros.lisp` - 高级宏特性演示（let*, if-let, when-let*, condb）
 - **实现代码**：
-  - `src/core/evaluator.cj` - 宏展开逻辑
-  - `src/core/eval_special_forms.cj` - 特殊形式求值（包含 let*, if-let, when-let*）
+  - `src/core/eval_macro.cj` - 宏展开特殊形式
+  - `src/core/eval_special_forms.cj` - 特殊形式求值（包含 let*, if-let, when-let*, condb）
   - `src/core/builtin_macros.cj` - 内置宏定义
   - `src/parser/lexer.cj` - 反引号词法分析
   - `src/parser/parser.cj` - 反引号语法解析
