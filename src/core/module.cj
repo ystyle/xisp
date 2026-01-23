@@ -327,26 +327,64 @@ public class ModuleRegistry {
     /**
      * 解析模块名到目录路径
      * 模块名格式：org::package.subpackage
-     * 路径格式：searchPath/org/package.subpackage/
+     * 路径格式：searchPath/org/packageDir/
+     * 注意：packageDir 是包名去掉最后一级（log.zlog → log）
      *
      * @param moduleName 模块名（如："ystyle::log.zlog"）
      * @return 找到的包目录路径，如果找不到返回 None
      */
     public func resolveModulePath(moduleName: String): Option<String> {
         let (org, packageName) = this.parseModuleName(moduleName)
+        let packageDir = this.extractPackageDir(packageName)
 
         // 在所有搜索路径中查找
         for (searchPath in this.searchPaths) {
-            let packagePath = Path(searchPath).join(org).join(packageName).toString()
+            let packagePath = Path(searchPath).join(org).join(packageDir).toString()
             if (this.isPackageDirectory(packagePath)) {
                 return Some(packagePath)
             }
 
-            // 尝试查找版本化的目录（如：log.zlog@0.2.0）
+            // 尝试查找版本化的目录（如：log@0.2.0）
             // 这需要额外的版本管理逻辑，暂时跳过
         }
 
         None
+    }
+
+    /**
+     * 从包名提取目录名
+     * 规则：去掉包名的最后一级
+     * 例如：
+     * - io → io
+     * - log.zlog → log
+     * - io.file → io
+     * - utils.string.parser → utils.string
+     *
+     * @param packageName 包名（如："log.zlog"）
+     * @return 目录名（如："log"）
+     */
+    public func extractPackageDir(packageName: String): String {
+        let parts = packageName.split('.')
+        if (parts.size > 1) {
+            // 去掉最后一级，重新组合
+            let dirParts = ArrayList<String>()
+            for (i in 0..(parts.size - 1)) {
+                dirParts.add(parts[i])
+            }
+            // 用 . 连接
+            var result = ""
+            for (i in 0..dirParts.size) {
+                if (i > 0) {
+                    result = "${result}.${dirParts[i]}"
+                } else {
+                    result = dirParts[i]
+                }
+            }
+            result
+        } else {
+            // 单级包名，直接返回
+            packageName
+        }
     }
 
     /**
