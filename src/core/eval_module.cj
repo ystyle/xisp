@@ -245,37 +245,34 @@ extend Evaluator {
 
         if (symbols.isEmpty()) {
             // 导入所有导出的符号到包命名空间
-            // 例如：(import ystyle::log.zlog) -> (zlog.init ...)
+            // 例如：(import ystyle::log.zlog) -> (zlog::init ...)
             for (symbolName in module.getAllExportedSymbols()) {
                 match (module.getExportedSymbol(symbolName)) {
                     case Some(value) =>
-                        // 使用 bindingName.symbolName 的形式
-                        let qualifiedName = "${bindingName}.${symbolName}"
+                        // 使用 bindingName::symbolName 的形式
+                        let qualifiedName = "${bindingName}::${symbolName}"
                         this.env.define(qualifiedName, value)
                     case None => ()
                 }
             }
 
-            // 同时将包本身绑定为一个命名空间对象
-            // 这样可以使用 zlog.init 的形式访问
-            // TODO: 创建命名空间对象类型
             Nil
         } else {
             // 只导入指定的符号
             for (symbolName in symbols) {
                 match (module.getExportedSymbol(symbolName)) {
                     case Some(value) =>
-                        // 使用 bindingName.symbolName 的形式
-                        let qualifiedName = "${bindingName}.${symbolName}"
+                        // 使用 bindingName::symbolName 的形式
+                        let qualifiedName = "${bindingName}::${symbolName}"
                         this.env.define(qualifiedName, value)
                     case None =>
                         // 符号未导出，忽略或报错
                         ()
                 }
             }
-        }
 
-        Nil
+            Nil
+        }
     }
 
     /**
@@ -293,12 +290,20 @@ extend Evaluator {
                         // 创建模块环境
                         let moduleEnv = this.env.createChild()
 
+                        // 创建模块（先创建，用于 export）
+                        let module = Module(moduleName, packageInfo, moduleEnv)
+
+                        // 设置当前模块，以便 export 可以工作
+                        let oldModule = this.currentModule
+                        this.currentModule = Some(module)
+
                         // 加载包目录下的所有 .lisp 文件
                         let loaded = this.loadPackageFiles(packagePath, moduleEnv)
 
+                        // 恢复之前的模块
+                        this.currentModule = oldModule
+
                         if (loaded) {
-                            // 创建模块
-                            let module = Module(moduleName, packageInfo, moduleEnv)
                             module.isInitialized = true
 
                             // 注册模块
@@ -384,9 +389,17 @@ extend Evaluator {
                 if (exportedSymbols.isEmpty()) {
                     Str("Error: export requires at least one symbol")
                 } else {
-                    // TODO: 将符号添加到当前模块的导出列表
-                    // 需要追踪当前模块
-                    Nil
+                    // 将符号添加到当前模块的导出列表
+                    match (this.currentModule) {
+                        case Some(module) =>
+                            for (sym in exportedSymbols) {
+                                module.exportSymbol(sym)
+                            }
+                            Nil
+                        case None =>
+                            // 如果没有当前模块，只返回 nil（在全局环境中 export 无效）
+                            Nil
+                    }
                 }
 
             case _ => Str("Error: export requires a list of symbols")

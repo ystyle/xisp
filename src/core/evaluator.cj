@@ -18,6 +18,7 @@ public class Evaluator {
     public var moduleRegistry: Option<ModuleRegistry> = None
     public var moduleLoader: Option<ModuleLoader> = None
     public var packageParser: Option<PackageParser> = None
+    public var currentModule: Option<Module> = None  // 当前正在求值的模块
 
     public init(env: Environment) {
         this.env = env
