@@ -174,9 +174,18 @@ public class DependencyResolver {
             return None
         }
 
-        // TODO: 实际解析 Lisp 文件
-        // 暂时返回空映射
-        Some(HashMap<String, String>())
+        // 使用 PackageParser 解析
+        match (this.packageParser.parse(projectPath)) {
+            case Some(packageInfo) =>
+                // 构建 HashMap<包名, 版本要求>
+                let deps = HashMap<String, String>()
+                for (dependency in packageInfo.dependencies) {
+                    deps[dependency.packageName] = dependency.versionRequirement
+                }
+                Some(deps)
+            case None =>
+                None
+        }
     }
 
     /**
@@ -185,13 +194,28 @@ public class DependencyResolver {
     private func listOrganizations(searchPath: String): ArrayList<String> {
         let orgs = ArrayList<String>()
 
-        // TODO: 实现目录遍历
-        // 伪代码：
-        // for (entry in FileSystem.listEntries(searchPath)) {
-        //     if (entry.isDirectory() && !entry.name.startsWith(".")) {
-        //         orgs.add(entry.name)
-        //     }
-        // }
+        try {
+            // 使用 Directory.readFrom 遍历目录
+            let fileInfos = Directory.readFrom(searchPath)
+
+            for (fileInfo in fileInfos) {
+                let dirName = fileInfo.name
+
+                // 忽略以 . 开头的目录
+                if (dirName.startsWith(".")) {
+                    continue
+                }
+
+                // 只添加目录
+                if (fileInfo.isDirectory()) {
+                    orgs.add(dirName)
+                }
+            }
+        } catch (e: FSException) {
+            // 目录不存在或无法访问，返回空列表
+        } catch (e: Exception) {
+            // 其他异常，返回空列表
+        }
 
         orgs
     }
@@ -262,8 +286,48 @@ public class DependencyResolver {
 
         let versions = ArrayList<String>()
 
-        // TODO: 扫描目录，查找所有版本化的包目录
-        // 例如：log.zlog@0.1.0、log.zlog@0.2.0
+        // 扫描目录，查找所有版本化的包目录
+        for (searchPath in this.moduleRegistry.getSearchPaths()) {
+            let orgPath = Path(searchPath).join(org).toString()
+
+            if (!exists(orgPath)) {
+                continue
+            }
+
+            try {
+                // 列出组织目录下的所有包目录
+                let fileInfos = Directory.readFrom(orgPath)
+
+                for (fileInfo in fileInfos) {
+                    let dirName = fileInfo.name
+
+                    if (!fileInfo.isDirectory()) {
+                        continue
+                    }
+
+                    // 检查是否是版本化目录（格式：packageName@version）
+                    if (dirName.contains("@")) {
+                        let parts = dirName.split('@')
+                        if (parts.size == 2) {
+                            let baseName = parts[0]
+                            let version = parts[1]
+
+                            // 匹配目标包名
+                            if (baseName == packageName) {
+                                versions.add(version)
+                            }
+                        }
+                    } else if (dirName == packageName) {
+                        // 默认版本（无版本号）
+                        versions.add("default")
+                    }
+                }
+            } catch (e: FSException) {
+                // 目录不存在或无法访问，继续下一个搜索路径
+            } catch (e: Exception) {
+                // 其他异常，继续下一个搜索路径
+            }
+        }
 
         this.versionCache[cacheKey] = versions
         versions

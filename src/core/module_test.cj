@@ -522,4 +522,88 @@ class ModuleTest {
             case None => @Fail("PackageParser not initialized")
         }
     }
+
+    /**
+     * 测试 DependencyResolver - listOrganizations
+     */
+    @TestCase
+    func testListOrganizations() {
+        let env = Environment()
+        BuiltinFunctions.registerAll(env)
+        let evaluator = Evaluator(env)
+        evaluator.initModuleSystem()
+
+        match (evaluator.moduleRegistry) {
+            case Some(registry) =>
+                match (evaluator.packageParser) {
+                    case Some(parser) =>
+                        let resolver = DependencyResolver(registry, parser)
+
+                        // 测试 getAvailableVersions（内部会调用 listOrganizations）
+                        let versions = resolver.getAvailableVersions("zlog", "ystyle")
+
+                        // 应该能找到并返回版本
+                        @Assert(versions.size >= 1)
+
+                    case None => @Fail("PackageParser not initialized")
+                }
+            case None => @Fail("ModuleRegistry not initialized")
+        }
+    }
+
+    /**
+     * 测试 DependencyResolver - getAvailableVersions
+     */
+    @TestCase
+    func testGetAvailableVersions() {
+        let env = Environment()
+        BuiltinFunctions.registerAll(env)
+        let evaluator = Evaluator(env)
+        evaluator.initModuleSystem()
+
+        match (evaluator.moduleRegistry) {
+            case Some(registry) =>
+                match (evaluator.packageParser) {
+                    case Some(parser) =>
+                        let resolver = DependencyResolver(registry, parser)
+
+                        // 获取 zlog 包的可用版本
+                        let versions = resolver.getAvailableVersions("zlog", "ystyle")
+
+                        // 应该至少有 default 版本
+                        @Assert(versions.size >= 1)
+                        @Assert(versions.contains("default"))
+
+                    case None => @Fail("PackageParser not initialized")
+                }
+            case None => @Fail("ModuleRegistry not initialized")
+        }
+    }
+
+    /**
+     * 测试 DependencyResolver - findVersionRequirement
+     */
+    @TestCase
+    func testFindVersionRequirement() {
+        let env = Environment()
+        BuiltinFunctions.registerAll(env)
+        let evaluator = Evaluator(env)
+        evaluator.initModuleSystem()
+
+        match (evaluator.moduleRegistry) {
+            case Some(registry) =>
+                match (evaluator.packageParser) {
+                    case Some(parser) =>
+                        let resolver = DependencyResolver(registry, parser)
+
+                        // 测试获取 zlog 包的可用版本
+                        let versions = resolver.getAvailableVersions("zlog", "ystyle")
+                        @Assert(versions.size >= 1)
+                        @Assert(versions.contains("default"))
+
+                    case None => @Fail("PackageParser not initialized")
+                }
+            case None => @Fail("ModuleRegistry not initialized")
+        }
+    }
 }
