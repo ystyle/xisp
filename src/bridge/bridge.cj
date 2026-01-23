@@ -1,6 +1,7 @@
 package ystyle::xisp.bridge
 
 import ystyle::xisp.core.*
+import ystyle::xisp.types.*
 import std.collection.ArrayList
 import std.fs.*
 import std.io.*

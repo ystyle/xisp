@@ -1,4 +1,5 @@
 package ystyle::xisp.core
+import ystyle::xisp.types.*
 
 /**
  * 现代化别名扩展

@@ -1,6 +1,7 @@
 package ystyle::xisp.examples.options_usage
 
 import ystyle::xisp.core.*
+import ystyle::xisp.types.*
 import ystyle::xisp.parser.*
 import ystyle::xisp.bridge.*
 import ystyle::xisp.repl.*

@@ -1,5 +1,6 @@
 package ystyle::xisp.core
 
+import ystyle::xisp.types.*
 import std.unittest.*
 import std.collection.ArrayList
 

@@ -2,6 +2,7 @@ package ystyle::xisp.examples.extension_demo
 
 import ystyle::xisp.bridge.*
 import ystyle::xisp.core.*
+import ystyle::xisp.types.*
 import std.collection.ArrayList
 import std.collection.HashMap
 import std.collection.HashSet

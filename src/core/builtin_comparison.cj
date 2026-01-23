@@ -1,4 +1,5 @@
 package ystyle::xisp.core
+import ystyle::xisp.types.*
 
 /**
  * 比较运算扩展

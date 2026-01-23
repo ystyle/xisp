@@ -1,4 +1,5 @@
 package ystyle::xisp.core
+import ystyle::xisp.types.*
 
 /**
  * 模式匹配扩展

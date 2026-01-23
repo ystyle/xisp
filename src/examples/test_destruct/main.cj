@@ -1,6 +1,7 @@
 package ystyle::xisp.examples.test_destruct
 
 import ystyle::xisp.core.*
+import ystyle::xisp.types.*
 import ystyle::xisp.parser.*
 
 /**

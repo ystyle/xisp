@@ -1,4 +1,5 @@
 package ystyle::xisp.core
+import ystyle::xisp.types.*
 
 /**
  * 谓词函数扩展
