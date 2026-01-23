@@ -4,6 +4,7 @@ import std.unittest.*
 import std.unittest.testmacro.*
 import std.collection.ArrayList
 import ystyle::xisp.core.*
+import ystyle::xisp.types.*
 import ystyle::xisp.parser.*
 
 /**
@@ -327,6 +328,55 @@ class MacroTest {
         match (result) {
             case Number(n) => @Assert(n == 12.0)
             case _ => @Fail("nested macro call should return 12")
+        }
+    }
+
+    @TestCase
+    func testBuiltinMacrosRegistration() {
+        // 测试内置宏自动注册功能
+        let env = Environment()
+        BuiltinFunctions.registerAll(env)
+
+        // 测试 when 宏（已自动注册，无需手动定义）
+        let result1 = evalCode("(when 1 100)", env)
+        match (result1) {
+            case Number(n) => @Assert(n == 100.0)
+            case _ => @Fail("builtin when macro should return 100")
+        }
+
+        let result2 = evalCode("(when 0 200)", env)
+        match (result2) {
+            case Number(n) => @Assert(n == 0.0)
+            case _ => @Fail("builtin when macro should return 0")
+        }
+
+        // 测试 incf 宏
+        evalCode("(define counter 0)", env)
+        let result3 = evalCode("(incf counter)", env)
+        match (result3) {
+            case Number(n) => @Assert(n == 1.0)
+            case _ => @Fail("builtin incf should return 1")
+        }
+
+        let counterVal = evalCode("counter", env)
+        match (counterVal) {
+            case Number(n) => @Assert(n == 1.0)
+            case _ => @Fail("counter should be 1 after incf")
+        }
+
+        // 测试 push 宏
+        evalCode("(define lst '(2 3))", env)
+        let result4 = evalCode("(push 1 lst)", env)
+        match (result4) {
+            case Cons(cell) => @Assert(cell.car.toString() == "1.000000")
+            case _ => @Fail("push should return new list")
+        }
+
+        // 测试 negate 宏
+        let result5 = evalCode("(negate 5)", env)
+        match (result5) {
+            case Number(n) => @Assert(n < 0.0)
+            case _ => @Fail("negate should return negative number")
         }
     }
 }

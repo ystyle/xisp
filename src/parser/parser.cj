@@ -1,6 +1,6 @@
 package ystyle::xisp.parser
 
-import ystyle::xisp.core.*
+import ystyle::xisp.types.*
 import std.collection.ArrayList
 
 /**

@@ -1,5 +1,6 @@
 package ystyle::xisp.core
 
+import ystyle::xisp.types.*
 import std.collection.ArrayList
 import std.math.fmod
 
@@ -22,5 +23,6 @@ extend BuiltinFunctions {
         registerLogic(env)
         registerPredicates(env)
         registerPrint(env)
+        BuiltinMacros.registerAll(env)
     }
 }

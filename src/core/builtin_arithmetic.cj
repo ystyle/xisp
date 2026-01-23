@@ -1,5 +1,6 @@
 package ystyle::xisp.core
 
+import ystyle::xisp.types.*
 import std.math.fmod
 
 /**

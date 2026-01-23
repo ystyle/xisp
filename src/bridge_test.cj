@@ -3,6 +3,7 @@ package ystyle::xisp
 import std.unittest.*
 import std.unittest.testmacro.*
 import ystyle::xisp.core.*
+import ystyle::xisp.types.*
 import ystyle::xisp.parser.*
 import ystyle::xisp.bridge.*
 

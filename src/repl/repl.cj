@@ -1,6 +1,7 @@
 package ystyle::xisp.repl
 
 import ystyle::xisp.core.*
+import ystyle::xisp.types.*
 import ystyle::xisp.parser.*
 import std.env.*
 import std.io.*
