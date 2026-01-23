@@ -11,6 +11,8 @@ public class Evaluator {
     var stackDepth: Int64 = 0
     var maxStackDepth: Int64 = 1000  // 默认栈深度限制
     var funcChecker: ?((String) -> Bool) = None  // 函数权限检查回调
+    var pathChecker: ?((String, Bool) -> Bool) = None  // 路径权限检查回调
+    var moduleLoadChecker: ?(() -> Bool) = None  // 模块加载权限检查回调
     var macroExpandDepth: Int64 = 0  // 宏展开深度
     var maxMacroExpandDepth: Int64 = 100  // 最大宏展开深度
 
@@ -54,5 +56,21 @@ public class Evaluator {
      */
     public func setFuncChecker(checker: (String) -> Bool) {
         this.funcChecker = Some(checker)
+    }
+
+    /**
+     * 设置路径权限检查回调
+     * @param checker 检查函数，参数为 和 isWrite(是否写入)，返回 true 表示允许访问，false 表示禁止
+     */
+    public func setPathChecker(checker: (String, Bool) -> Bool) {
+        this.pathChecker = Some(checker)
+    }
+
+    /**
+     * 设置模块加载权限检查回调
+     * @param checker 检查函数，返回 true 表示允许加载，false 表示禁止
+     */
+    public func setModuleLoadChecker(checker: () -> Bool) {
+        this.moduleLoadChecker = Some(checker)
     }
 }
