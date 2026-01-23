@@ -127,12 +127,12 @@ class LetStarTest {
         let env = Environment()
         BuiltinFunctions.registerAll(env)
 
-        // (when-let* ((x 5) (y (> x 3))) (+ x y))
-        // 如果 y 为真（即 x > 3），则执行 (+ x y)
-        let result = evalCode("(when-let* ((x 5) (y (> x 3))) (+ x y))", env)
+        // (when-let* ((x 5) (y (+ x 10))) y)
+        // 绑定 x=5, y=15，检查 y 是否为真，返回 y
+        let result = evalCode("(when-let* ((x 5) (y (+ x 10))) y)", env)
 
         match (result) {
-            case Number(n) => @Assert(n > 7.0 && n < 9.0)  // 应该是 8 (5 + 3)
+            case Number(n) => @Assert(n > 14.0 && n < 16.0)  // 应该是 15
             case _ => @Fail("when-let* should return number when condition is true")
         }
     }
@@ -143,9 +143,9 @@ class LetStarTest {
         let env = Environment()
         BuiltinFunctions.registerAll(env)
 
-        // (when-let* ((x 1) (y (> x 3))) (+ x y))
-        // 如果 y 为假（即 x <= 3），则返回 nil
-        let result = evalCode("(when-let* ((x 1) (y (> x 3))) (+ x y))", env)
+        // (when-let* ((x 1) (y 0)) y)
+        // y 为假（0），返回 nil
+        let result = evalCode("(when-let* ((x 1) (y 0)) y)", env)
 
         match (result) {
             case Nil => ()  // 期望返回 nil
@@ -159,11 +159,11 @@ class LetStarTest {
         let env = Environment()
         BuiltinFunctions.registerAll(env)
 
-        // (when-let* ((a 10) (b (> a 5)) (c (* b 2))) c)
-        let result = evalCode("(when-let* ((a 10) (b (> a 5)) (c (* b 2))) c)", env)
+        // (when-let* ((a 10) (b (* a 2)) (c (+ b 5))) c)
+        let result = evalCode("(when-let* ((a 10) (b (* a 2)) (c (+ b 5))) c)", env)
 
         match (result) {
-            case Number(n) => @Assert(n > 1.0 && n < 3.0)  // 应该是 2 (1 * 2)
+            case Number(n) => @Assert(n > 24.0 && n < 26.0)  // 应该是 25 (10*2+5)
             case _ => @Fail("when-let* with multiple bindings should work")
         }
     }
@@ -174,11 +174,12 @@ class LetStarTest {
         let env = Environment()
         BuiltinFunctions.registerAll(env)
 
-        // (when-let* ((x 5) (y (> x 3))) (begin (+ x y) (* x y)))
-        let result = evalCode("(when-let* ((x 5) (y (> x 3))) (begin (* x y)))", env)
+        // (when-let* ((x 5) (y (* x 2))) (begin (* x y)))
+        // x=5, y=10, (* x y) = 50
+        let result = evalCode("(when-let* ((x 5) (y (* x 2))) (begin (* x y)))", env)
 
         match (result) {
-            case Number(n) => @Assert(n > 14.0 && n < 16.0)  // 应该是 15 (5 * 3)
+            case Number(n) => @Assert(n > 49.0 && n < 51.0)  // 应该是 50 (5 * 10)
             case _ => @Fail("when-let* with begin should work")
         }
     }

@@ -592,5 +592,99 @@ class AdvancedMacroTest {
             case _ => @Fail("if-let should execute else branch when false")
         }
     }
+
+    @TestCase
+    func testWhenLetStarBasic() {
+        let env = Environment()
+        BuiltinFunctions.registerAll(env)
+
+        // (when-let* ((x 5)) x)
+        let result = evalCode("(when-let* ((x 5)) x)", env)
+
+        match (result) {
+            case Number(n) => @Assert(n > 4.0 && n < 6.0)  // 应该是 5
+            case _ => @Fail("when-let* with true value should return bound value")
+        }
+    }
+
+    @TestCase
+    func testWhenLetStarFalseCondition() {
+        let env = Environment()
+        BuiltinFunctions.registerAll(env)
+
+        // (when-let* ((x 0)) x)
+        let result = evalCode("(when-let* ((x 0)) x)", env)
+
+        match (result) {
+            case Nil => ()  // 期望返回 nil
+            case _ => @Fail("when-let* with false value should return nil")
+        }
+    }
+
+    @TestCase
+    func testWhenLetStarMultipleBindings() {
+        let env = Environment()
+        BuiltinFunctions.registerAll(env)
+
+        // (when-let* ((a 1) (b (+ a 10))) b)
+        let result = evalCode("(when-let* ((a 1) (b (+ a 10))) b)", env)
+
+        match (result) {
+            case Number(n) => @Assert(n > 10.0 && n < 12.0)  // 应该是 11
+            case _ => @Fail("when-let* with multiple bindings should work")
+        }
+    }
+
+    @TestCase
+    func testWhenLetStarWithBody() {
+        let env = Environment()
+        BuiltinFunctions.registerAll(env)
+
+        // (when-let* ((a 1) (b 2)) (+ a b))
+        let result = evalCode("(when-let* ((a 1) (b 2)) (+ a b))", env)
+
+        match (result) {
+            case Number(n) => @Assert(n > 2.0 && n < 4.0)  // 应该是 3
+            case _ => @Fail("when-let* should execute body with bindings")
+        }
+    }
+
+    @TestCase
+    func testWhenLetStarNoBindings() {
+        let env = Environment()
+        BuiltinFunctions.registerAll(env)
+
+        // (when-let* () 42)
+        let result = evalCode("(when-let* () 42)", env)
+
+        match (result) {
+            case Nil => ()  // 没有绑定时返回 nil
+            case _ => @Fail("when-let* with no bindings should return nil")
+        }
+    }
+
+    @TestCase
+    func testWhenLetStarLexicalScope() {
+        let env = Environment()
+        BuiltinFunctions.registerAll(env)
+
+        // 在外层定义 x
+        evalCode("(define x 100)", env)
+
+        // when-let* 中的 x 应该遮蔽外层的 x
+        let result = evalCode("(when-let* ((x 1) (y (+ x 10))) y)", env)
+
+        match (result) {
+            case Number(n) => @Assert(n > 10.0 && n < 12.0)  // 应该是 11
+            case _ => @Fail("when-let* should create lexical scope")
+        }
+
+        // 外层的 x 不应该被修改
+        let outerX = evalCode("x", env)
+        match (outerX) {
+            case Number(n) => @Assert(n > 99.0 && n < 101.0)  // 应该还是 100
+            case _ => @Fail("outer x should not be modified")
+        }
+    }
 }
 

@@ -376,6 +376,7 @@ extend Evaluator {
     /**
      * 特殊形式：when-let* (条件+顺序绑定)
      * 如果所有绑定成功（最后一个值为真），则执行 body
+     * 语法：(when-let* ((var1 expr1) (var2 expr2) ...) body...)
      */
     func evalWhenLetStar(expr: LispValue): LispValue {
         match (expr) {
@@ -388,49 +389,73 @@ extend Evaluator {
                         // 没有绑定，返回 nil
                         Nil
                     case Cons(bindingsCell) =>
-                        // 检查最后一个绑定，提取其变量名
-                        let lastBinding = this.getLastBinding(bindingsCell)
-                        match (lastBinding) {
-                            case Cons(bindingCell) =>
-                                match (bindingCell.car) {
-                                    case Symbol(lastVar) =>
-                                        // 展开为 (let* bindings (if lastVar (begin body) nil))
-                                        // 使用 if 而不是 when，因为 when 只支持单个表达式
-                                        let beginBody = consValue(Symbol("begin"), body)
-                                        let ifThen = consValue(beginBody, Nil)
-                                        let ifExpr = consValue(Symbol("if"), consValue(Symbol(lastVar), consValue(ifThen, Nil)))
-                                        let letStarExpr = consValue(Symbol("let*"), consValue(bindingsExpr, consValue(ifExpr, Nil)))
-                                        // DEBUG: print expanded form
-                                        // println("Expanded: " + letStarExpr.toString())
-                                        // 直接求值展开后的表达式
-                                        this.eval(letStarExpr)
-                                    case _ => Nil
-                                }
-                            case _ => Nil
+                        // 创建新的作用域
+                        let whenLetEnv = this.env.createChild()
+                        let oldEnv = this.env
+                        this.env = whenLetEnv
+
+                        var lastValue: LispValue = Nil
+                        var hasError = false
+
+                        // 按顺序绑定变量
+                        var current: LispValue = Cons(bindingsCell)
+                        while (!current.isNil()) {
+                            match (current) {
+                                case Cons(currCell) =>
+                                    let binding = currCell.car
+                                    match (binding) {
+                                        case Cons(bindingCell) =>
+                                            match (bindingCell.car) {
+                                                case Symbol(varName) =>
+                                                    match (bindingCell.cdr) {
+                                                        case Cons(valueCell) =>
+                                                            let value = this.eval(valueCell.car)
+
+                                                            // 检查是否有错误
+                                                            match (value) {
+                                                                case Str(s) =>
+                                                                    if (s.startsWith("Error:")) {
+                                                                        hasError = true
+                                                                    }
+                                                                case _ => ()
+                                                            }
+
+                                                            if (!hasError) {
+                                                                whenLetEnv.define(varName, value)
+                                                                lastValue = value
+                                                            }
+                                                        case _ => ()
+                                                    }
+                                                case _ => ()
+                                            }
+                                        case _ => ()
+                                    }
+                                    current = currCell.cdr
+                                case _ => break
+                            }
+
+                            if (hasError) {
+                                break
+                            }
+                        }
+
+                        // 恢复环境
+                        this.env = oldEnv
+
+                        // 检查最后一个值是否为真
+                        if (!hasError && lastValue.isTruthy()) {
+                            // 在新环境中执行 body
+                            this.env = whenLetEnv
+                            let result = this.evalBegin(body)
+                            this.env = oldEnv
+                            result
+                        } else {
+                            Nil
                         }
                     case _ => Nil
                 }
             case _ => Nil
         }
-    }
-
-    /**
-     * 获取绑定列表中的最后一个绑定
-     */
-    private func getLastBinding(bindingsCell: ConsCell): LispValue {
-        var current: LispValue = Cons(bindingsCell)
-        var lastBinding: LispValue = Nil
-
-        while (!current.isNil()) {
-            match (current) {
-                case Cons(currCell) =>
-                    lastBinding = currCell.car
-                    current = currCell.cdr
-                case _ => break
-            }
-        }
-
-        lastBinding
     }
 
     /**
