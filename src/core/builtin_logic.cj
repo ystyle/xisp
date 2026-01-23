@@ -9,10 +9,10 @@ extend BuiltinFunctions {
     static func registerLogic(env: Environment) {
         // (and x1 x2 ...) - 逻辑与
         env.define("and", NativeFunc({ args =>
-            var result = Boolean(true)
+            var result: LispValue = LispValue.Boolean(true)
             for (i in 0..args.size) {
                 if (!args[i].isTruthy()) {
-                    return Boolean(false)
+                    return LispValue.Boolean(false)
                 }
                 result = args[i]
             }
@@ -26,7 +26,7 @@ extend BuiltinFunctions {
                     return args[i]
                 }
             }
-            Boolean(false)
+            LispValue.Boolean(false)
         }))
 
         // (not x) - 逻辑非

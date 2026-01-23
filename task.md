@@ -85,6 +85,43 @@
 
 ---
 
+### M3.5: 模块系统 ✅ 2026-01-23
+**目标**: 实现完整的模块系统，支持代码组织、命名空间隔离和依赖管理
+
+**验收标准**:
+- [x] 支持模块命名空间（组织名::包名）
+- [x] 支持包元数据管理（package.lisp）
+- [x] 支持模块加载和注册
+- [x] 支持依赖解析
+- [x] 18个单元测试全部通过
+
+**交付物**:
+- [x] 核心模块系统实现 (module.cj, module_loader.cj, package_parser.cj, eval_module.cj, dependency_resolver.cj)
+- [x] 模块系统单元测试 (module_test.cj - 18个测试)
+- [x] 模块系统演示程序 (modules_demo)
+- [x] 模块系统文档 (docs/modules.md)
+
+**核心组件**:
+- [x] ModuleNamespace - 命名空间工具
+- [x] PackageInfo - 包元数据
+- [x] Dependency - 依赖管理
+- [x] Module - 模块实例
+- [x] ModuleRegistry - 模块注册表
+- [x] ModuleLoader - 文件加载器
+- [x] PackageParser - 包解析器
+- [x] ModulePathUtils - 路径工具
+
+**技术亮点**:
+- [x] 解决枚举构造函数名冲突（使用完全限定类型名）
+- [x] 解决 Option 类型模式匹配问题
+- [x] 解决构造函数参数问题（位置参数）
+- [x] 解决文件系统 API 问题
+- [x] 解决循环依赖问题（Option 类型延迟初始化）
+
+**完成时间**: 2026-01-23
+
+---
+
 ### M4: 生产级特性 ⏳ 第 9 周+ 持续
 **目标**: 性能优化、安全加固、工具链完善
 

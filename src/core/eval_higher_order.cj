@@ -168,7 +168,7 @@ extend Evaluator {
                     let testResult = match (pred) {
                         case Procedure(_, _, _) => this.applyProcedure(pred, args)
                         case NativeFunc(f) => f(args)
-                        case _ => Boolean(false)
+                        case _ => LispValue.Boolean(false)
                     }
 
                     if (testResult.isTruthy()) {

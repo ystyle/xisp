@@ -14,8 +14,25 @@ public class Evaluator {
     var macroExpandDepth: Int64 = 0  // 宏展开深度
     var maxMacroExpandDepth: Int64 = 100  // 最大宏展开深度
 
+    // 模块系统相关字段（延迟初始化以避免循环依赖）
+    public var moduleRegistry: Option<ModuleRegistry> = None
+    public var moduleLoader: Option<ModuleLoader> = None
+    public var packageParser: Option<PackageParser> = None
+
     public init(env: Environment) {
         this.env = env
+        // 不在构造函数中初始化模块系统，避免循环依赖
+    }
+
+    /**
+     * 初始化模块系统（在构造对象后调用）
+     */
+    public func initModuleSystem() {
+        if (this.moduleRegistry.isNone()) {
+            this.moduleRegistry = Some(ModuleRegistry())
+            this.moduleLoader = Some(ModuleLoader(this))
+            this.packageParser = Some(PackageParser(this))
+        }
     }
 
     /**

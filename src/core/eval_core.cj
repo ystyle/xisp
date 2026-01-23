@@ -121,9 +121,15 @@ extend Evaluator {
                     return this.evalMacroexpand(rest)
                 } else if (actualSym == "macroexpand-all") {
                     return this.evalMacroexpandAll(rest)
+                } else if (actualSym == "import") {
+                    return this.evalImport(rest)
+                } else if (actualSym == "export") {
+                    return this.evalExport(rest)
+                } else if (actualSym == "package") {
+                    return this.evalPackage(rest)
                 } else {
                     let actualFirst = if (sym != actualSym) {
-                        Symbol(actualSym)
+                        LispValue.Symbol(actualSym)
                     } else {
                         first
                     }
