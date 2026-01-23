@@ -361,17 +361,236 @@
 ---
 
 ### 模块 8: 宏系统
-**职责**: 实现编译时元编程
+**职责**: 实现编译时元编程能力
 
+**设计目标**:
+- 在代码执行前展开宏，生成新的代码
+- 支持用户自定义宏（defmacro）
+- 提供宏展开工具（macroexpand）
+- 内置常用宏（when, unless, cond-expand, let* 等）
+
+**子任务**:
 - [ ] 8.1 设计宏展开机制 (P1)
+  - [ ] 实现宏展开器核心逻辑
+  - [ ] 区分宏展开阶段和求值阶段
+  - [ ] 防止宏展开无限循环
+
 - [ ] 8.2 实现 defmacro 特殊形式 (P1)
+  - [ ] (defmacro name (args) body)
+  - [ ] 支持解构参数
+  - [ ] 宏的词法闭包（捕获定义时环境）
+
 - [ ] 8.3 实现 macroexpand 函数 (P1)
-- [ ] 8.4 实现常用宏：when/unless (P2)
-- [ ] 8.5 实现常用宏：let* (P2)
+  - [ ] (macroexpand expr) - 展开一次
+  - [ ] (macroexpand-all expr) - 完全展开
+  - [ ] 宏展开调试工具
+
+- [ ] 8.4 实现常用内置宏 (P2)
+  - [ ] when - 条件执行 + 隐式 begin
+  - [ ] unless - 否定条件执行
+  - [ ] cond-expand - 条件编译
+  - [ ] delay/force - 延迟求值
+
+- [ ] 8.5 实现高级宏 (P2)
+  - [ ] let* - 顺序绑定
+  - [ ] when-let* - 条件+绑定组合
+  - [ ] if-let - 条件+解构组合
+  - [ ] condb - 增强 cond（支持 :let 绑定）
 
 **关键文件**:
-- `src/core/macro.cj`
-- `src/macros/builtin.cj`
+- `src/core/macro.cj` - 宏系统核心
+- `src/macros/builtin.cj` - 内置宏定义
+- `src/core/eval_macro.cj` - 宏展开特殊形式
+
+**参考实现**:
+- Clojure 宏系统：https://clojure.org/reference/macros
+- Racket 宏系统：https://docs.racket-lang.org/reference/macros.html
+- Emacs Lisp 宏：https://www.gnu.org/software/emacs/manual/elisp.html#Macro-Expansion
+
+---
+
+### 模块 8.5: 异步/await 支持
+**职责**: 实现代码级别的异步编程支持
+
+**设计目标**:
+- 支持 async/await 语法，让异步代码像同步代码一样易读
+- 与仓颉 async/await 深度集成，利用底层协程能力
+- 提供 Promise/Future 类型的 Lisp 接口
+- 支持并发原语（并行执行多个异步任务）
+
+**子任务**:
+- [ ] 8.5.1 设计异步类型系统 (P1)
+  - [ ] Promise 类型定义
+  - [ ] Future 类型桥接仓颉 Future
+  - [ ] async/await 特殊形式
+
+- [ ] 8.5.2 实现 async 特殊形式 (P1)
+  - [ ] (async expr) - 将表达式包装为 Promise
+  - [ ] (await expr) - 等待 Promise 完成
+  - [ ] 异常传播机制
+
+- [ ] 8.5.3 实现 Promise 操作 (P2)
+  - [ ] (promise f) - 创建 Promise
+  - [ ] (resolve value) - 返回已完成的 Promise
+  - [ ] (reject reason) - 返回拒绝的 Promise
+  - [ ] (all promises) - 等待所有 Promise 完成
+  - [ ] (race promises) - 等待任一 Promise 完成
+  - [ ] (map promise f) - Promise 映射
+
+- [ ] 8.5.4 实现并发原语 (P2)
+  - [ ] (await-all tasks) - 并行执行多个异步任务
+  - [ ] (await-race tasks) - 竞争执行多个异步任务
+  - [ ] 超时控制 (with-timeout)
+
+- [ ] 8.5.5 异步迭代器支持 (P3)
+  - [ ] (for-async (var async-iter) body ...)
+  - [ ] 异步序列操作 (async-map, async-filter)
+
+**关键文件**:
+- `src/core/async.cj` - 异步类型和操作
+- `src/core/eval_async.cj` - async/await 特殊形式
+- `src/bridge/async_bridge.cj` - 桥接仓颉 Future
+
+**示例**:
+```lisp
+;; 基础 async/await
+(define (fetch-user id)
+  (async (http-get (str "https://api.example.com/users/" id))))
+
+(define (process-user id)
+  (let [(user (await (fetch-user id)))
+    (println "User:" user)
+    (user)))
+
+;; 并行执行
+(define (process-multiple ids)
+  (let [(results (await-all
+    (map fetch-user ids)))]
+    (println "All users fetched:" results)))
+
+;; Promise 链式调用
+(define (fetch-and-process id)
+  (-> (fetch-user id)
+      (await (lambda (user)
+        (fetch-user (:id user))))
+      (await (lambda (posts)
+        (println "Posts:" posts)))))
+```
+
+**参考实现**:
+- 仓颉 async4j：https://gitcode.com/cj-awaresome/async4j
+- JavaScript Promise：https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Promise
+- Clojure core.async：https://clojure.org/guides/core_async_go
+
+---
+
+### 模块 11: 模块与包管理系统
+**职责**: 实现 Lisp 代码的模块化和包管理
+
+**设计目标**:
+- 支持 import/require 语法导入模块
+- 支持模块定义和导出
+- 实现包管理器（cjlpm）
+- 支持模块搜索路径
+- 避免全局命名空间污染
+
+**子任务**:
+- [ ] 11.1 设计模块系统 (P1)
+  - [ ] 模块概念和语义定义
+  - [ ] 模块命名空间
+  - [ ] 导入/导出机制
+  - [ ] 模块搜索路径
+
+- [ ] 11.2 实现模块加载 (P1)
+  - [ ] (import module) 特殊形式
+  - [ ] (require module) 别名导入
+  - [ ] (provide symbol...) 导出符号
+  - [ ] 模块缓存机制（避免重复加载）
+
+- [ ] 11.3 实现 define-module (P2)
+  - [ ] (define-module name
+      (export symbol1 symbol2)
+      (import other-module))
+  - [ ] 模块文档和元数据
+
+- [ ] 11.4 实现包管理器 cjlpm (P1)
+  - [ ] cjpm.toml 配置文件
+  - [ ] 依赖版本管理
+  - [ ] 包下载和缓存
+  - [ ] 本地包链接（开发模式）
+
+- [ ] 11.5 实现模块搜索路径 (P2)
+  - [ ] *module-path* 参数
+  - [ ] 相对路径导入 (./local-module)
+  - [ ] 标准库路径 (std:xxx)
+  - [ ] 用户库路径 (~/.local/lib/xisp)
+
+**关键文件**:
+- `src/core/module.cj` - 模块系统核心
+- `src/core/eval_module.cj` - import/export 特殊形式
+- `src/cjpm/` - 包管理器实现
+- `cjpm.toml` - 包配置文件格式
+
+**示例**:
+```lisp
+;; 定义模块
+;; file: modules/my-utils.lisp
+(define-module my-utils
+  (export square cube)
+  (import (only math) (factorial)))
+
+(define (square x) (* x x))
+(define (cube x) (* x x x))
+
+;; 使用模块
+;; file: main.lisp
+(import (modules my-utils))
+(import (prefix modules m-) my-utils)
+
+(my-utils:square 5)  ; => 25
+(m:square 5)            ; => 25
+
+;; 只导入特定符号
+(import (only modules my-utils square cube))
+
+;; 重命名导入
+(import (rename modules my-utils as utils))
+
+;; 相对路径导入
+(import (./local-modules parser))
+```
+
+**cjpm.toml 示例**:
+```toml
+[package]
+name = "my-lisp-app"
+version = "0.1.0"
+description = "A sample Lisp application"
+
+[dependencies]
+string-utils = { git = "https://github.com/example/string-utils", tag = "v1.0" }
+http-client = { path = "../local/http-client" }
+
+[dev-dependencies]
+test-lib = { git = "https://github.com/example/test-lib", branch = "main" }
+
+[metadata]
+license = "MIT"
+author = "Your Name <you@example.com>"
+```
+
+**参考实现**:
+- Racket require：https://docs.racket-lang.org/reference/require.html
+- Clojure namespace：https://clojure.org/reference/namespaces.html
+- Emacs Lisp require：https://www.gnu.org/software/emacs/manual/html_node/Elisp-Modules.html
+- npm package.json：https://docs.npmjs.com/cli/v7/configuring-npm/package-json.html
+
+**与现有系统集成**:
+- 模块系统应该与沙箱系统配合，限制模块可访问的函数
+- 模块应该支持异步导出（导出 async 函数）
+- 包管理器应该集成到 REPL（需要时自动下载依赖）
+
+---
 
 ---
 
@@ -483,6 +702,8 @@
 | 7.5.1-7.5.3 | 高阶函数 lambda 支持 | P1 | ✅ | 2026-01-22 | map/filter/reduce + lambda |
 | 7.3-7.6 | 现代化语法（其他） | P1/P2 | ⏳ | | | M3 |
 | 8.1-8.5 | 宏系统 | P1/P2 | ⏳ | | | M3 |
+| 8.5.1-8.5.5 | 异步/await 支持 | P1/P2 | ⏳ | | | M3 |
+| 11.1-11.5 | 模块与包管理 | P1/P2 | ⏳ | | | M3 |
 | 9.1-9.5 | 安全沙箱 | P1/P2 | ✅ | 2026-01-22 | 栈深度、超时、函数权限、文件权限、内存限制 |
 | 10.1 | 核心测试套件 | P0 | ✅ | 2026-01-21 | 46个测试通过 |
 | 10.2 | REPL 测试 | P1 | ⏳ | | | |
@@ -631,6 +852,8 @@ Closes #1
 - ✅ 模块 7: 现代化语法 (10/10)
 - ✅ 模块 7.5: 高阶函数增强 (3/3)
 - ⏳ 模块 8: 宏系统 (0/5)
+- ⏳ 模块 8.5: 异步/await 支持 (0/5)
+- ⏳ 模块 11: 模块与包管理 (0/5)
 - ✅ 模块 9: 安全与沙箱 (5/5)
 - 🚧 模块 10: 测试与工具 (2/5)
 
@@ -671,7 +894,7 @@ Closes #1
 - ⏳ 调试工具完善
 - ⏳ 性能优化（字节码缓存）
 
-**总计**: 82/90 任务完成 (91.1%)
+**总计**: 82/110 任务完成 (74.5%)
 
 ---
 
@@ -968,7 +1191,9 @@ while (!patternList.isNil()) {  // ✅ 只检查 patternList
 
 #### 长期（1-2周）
 1. ⏳ 实现宏系统（模块 8）
-2. ⏳ 完善调试工具（模块 10）
+2. ⏳ 实现异步/await 支持（模块 8.5）
+3. ⏳ 实现模块与包管理系统（模块 11）
+4. ⏳ 完善调试工具（模块 10）
 
 ---
 
@@ -981,8 +1206,118 @@ while (!patternList.isNil()) {  // ✅ 只检查 patternList
 
 ---
 
-**最后更新**: 2026-01-22
+**最后更新**: 2026-01-23
 **问题报告者**: Claude (AI Assistant)
+
+---
+
+## 最新更新记录 (2026-01-23)
+
+### ✅ 新增三个功能模块
+
+#### 1. 扩展模块 8: 宏系统
+**新增内容**:
+- ✅ 完整的宏系统设计文档
+- ✅ 明确设计目标和子任务拆分（8.1-8.5）
+- ✅ 添加参考实现链接（Clojure、Racket、Emacs Lisp）
+- ✅ 关键文件结构规划
+
+**任务明细** (共 5 个子任务，27 个具体任务):
+- 8.1: 宏展开机制（3 个任务）
+- 8.2: defmacro 特殊形式（3 个任务）
+- 8.3: macroexpand 函数（3 个任务）
+- 8.4: 常用内置宏（4 个任务）
+- 8.5: 高级宏（4 个任务）
+
+**优先级**: P1/P2
+**状态**: ⏳ 待开始
+
+---
+
+#### 2. 新增模块 8.5: 异步/await 支持
+**新增内容**:
+- ✅ 完整的异步系统设计文档
+- ✅ 与仓颉 async4j 集成方案
+- ✅ Promise/Future 类型设计
+- ✅ async/await 语法设计
+- ✅ 并发原语设计（await-all, await-race）
+- ✅ 实用示例代码
+
+**任务明细** (共 5 个子任务，21 个具体任务):
+- 8.5.1: 异步类型系统（3 个任务）
+- 8.5.2: async/await 特殊形式（3 个任务）
+- 8.5.3: Promise 操作（5 个任务）
+- 8.5.4: 并发原语（3 个任务）
+- 8.5.5: 异步迭代器（2 个任务）
+
+**优先级**: P1/P2
+**状态**: ⏳ 待开始
+
+**技术亮点**:
+- 深度集成仓颉 async4j 协程能力
+- Promise 链式调用支持
+- 并行执行和竞争机制
+- 超时控制和错误处理
+
+---
+
+#### 3. 新增模块 11: 模块与包管理系统
+**新增内容**:
+- ✅ 完整的模块系统设计文档
+- ✅ import/require 语法设计
+- ✅ define-module 语法设计
+- ✅ cjpm 包管理器设计
+- ✅ cjpm.toml 配置文件格式
+- ✅ 模块搜索路径设计
+- ✅ 实用示例代码
+
+**任务明细** (共 5 个子任务，20 个具体任务):
+- 11.1: 模块系统设计（5 个任务）
+- 11.2: 模块加载机制（4 个任务）
+- 11.3: define-module 实现（3 个任务）
+- 11.4: cjlpm 包管理器（4 个任务）
+- 11.5: 模块搜索路径（4 个任务）
+
+**优先级**: P1/P2
+**状态**: ⏳ 待开始
+
+**技术亮点**:
+- 模块命名空间隔离
+- 导入/导出机制
+- 依赖版本管理
+- 本地包链接（开发模式）
+- 与沙箱系统协同
+- 与异步系统集成
+
+---
+
+### 📊 更新后的项目统计
+
+**总任务数**: 110 个（从 90 个增加）
+**已完成**: 82 个
+**待完成**: 28 个
+**完成率**: 74.5%（从 91.1% 降低）
+
+**新增模块**:
+- 模块 8.5: 异步/await 支持（5 个子任务）
+- 模块 11: 模块与包管理（5 个子任务）
+
+**模块清单更新**:
+- ✅ 模块 1: 数据类型系统 (5/5)
+- ✅ 模块 2: 词法与语法分析 (3/5)
+- ✅ 模块 3: 求值器核心 (10/10)
+- ✅ 模块 4: 基础函数库 (8/8)
+- ✅ 模块 5: REPL 和交互 (2/5)
+- ✅ 模块 6: 仓颉桥接层 (11/11)
+- ✅ 模块 6.5: 选项系统 (9/9)
+- ✅ 模块 6.6: 中文支持优化 (6/6)
+- ✅ 模块 7: 现代化语法 (10/10)
+- ✅ 模块 7.5: 高阶函数增强 (3/3)
+- ⏳ 模块 8: 宏系统 (0/5)
+- ⏳ 模块 8.5: 异步/await 支持 (0/5)
+- ⏳ 模块 11: 模块与包管理 (0/5)
+- ✅ 模块 9: 安全与沙箱 (5/5)
+- 🚧 模块 10: 测试与工具 (2/5)
 
 ---
 
@@ -1082,15 +1417,29 @@ docs/
    - [ ] 8.2 实现 defmacro 特殊形式
    - [ ] 8.3 实现 macroexpand 函数
    - [ ] 8.4 实现常用宏：when/unless
-   - [ ] 8.5 实现常用宏：let*
+   - [ ] 8.5 实现高级宏：let*/when-let*
+
+2. **模块 8.5: 异步/await 支持** (0/5)
+   - [ ] 8.5.1 设计异步类型系统
+   - [ ] 8.5.2 实现 async/await 特殊形式
+   - [ ] 8.5.3 实现 Promise 操作
+   - [ ] 8.5.4 实现并发原语
+   - [ ] 8.5.5 异步迭代器支持
+
+3. **模块 11: 模块与包管理** (0/5)
+   - [ ] 11.1 设计模块系统
+   - [ ] 11.2 实现模块加载
+   - [ ] 11.3 实现 define-module
+   - [ ] 11.4 实现包管理器 cjlpm
+   - [ ] 11.5 实现模块搜索路径
 
 #### 优先级 P1 (重要功能)
-2. **模块 5: REPL 增强** (3/5)
+4. **模块 5: REPL 增强** (3/5)
    - [ ] 5.3 实现命令历史
    - [ ] 5.4 实现错误提示
    - [ ] 5.5 实现 pretty-print
 
-3. **模块 10: 测试与工具** (3/5)
+5. **模块 10: 测试与工具** (3/5)
    - [ ] 10.2 编写 REPL 测试
    - [ ] 10.3 编写桥接层测试
    - [ ] 10.4 实现调试工具

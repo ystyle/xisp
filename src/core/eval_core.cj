@@ -15,8 +15,32 @@ extend Evaluator {
             case Boolean(_) => expr
             case Nil => expr
             case Symbol(s) => this.env.lookup(s)
-            case Cons(cell) => this.doEvalList(cell)
+            case Cons(cell) => this.evalCons(expr, cell)
             case _ => expr
+        }
+    }
+
+    /**
+     * 求值 Cons 类型的表达式
+     * 先展开宏，然后求值
+     */
+    func evalCons(expr: LispValue, cell: ConsCell): LispValue {
+        // 检查是否是宏调用
+        if (let Symbol(sym) <- cell.car) {
+            let resolvedSym = this.env.lookupKeyword(sym)
+            let value = this.env.lookup(resolvedSym)
+            if (let Macro(_, _, _) <- value) {
+                // 这是一个宏，展开并重新求值
+                let expanded = this.expandMacro(value, cell.cdr)
+                // 对展开后的表达式求值
+                this.eval(expanded)
+            } else {
+                // 不是宏，正常求值（会先求值参数）
+                this.doEvalList(cell)
+            }
+        } else {
+            // car 不是符号，正常求值
+            this.doEvalList(cell)
         }
     }
 
@@ -54,6 +78,8 @@ extend Evaluator {
                     return this.evalQuote(rest)
                 } else if (actualSym == "define") {
                     return this.evalDefine(rest)
+                } else if (actualSym == "defmacro") {
+                    return this.evalDefmacro(rest)
                 } else if (actualSym == "set!") {
                     return this.evalSet(rest)
                 } else if (actualSym == "if") {
@@ -76,6 +102,10 @@ extend Evaluator {
                     return this.evalReduce(rest)
                 } else if (actualSym == "match") {
                     return this.evalMatch(rest)
+                } else if (actualSym == "macroexpand") {
+                    return this.evalMacroexpand(rest)
+                } else if (actualSym == "macroexpand-all") {
+                    return this.evalMacroexpandAll(rest)
                 } else {
                     let actualFirst = if (sym != actualSym) {
                         Symbol(actualSym)

@@ -314,6 +314,14 @@ public enum LispValue <: ToString {
     | Procedure(ArrayList<String>, LispValue, Environment)
 
     /**
+     * 宏（编译时元编程）
+     *
+     * 包含：参数列表、宏体、捕获的环境
+     * 与 Procedure 不同，宏接收的是未求值的语法树
+     */
+    | Macro(ArrayList<String>, LispValue, Environment)
+
+    /**
      * 原生函数（用仓颉实现的内置函数）
      *
      * 接收参数列表，返回结果
@@ -400,7 +408,18 @@ public enum LispValue <: ToString {
     public func isProcedure(): Bool {
         match (this) {
             case Procedure(_, _, _) => true
+            case Macro(_, _, _) => true
             case NativeFunc(_) => true
+            case _ => false
+        }
+    }
+
+    /**
+     * 判断是否为宏
+     */
+    public func isMacro(): Bool {
+        match (this) {
+            case Macro(_, _, _) => true
             case _ => false
         }
     }
@@ -417,6 +436,7 @@ public enum LispValue <: ToString {
             case Symbol(s) => s
             case Cons(c) => c.toString()
             case Procedure(_, _, _) => "#<procedure>"
+            case Macro(_, _, _) => "#<macro>"
             case NativeFunc(_) => "#<native-function>"
         }
     }
@@ -433,6 +453,7 @@ public enum LispValue <: ToString {
             case Symbol(s) => Symbol(s)
             case Cons(cell) => Cons(cell.clone())
             case Procedure(params, body, env) => Procedure(params, body, env.clone())
+            case Macro(params, body, env) => Macro(params, body, env.clone())
             case NativeFunc(f) => NativeFunc(f)  // 原生函数不需要克隆
         }
     }
@@ -498,6 +519,10 @@ public func consValue(car: LispValue, cdr: LispValue): LispValue {
 
 public func procedureValue(params: ArrayList<String>, body: LispValue, env: Environment): LispValue {
     Procedure(params, body, env)
+}
+
+public func macroValue(params: ArrayList<String>, body: LispValue, env: Environment): LispValue {
+    Macro(params, body, env)
 }
 
 /**
