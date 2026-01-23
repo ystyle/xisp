@@ -25,45 +25,52 @@ ystyle/
 
 ### 命名空间语法
 
-使用 `::` 作为命名空间分隔符：
+**分隔符规则**：
+- **`.`**：用于分隔**包层级**（标准库和第三方库都使用）
+- **`::`**：仅用于分隔**组织名和包名**（仅第三方库使用）
 
 ```lisp
-;; 标准库（无组织前缀）
-(import std::io)
-(import std::io::file)
+;; 标准库（无组织前缀）- 使用 . 分隔
+(import std.io)           ; 导入 std/io/
+(import std.io.file)     ; 导入 std/io/file/
 
-;; 第三方包（带组织前缀）
-(import ystyle::log.zlog)
-(import myorg::utils.string)
+;; 第三方包（带组织前缀）- 使用 :: 分隔组织和包名
+(import ystyle::log.zlog)         ; 导入 ystyle/log.zlog/
+(import myorg::utils.string)        ; 导入 myorg/utils/string/
 ```
 
 ### 结构
 
 ```
-组织名::包名
+组织名::包名[.子包]
 ```
 
-- **`::` 前**：组织名（可选）
-- **`::` 后**：包名（可以用 `.` 分层级）
+- **`::`**：分隔**组织名**和**包名**（可选）
+- **`.`**：分隔**包层级**
 
-| 导入语句 | 组织名 | 包名 | 目录 |
-|---------|-------|------|------|
-| `std::io` | 无 | `io` | `std/io/` |
-| `std::io.file` | 无 | `io.file` | `std/io/file/` |
+| 导入语句 | 组织名 | 包名（含层级） | 目录 |
+|---------|-------|--------------|------|
+| `std.io` | 无 | `io` | `std/io/` |
+| `std.io.file` | 无 | `io.file` | `std/io/file/` |
 | `ystyle::log.zlog` | `ystyle` | `log.zlog` | `ystyle/log.zlog/` |
 | `myorg::utils.string` | `myorg` | `utils.string` | `myorg/utils/string/` |
+
+**实现说明**：组织名通过命名空间（namespace）实现，避免不同组织的包之间符号冲突。
 
 ---
 
 ## package.lisp - 包元数据
 
-### 基本格式
+> **注意**：标准库尚未实现，以下说明仅针对第三方包。
 
-每个包目录下必须有 `package.lisp` 文件：
+### 第三方包格式
+
+每个第三方包目录下必须有 `package.lisp` 文件：
 
 ```lisp
-(package ystyle.log.zlog
+(package log.zlog
   (version "0.2.0")
+  (organization "ystyle")
   (description "Logging library")
   (author "ystyle")
   (homepage "https://github.com/ystyle/log")
@@ -71,6 +78,11 @@ ystyle/
 
 (export init shutdown write)
 ```
+
+**要点**：
+- **包名不含组织前缀**：`log.zlog` 而不是 `ystyle.log.zlog`
+- **organization 字段**：指定组织名（必需）
+- **导入时组合**：`(import ystyle::log.zlog)`
 
 ### 应用（有依赖）
 
@@ -81,17 +93,19 @@ ystyle/
   (author "Me")
 
   (dependencies
-    (ystyle.log.zlog "0.2.0")
-    (std.io "latest")
-    (myorg.utils "1.0.0")))
+    (ystyle::log.zlog "0.2.0")))
 ```
+
+**依赖声明格式**：
+- **第三方包**：`(组织::包名 "version")` - 使用 `::` 分隔组织和包名
 
 ### 字段说明
 
 | 字段 | 说明 | 必需 |
 |------|------|------|
-| `name` | 包名 | ✅ |
+| `name` | 包名（不含组织前缀） | ✅ |
 | `version` | 版本号 | ✅ |
+| `organization` | 组织名 | ✅ |
 | `description` | 描述 | ⚠️ |
 | `author` | 作者 | ⚠️ |
 | `homepage` | 主页 | ⚠️ |
@@ -106,11 +120,11 @@ ystyle/
 ### 基础导入
 
 ```lisp
-;; 标准库
-(import std::io)
-(import std::io::file)
+;; 标准库 - 使用 . 分隔包层级
+(import std.io)
+(import std.io.file)
 
-;; 第三方包
+;; 第三方包 - 使用 :: 分隔组织和包名
 (import ystyle::log.zlog)
 (import myorg::utils.string)
 ```
@@ -125,7 +139,7 @@ ystyle/
 ### 限定导入
 
 ```lisp
-(import (only std::io.file read write))
+(import (only std.io.file read write))
 (io.read "/tmp/test.txt")
 (io.write "/tmp/out.txt" "hello")
 ```
@@ -151,8 +165,8 @@ ystyle/
 **包名 = 路径的最后一个组件**：
 
 ```lisp
-(import std::io)              ; → io
-(import std::io::file)         ; → file
+(import std.io)              ; → io
+(import std.io.file)         ; → file
 (import ystyle::log.zlog)     ; → log.zlog
 (import myorg::utils.string)  ; → string
 ```
@@ -263,9 +277,7 @@ ystyle/log.zlog/
 (package myapp
   (version "1.0.0")
   (dependencies
-    (ystyle.log.zlog "0.2.0")   ; 固定版本
-    (std.io "latest")             ; 显式最新
-    (myorg.utils "1.0.0")))
+    (ystyle::log.zlog "0.2.0")))   ; 固定版本
 ```
 
 **使用时**：
@@ -290,7 +302,7 @@ ystyle/log.zlog/
 
 ```
 myapp@1.0.0
-  └── ystyle.log.zlog@0.2.0
+  └── ystyle::log.zlog@0.2.0
       └── std.io@1.0.0
 ```
 
@@ -358,11 +370,10 @@ myapp/
 
 ### 包文件
 
-**std/io/file/package.lisp**：
+**std/io/file/package.lisp**（标准库示例，尚未实现）：
 ```lisp
-(package std.io.file
-  (version "1.0.0")
-  (author "Xisp Team"))
+(package file
+  (version "1.0.0"))
 
 (export read write appendToFile exists?)
 
@@ -370,26 +381,24 @@ myapp/
 (define (write path content) "写入文件")
 ```
 
-**ystyle/log.zlog/package.lisp**：
+**ystyle/log.zlog/package.lisp**（第三方包）：
 ```lisp
-(package ystyle.log.zlog
+(package log.zlog
   (version "0.2.0")
-  (author "ystyle")
-  (dependencies
-    (std.io "1.0.0")))
+  (organization "ystyle")
+  (author "ystyle"))
 
 (export init shutdown write)
 
 (define (init) "初始化")
 ```
 
-**myapp/package.lisp**：
+**myapp/package.lisp**（应用）：
 ```lisp
 (package myapp
   (version "1.0.0")
   (dependencies
-    (ystyle.log.zlog "0.2.0")
-    (std.io "latest")))
+    (ystyle::log.zlog "0.2.0")))
 ```
 
 ### 使用
@@ -398,7 +407,7 @@ myapp/
 ;; main.lisp
 
 ;; 导入标准库
-(import std::io::file)
+(import std.io.file)
 (file.read "/tmp/test.txt")
 
 ;; 导入第三方包
@@ -423,7 +432,7 @@ myapp/
 (export readToEnd)
 
 ;; 使用
-(import std::io.file)
+(import std.io.file)
 (file.readToEnd path)        ; ✅ 可以
 ; (std.io.file.readToEnd)   ; ❌ 不能跨层级
 ```
@@ -453,7 +462,7 @@ myapp/
 (define (internalHelper) ...)  ; 未 export
 
 ;; main.lisp
-(import std.io::file)
+(import std.io.file)
 (file.internalHelper)
 ; ❌ 错误：internalHelper 未导出（包私有）
 ```
@@ -462,12 +471,13 @@ myapp/
 
 ```lisp
 ;; ystyle/log.zlog/package.lisp
-(package ystyle.log.zlog
-  (version "0.2.0"))  ; org = "ystyle"
+(package log.zlog
+  (version "0.2.0")
+  (organization "ystyle"))
 
 ;; 错误导入
 (import wrongorg::log.zlog)
-; ❌ 错误：Package 'log.zlog' belongs to 'ystyle', not 'wrongorg'
+; ❌ 错误：Package 'log.zlog' belongs to organization 'ystyle', not 'wrongorg'
 ```
 
 ---
@@ -494,12 +504,16 @@ myapp/
 (define log::file "app.log")    ; ❌ 不能用 ::
 ```
 
-### 命名空间
+### 导入语法中的分隔符
 
-**只在 import 中使用 `::`**：
+**规则总结**：
+- **`.`**：分隔包层级（标准库和第三方库的包层级都用 `.`）
+- **`::`**：仅用于分隔组织名和包名（仅第三方库在 import 时使用）
+
+**示例**：
 ```lisp
-(import ystyle::log.zlog)   ; ✅ 正确
-(import std::io::file)       ; ✅ 正确
+(import ystyle::log.zlog)   ; ✅ 正确（第三方包使用 ::）
+(import std.io.file)       ; ✅ 正确（标准库使用 .）
 
 ;; 代码中使用
 (zlog.init)                 ; ✅ 正确
@@ -534,7 +548,7 @@ package/
 ```lisp
 ;; 推荐简短有意义的包名
 (import utils.string)         ; ✅ 好
-(import ystyle.log.zlog)      ; ✅ 好
+(import ystyle::log.zlog)     ; ✅ 好（使用 :: 分隔组织和包名）
 (import company.project.app.utils)  ; ❌ 太深
 ```
 
@@ -552,11 +566,11 @@ package/
 
 ```lisp
 ;; 明确导入需要的符号
-(import (only std::io.file read write))
+(import (only std.io.file read write))
 
 ;; 使用别名避免冲突
 (import std.io.file :as file)
-(import myorg.io.file :as org-file)
+(import myorg::io.file :as org-file)
 ```
 
 ### 4. 文件组织
@@ -577,9 +591,13 @@ package/
 |------|------|---------|------|-----|
 | 元数据文件 | `package.lisp` | `package.json` | `Cargo.toml` | `go.mod` |
 | 导入语法 | `(import ...)` | `require(...)` | `use ...` | `import ...` |
-| 命名空间 | `::` | `/` | `::` | `/` |
+| 分隔符 | `.` 和 `::` | `/` | `::` | `/` |
 | 导出关键字 | `export` | `exports` | `pub` | 无（首字母大写） |
 | 依赖管理 | `dependencies` | `dependencies` | `dependencies` | `require` |
+
+**说明**：
+- **`.`**：分隔包层级（标准库：`std.io.file`）
+- **`::`**：分隔组织和包名（第三方库：`ystyle::log.zlog`）
 
 ---
 
@@ -589,10 +607,32 @@ package/
 
 | 语法 | 说明 |
 |------|------|
-| `(import pkg::subpkg)` | 导入包 |
-| `(import pkg::subpkg :as alias)` | 别名导入 |
-| `(import (only pkg::subpkg sym1 sym2))` | 限定导入 |
-| `(import ./local)` | 相对路径 |
+| `(import std.io.file)` | 导入标准库包（使用 `.` 分隔层级） |
+| `(import org::pkg.subpkg)` | 导入第三方包（使用 `::` 分隔组织和包名） |
+| `(import org::pkg.subpkg :as alias)` | 别名导入 |
+| `(import (only std.io.file sym1 sym2))` | 限定导入（只导入指定符号） |
+| `(import ./local)` | 相对路径导入 |
+
+### 符号使用
+
+**导入后使用符号的规则**：
+- **包名** = 路径的最后一个组件
+- **标准库**：`(import std.io.file)` → 使用 `(file.read path)`
+- **第三方包**：`(import ystyle::log.zlog)` → 使用 `(zlog.init "app")`
+- **符号名允许 `.`**：`(file.read "/tmp/test.txt")` ✅
+
+**示例**：
+```lisp
+;; 标准库
+(import std.io.file)
+(file.read "/tmp/test.txt")     ; ✅ 正确
+(file.write "/tmp/out" "data")   ; ✅ 正确
+
+;; 第三方包
+(import ystyle::log.zlog)
+(zlog.init "myapp")              ; ✅ 正确
+(zlog.write "Hello")             ; ✅ 正确
+```
 
 ### export 语法
 
