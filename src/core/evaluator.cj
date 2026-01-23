@@ -30,7 +30,12 @@ public class Evaluator {
      */
     public func initModuleSystem() {
         if (this.moduleRegistry.isNone()) {
-            this.moduleRegistry = Some(ModuleRegistry())
+            let registry = ModuleRegistry()
+
+            // 添加默认搜索路径
+            registry.addSearchPath("./examples")  // 添加 examples 目录用于测试和示例
+
+            this.moduleRegistry = Some(registry)
             this.moduleLoader = Some(ModuleLoader(this))
             this.packageParser = Some(PackageParser(this))
         }

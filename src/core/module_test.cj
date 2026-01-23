@@ -3,6 +3,7 @@ package ystyle::xisp.core
 import ystyle::xisp.types.*
 import std.unittest.*
 import std.collection.ArrayList
+import std.collection.*
 import std.fs.*
 
 /**
@@ -445,5 +446,80 @@ class ModuleTest {
         // 再次初始化（不应该重复初始化）
         evaluator.initModuleSystem()
         @Assert(evaluator.moduleRegistry.isSome())
+    }
+
+    /**
+     * 测试 PackageParser 解析真实的 package.lisp
+     * 使用 examples/ystyle/zlog/package.lisp（真实的第三方包，含 organization）
+     */
+    @TestCase
+    func testPackageParser() {
+        let env = Environment()
+        BuiltinFunctions.registerAll(env)
+        let evaluator = Evaluator(env)
+        evaluator.initModuleSystem()
+
+        // 获取 PackageParser
+        match (evaluator.packageParser) {
+            case Some(parser) =>
+                // 使用真实的第三方包（examples/ystyle/zlog）
+                let packagePath = "./examples/ystyle/zlog"
+
+                // 解析
+                match (parser.parse(packagePath)) {
+                    case Some(packageInfo) =>
+                        // 验证基本信息
+                        @Assert(packageInfo.name, "zlog")
+                        @Assert(packageInfo.org, "ystyle")
+                        @Assert(packageInfo.packageName, "zlog")
+
+                        // 验证元数据字段
+                        @Assert(packageInfo.version, "0.2.0")
+                        @Assert(packageInfo.description, "Logging library for Xisp")
+                        @Assert(packageInfo.author, "ystyle")
+                        @Assert(packageInfo.homepage, "https://github.com/ystyle/zlog")
+                        @Assert(packageInfo.license, "MIT")
+
+                    case None => @Fail("Failed to parse package.lisp")
+                }
+
+            case None => @Fail("PackageParser not initialized")
+        }
+    }
+
+    /**
+     * 测试 PackageParser 解析多级目录包（utils.string）
+     */
+    @TestCase
+    func testPackageParserMultiLevel() {
+        let env = Environment()
+        BuiltinFunctions.registerAll(env)
+        let evaluator = Evaluator(env)
+        evaluator.initModuleSystem()
+
+        match (evaluator.packageParser) {
+            case Some(parser) =>
+                // 测试多级目录包：examples/ystyle/utils（包含 string 子目录）
+                let packagePath = "./examples/ystyle/utils"
+
+                match (parser.parse(packagePath)) {
+                    case Some(packageInfo) =>
+                        // 验证基本信息
+                        @Assert(packageInfo.name, "utils.string")
+                        @Assert(packageInfo.org, "ystyle")
+                        @Assert(packageInfo.packageName, "utils.string")
+
+                        // 验证元数据
+                        @Assert(packageInfo.version, "0.1.0")
+                        @Assert(packageInfo.description, "String utilities for Xisp")
+                        @Assert(packageInfo.author, "ystyle")
+                        @Assert(packageInfo.homepage, "https://github.com/ystyle/utils")
+                        @Assert(packageInfo.license, "MIT")
+
+                    case None => @Fail("Failed to parse package.lisp")
+                }
+
+            case None => @Fail("PackageParser not initialized")
+        }
     }
 }
