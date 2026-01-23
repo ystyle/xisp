@@ -236,6 +236,7 @@ public class ModulePathUtils {
     /**
      * 解析模块路径
      * 从模块名生成文件系统路径
+     * 注意：目录名是包名去掉最后一级（log.zlog → log）
      */
     public static func moduleToPath(moduleName: String, searchPath: String): String {
         // 解析模块名：org::package.subpkg
@@ -244,19 +245,58 @@ public class ModulePathUtils {
             // 有组织前缀：ystyle::log.zlog
             (parts[0], parts[1])
         } else if (parts.size == 1) {
-            // 无组织前缀（标准库）：io
+            // 无组织前缀：io
             ("", parts[0])
         } else {
             // 格式错误
             ("", moduleName)
         }
 
+        // 提取目录名（去掉包名的最后一级）
+        let packageDir = extractPackageDir(packageName)
+
         if (org.isEmpty()) {
-            // 标准库：searchPath/packageName/
-            Path(searchPath).join(packageName).toString()
+            // 标准库：searchPath/packageDir/
+            Path(searchPath).join(packageDir).toString()
         } else {
-            // 带组织前缀：searchPath/org/packageName/
-            Path(searchPath).join(org).join(packageName).toString()
+            // 带组织前缀：searchPath/org/packageDir/
+            Path(searchPath).join(org).join(packageDir).toString()
+        }
+    }
+
+    /**
+     * 从包名提取目录名
+     * 规则：去掉包名的最后一级
+     * 例如：
+     * - io → io
+     * - log.zlog → log
+     * - io.file → io
+     * - utils.string.parser → utils.string
+     *
+     * @param packageName 包名（如："log.zlog"）
+     * @return 目录名（如："log"）
+     */
+    public static func extractPackageDir(packageName: String): String {
+        let parts = packageName.split('.')
+        if (parts.size > 1) {
+            // 去掉最后一级，重新组合
+            let dirParts = ArrayList<String>()
+            for (i in 0..(parts.size - 1)) {
+                dirParts.add(parts[i])
+            }
+            // 用 . 连接
+            var result = ""
+            for (i in 0..dirParts.size) {
+                if (i > 0) {
+                    result = "${result}.${dirParts[i]}"
+                } else {
+                    result = dirParts[i]
+                }
+            }
+            result
+        } else {
+            // 单级包名，直接返回
+            packageName
         }
     }
 

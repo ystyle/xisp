@@ -195,13 +195,13 @@ class ModuleTest {
         let stdPath = ModulePathUtils.moduleToPath("io", "/modules")
         @Assert(stdPath, "/modules/io")
 
-        // 第三方包
+        // 第三方包 - log.zlog 的目录是 log（去掉最后一级）
         let thirdPartyPath = ModulePathUtils.moduleToPath("ystyle::log.zlog", "/modules")
-        @Assert(thirdPartyPath, "/modules/ystyle/log.zlog")
+        @Assert(thirdPartyPath, "/modules/ystyle/log")
 
-        // 带点号的包名
+        // 带点号的包名 - utils.string 的目录是 utils（去掉最后一级）
         let dottedPath = ModulePathUtils.moduleToPath("org::utils.string", "/modules")
-        @Assert(dottedPath, "/modules/org/utils.string")
+        @Assert(dottedPath, "/modules/org/utils")
     }
 
     /**
@@ -220,6 +220,31 @@ class ModuleTest {
         // 多级相对路径
         let multi = ModulePathUtils.relativePathToModuleName("./a/b/c")
         @Assert(multi, "a.b.c")
+    }
+
+    /**
+     * 测试 ModulePathUtils - extractPackageDir
+     */
+    @TestCase
+    func testExtractPackageDir() {
+        // 单级包名
+        let single = ModulePathUtils.extractPackageDir("io")
+        @Assert(single, "io")
+
+        // 两级包名
+        let twoLevel = ModulePathUtils.extractPackageDir("log.zlog")
+        @Assert(twoLevel, "log")
+
+        // 三级包名
+        let threeLevel = ModulePathUtils.extractPackageDir("utils.string.parser")
+        @Assert(threeLevel, "utils.string")
+
+        // 边界情况
+        let edge1 = ModulePathUtils.extractPackageDir("a.b")
+        @Assert(edge1, "a")
+
+        let edge2 = ModulePathUtils.extractPackageDir("very.long.package.name")
+        @Assert(edge2, "very.long.package")
     }
 
     /**
