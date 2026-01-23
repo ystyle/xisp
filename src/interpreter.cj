@@ -85,6 +85,11 @@ public class LispInterpreter {
     private var allowFileWrite: Bool = true
 
     /**
+     * 是否允许加载模块
+     */
+    private var allowModuleLoad: Bool = true
+
+    /**
      * 允许的文件路径（白名单）
      */
     private var allowedPaths: ArrayList<String> = ArrayList<String>()
@@ -107,6 +112,12 @@ public class LispInterpreter {
 
         // 设置函数权限检查回调
         this.evaluator.setFuncChecker({ funcName => this.isFunctionAllowed(funcName) })
+
+        // 设置路径权限检查回调
+        this.evaluator.setPathChecker({ path, isWrite => this.isPathAllowed(path, isWrite) })
+
+        // 设置模块加载权限检查回调
+        this.evaluator.setModuleLoadChecker({ => this.isModuleLoadAllowed() })
 
         // 注册内置函数
         BuiltinFunctions.registerAll(this.env)
@@ -306,6 +317,44 @@ public class LispInterpreter {
     }
 
     /**
+     * 允许文件写入
+     */
+    public func setFileWriteAllowed(allowed: Bool) {
+        this.allowFileWrite = allowed
+        if (this.verbose) {
+            if (allowed) {
+                this.outputFn("允许文件写入")
+            } else {
+                this.outputFn("禁止文件写入")
+            }
+        }
+    }
+
+    /**
+     * 禁止模块加载
+     */
+    public func blockModuleLoad() {
+        this.allowModuleLoad = false
+        if (this.verbose) {
+            this.outputFn("禁止模块加载")
+        }
+    }
+
+    /**
+     * 允许模块加载
+     */
+    public func setModuleLoadAllowed(allowed: Bool) {
+        this.allowModuleLoad = allowed
+        if (this.verbose) {
+            if (allowed) {
+                this.outputFn("允许模块加载")
+            } else {
+                this.outputFn("禁止模块加载")
+            }
+        }
+    }
+
+    /**
      * 设置允许的路径
      */
     public func setAllowedPaths(paths: Array<String>) {
@@ -368,6 +417,13 @@ public class LispInterpreter {
         }
 
         return true
+    }
+
+    /**
+     * 检查是否允许加载模块
+     */
+    public func isModuleLoadAllowed(): Bool {
+        this.allowModuleLoad
     }
 
     /**

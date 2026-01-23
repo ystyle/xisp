@@ -196,4 +196,108 @@ class SandboxTest {
             case _ => @Fail("Allowed function should work")
         }
     }
+
+    @TestCase
+    func testBlockModuleLoad() {
+        println("\n=== 测试禁止模块加载 ===")
+        let interp = LispInterpreter([
+            withQuietMode()
+        ])
+        BuiltinFunctions.registerAll(interp.getEnvironment())
+
+        // 禁止模块加载
+        interp.blockModuleLoad()
+
+        // 尝试 import 应该被禁止
+        let result = interp.eval("(import std::io)")
+
+        match (result) {
+            case Str(s) =>
+                // 应该返回错误信息
+                @Assert(s.contains("not allowed"))
+            case _ => @Fail("Module import should be blocked")
+        }
+
+        // 检查权限状态
+        @Assert(!interp.isModuleLoadAllowed())
+    }
+
+    @TestCase
+    func testAllowModuleLoad() {
+        println("\n=== 测试允许模块加载 ===")
+        let interp = LispInterpreter([
+            withQuietMode()
+        ])
+        BuiltinFunctions.registerAll(interp.getEnvironment())
+
+        // 默认应该允许
+        @Assert(interp.isModuleLoadAllowed())
+
+        // 禁止后再允许
+        interp.blockModuleLoad()
+        @Assert(!interp.isModuleLoadAllowed())
+
+        interp.setModuleLoadAllowed(true)
+        @Assert(interp.isModuleLoadAllowed())
+    }
+
+    @TestCase
+    func testWithNoModuleLoadOption() {
+        println("\n=== 测试 withNoModuleLoad 选项 ===")
+        let interp = LispInterpreter([
+            withNoModuleLoad(),
+            withQuietMode()
+        ])
+        BuiltinFunctions.registerAll(interp.getEnvironment())
+
+        // 模块加载应该被禁止
+        @Assert(!interp.isModuleLoadAllowed())
+
+        // 尝试 import 应该被禁止
+        let result = interp.eval("(import test::module)")
+
+        match (result) {
+            case Str(s) =>
+                @Assert(s.contains("not allowed"))
+            case _ => @Fail("Module import should be blocked")
+        }
+    }
+
+    @TestCase
+    func testWithSandboxIncludesModuleLoadBlock() {
+        println("\n=== 测试 withSandbox 包含模块加载禁止 ===")
+        let interp = LispInterpreter([
+            withSandbox(),
+            withQuietMode()
+        ])
+        BuiltinFunctions.registerAll(interp.getEnvironment())
+
+        // withSandbox 应该禁止模块加载
+        @Assert(!interp.isModuleLoadAllowed())
+
+        // 尝试 import 应该被禁止
+        let result = interp.eval("(import std::io)")
+
+        match (result) {
+            case Str(s) =>
+                @Assert(s.contains("not allowed"))
+            case _ => @Fail("Module import should be blocked in sandbox")
+        }
+    }
+
+    @TestCase
+    func testPathCheckerIntegration() {
+        println("\n=== 测试路径权限检查集成 ===")
+        let interp = LispInterpreter([
+            withAllowedPaths(["/tmp/"]),
+            withNoFileWrite(),  // 禁止文件写入
+            withQuietMode()
+        ])
+        BuiltinFunctions.registerAll(interp.getEnvironment())
+
+        // 检查路径权限
+        @Assert(interp.isPathAllowed("/tmp/test.txt", false))  // 读取允许（在白名单中）
+        @Assert(!interp.isPathAllowed("/etc/passwd", false))  // 读取不允许（不在白名单中）
+        @Assert(!interp.isPathAllowed("/tmp/test.txt", true))  // 写入不允许（被禁止）
+    }
 }

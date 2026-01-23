@@ -125,6 +125,15 @@ public class ModuleLoader {
             return true  // 忽略的文件不算失败
         }
 
+        // 检查沙箱权限（读取操作）
+        match (this.evaluator.pathChecker) {
+            case Some(checker) =>
+                if (!checker(filePath, false)) {  // false = 读取操作
+                    return false  // 权限拒绝
+                }
+            case None => ()  // 没有沙箱检查，允许
+        }
+
         // 读取文件内容
         try {
             let bytes = File.readFrom(filePath)

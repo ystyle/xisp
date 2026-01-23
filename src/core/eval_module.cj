@@ -54,6 +54,15 @@ extend Evaluator {
      * (import ../parent.module)
      */
     func evalImport(expr: LispValue): LispValue {
+        // 检查模块加载权限
+        match (this.moduleLoadChecker) {
+            case Some(checker) =>
+                if (!checker()) {
+                    return Str("Error: Module loading is not allowed in this sandbox")
+                }
+            case None => ()  // 没有沙箱检查，允许
+        }
+
         match (expr) {
             case Cons(cell) =>
                 if (cell.length() == 0) {

@@ -204,6 +204,7 @@ public func withOutputFn(fn: (String) -> Unit): InterpreterOption {
  * - 调用栈深度：500
  * - 执行时间：30 秒
  * - 禁止文件写入
+ * - 禁止模块加载
  * - 禁止危险函数（eval, apply）
  *
  * 示例：
@@ -220,6 +221,7 @@ public func withSandbox(): InterpreterOption {
         interpreter.setMaxStackDepth(500)
         interpreter.setTimeout(Some(Duration.second * 30))
         interpreter.blockFileWrite()
+        interpreter.blockModuleLoad()
         interpreter.blockFunctions(["eval", "apply"])
     }
 }
@@ -352,5 +354,39 @@ public func withNoFileWrite(): InterpreterOption {
  * ```
  */
 public func withAllowedPaths(paths: Array<String>): InterpreterOption {
+    { interpreter => interpreter.setAllowedPaths(paths) }
+}
+
+/**
+ * 禁止模块加载
+ *
+ * 禁止使用 import 语句加载任何模块。
+ * 适用于需要完全隔离代码执行的沙箱环境。
+ *
+ * 示例：
+ * ```cangjie
+ * let interpreter = LispInterpreter([
+ *     withNoModuleLoad()
+ * ])
+ * ```
+ */
+public func withNoModuleLoad(): InterpreterOption {
+    { interpreter => interpreter.blockModuleLoad() }
+}
+
+/**
+ * 限制模块加载路径（白名单）
+ * @param paths 允许加载模块的路径前缀
+ *
+ * 只允许从指定路径加载模块，配合 withNoFileWrite() 使用可实现严格隔离。
+ *
+ * 示例：
+ * ```cangjie
+ * let interpreter = LispInterpreter([
+ *     withAllowedModulePaths(["./lib/", "/usr/share/xisp/modules/"])
+ * ])
+ * ```
+ */
+public func withAllowedModulePaths(paths: Array<String>): InterpreterOption {
     { interpreter => interpreter.setAllowedPaths(paths) }
 }
