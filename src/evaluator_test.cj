@@ -217,3 +217,117 @@ class EvaluatorTest {
         }
     }
 }
+
+/**
+ * 宏系统测试
+ */
+@Test
+class MacroTest {
+    // 辅助函数：执行字符串代码并返回最后结果
+    func evalCode(code: String, env: Environment): LispValue {
+        let exprs = Parser.parseFromString(code)
+        var result: LispValue = Nil
+        let evaluator = Evaluator(env)
+        for (i in 0..exprs.size) {
+            result = evaluator.eval(exprs[i])
+        }
+        result
+    }
+
+    @TestCase
+    func testDefmacroBasic() {
+        let env = Environment()
+        BuiltinFunctions.registerAll(env)
+        let result = evalCode("(defmacro identity (x) x)", env)
+        match (result) {
+            case Symbol(name) => @Assert(name == "identity")
+            case _ => @Fail("defmacro should return symbol")
+        }
+        let macroValue = env.lookup("identity")
+        match (macroValue) {
+            case Macro(_, _, _) => ()
+            case _ => @Fail("identity should be a macro")
+        }
+    }
+
+    @TestCase
+    func testIdentityMacro() {
+        let env = Environment()
+        BuiltinFunctions.registerAll(env)
+        evalCode("(defmacro identity (x) x)", env)
+        let result = evalCode("(identity 123)", env)
+        match (result) {
+            case Number(n) => @Assert(n == 123.0)
+            case _ => @Fail("identity macro should return number")
+        }
+    }
+
+    @TestCase
+    func testWhenMacro() {
+        let env = Environment()
+        BuiltinFunctions.registerAll(env)
+        evalCode("(defmacro when (test then) (list (quote if) test then (quote 0)))", env)
+        let result1 = evalCode("(when 1 100)", env)
+        match (result1) {
+            case Number(n) => @Assert(n == 100.0)
+            case _ => @Fail("when with true condition should return 100")
+        }
+        let result2 = evalCode("(when 0 100)", env)
+        match (result2) {
+            case Number(n) => @Assert(n == 0.0)
+            case _ => @Fail("when with false condition should return 0")
+        }
+    }
+
+    @TestCase
+    func testIncfMacro() {
+        let env = Environment()
+        BuiltinFunctions.registerAll(env)
+        evalCode("(defmacro incf (var) (list (quote setq) var (list (quote +) var 1)))", env)
+        evalCode("(define counter 0)", env)
+        let result1 = evalCode("(incf counter)", env)
+        match (result1) {
+            case Number(n) => @Assert(n == 1.0)
+            case _ => @Fail("first incf should return 1")
+        }
+        let counter1 = evalCode("counter", env)
+        match (counter1) {
+            case Number(n) => @Assert(n == 1.0)
+            case _ => @Fail("counter should be 1 after first incf")
+        }
+    }
+
+    @TestCase
+    func testSwapMacro() {
+        let env = Environment()
+        BuiltinFunctions.registerAll(env)
+        evalCode("(defmacro swap (a b) (list (quote let) (list (list (quote temp) a)) (list (quote setq) a b) (list (quote setq) b (quote temp))))", env)
+        evalCode("(define x 1)", env)
+        evalCode("(define y 2)", env)
+        evalCode("(swap x y)", env)
+        let x = evalCode("x", env)
+        match (x) {
+            case Number(n) => @Assert(n == 2.0)
+            case _ => @Fail("x should be 2 after swap")
+        }
+        let y = evalCode("y", env)
+        match (y) {
+            case Number(n) => @Assert(n == 1.0)
+            case _ => @Fail("y should be 1 after swap")
+        }
+    }
+
+    @TestCase
+    func testMacroNestedCall() {
+        let env = Environment()
+        BuiltinFunctions.registerAll(env)
+        evalCode("(defmacro add-one (x) (list (quote +) x 1))", env)
+        evalCode("(defmacro add-two (x) (list (quote +) (list (quote add-one) x) 1))", env)
+        let result = evalCode("(add-two 10)", env)
+        match (result) {
+            case Number(n) => @Assert(n == 12.0)
+            case _ => @Fail("nested macro call should return 12")
+        }
+    }
+}
+

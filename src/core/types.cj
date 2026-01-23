@@ -330,12 +330,14 @@ public enum LispValue <: ToString {
 
     /**
      * 判断是否为真值
-     * 除了 nil 和 false，其他都是真
+     * 假值：nil、false、数字 0
+     * 其他都是真
      */
     public func isTruthy(): Bool {
         match (this) {
             case Nil => false
             case Boolean(false) => false
+            case Number(0.0) => false
             case _ => true
         }
     }

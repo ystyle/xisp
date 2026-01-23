@@ -459,8 +459,13 @@ class EdgeCasesTest {
      */
     @TestCase
     func testZeroValues() {
-        @Assert(Number(0.0).isTruthy())
+        // 0 是假值（用作 false）
+        @Assert(!Number(0.0).isTruthy())
+        // Boolean(false) 是假值
         @Assert(!Boolean(false).isTruthy())
+        // 其他非零数字是真值
+        @Assert(Number(1.0).isTruthy())
+        @Assert(Number(-1.0).isTruthy())
     }
 
     /**

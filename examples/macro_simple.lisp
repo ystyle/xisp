@@ -80,13 +80,13 @@
 (println "4. 定义 swap 宏")
 (println "代码: (defmacro swap (a b)")
 (println "        (list (quote let)")
-(println "              (list (quote temp) a)")
+(println "              (list (list (quote temp) a))")
 (println "              (list (quote setq) a b)")
 (println "              (list (quote setq) b (quote temp))))")
 
 (defmacro swap (a b)
   (list (quote let)
-        (list (quote temp) a)
+        (list (list (quote temp) a))
         (list (quote setq) a b)
         (list (quote setq) b (quote temp))))
 
