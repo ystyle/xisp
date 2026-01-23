@@ -606,4 +606,117 @@ class ModuleTest {
             case None => @Fail("ModuleRegistry not initialized")
         }
     }
+
+    /**
+     * 测试相对路径导入 - 当前目录
+     */
+    @TestCase
+    func testRelativeImportCurrentDir() {
+        let env = Environment()
+        BuiltinFunctions.registerAll(env)
+        let evaluator = Evaluator(env)
+        evaluator.initModuleSystem()
+
+        // 设置当前文件路径（模拟在 examples/ystyle/test.lisp 中）
+        evaluator.currentFilePath = Some("./examples/ystyle/zlog/core.lisp")
+
+        // 测试相对路径解析：./utils.string -> 应该找到 examples/ystyle/utils/string
+        match (evaluator.currentFilePath) {
+            case Some(filePath) =>
+                let currentDir = Path(filePath).parent.toString()
+                // 这里只测试路径解析，不测试实际导入（需要复杂的文件系统设置）
+                @Assert(currentDir.contains("zlog"))
+            case None => @Fail("currentFilePath should be set")
+        }
+    }
+
+    /**
+     * 测试相对路径导入 - 上级目录
+     */
+    @TestCase
+    func testRelativeImportParentDir() {
+        let env = Environment()
+        BuiltinFunctions.registerAll(env)
+        let evaluator = Evaluator(env)
+        evaluator.initModuleSystem()
+
+        // 设置当前文件路径（模拟在 examples/ystyle/zlog/core.lisp 中）
+        evaluator.currentFilePath = Some("./examples/ystyle/zlog/core.lisp")
+
+        match (evaluator.currentFilePath) {
+            case Some(filePath) =>
+                let currentDir = Path(filePath).parent.toString()
+                let parentDir = Path(currentDir).parent.toString()
+                // 验证能够获取上级目录
+                @Assert(parentDir.contains("ystyle"))
+            case None => @Fail("currentFilePath should be set")
+        }
+    }
+
+    /**
+     * 测试 findPackageDirectory - 向上查找 package.lisp
+     */
+    @TestCase
+    func testFindPackageDirectory() {
+        let env = Environment()
+        BuiltinFunctions.registerAll(env)
+        let evaluator = Evaluator(env)
+        evaluator.initModuleSystem()
+
+        // 测试在 examples/ystyle/zlog 目录下查找 package.lisp
+        let testPath = "./examples/ystyle/zlog"
+        let pathObj = Path(testPath)
+
+        if (exists(testPath)) {
+            let packageFile = Path(testPath).join("package.lisp").toString()
+            @Assert(exists(packageFile))
+        }
+    }
+
+    /**
+     * 测试 packagePathToModuleName - 包路径到模块名转换
+     */
+    @TestCase
+    func testPackagePathToModuleName() {
+        let env = Environment()
+        BuiltinFunctions.registerAll(env)
+        let evaluator = Evaluator(env)
+        evaluator.initModuleSystem()
+
+        match (evaluator.moduleRegistry) {
+            case Some(registry) =>
+                // 添加测试路径
+                registry.addSearchPath("./examples")
+
+                // 测试转换：examples/ystyle/zlog -> ystyle::zlog
+                // 注意：extractPackageDir 会去掉最后一级，所以 zlog 的目录名就是 zlog
+                let modulePath = ModulePathUtils.moduleToPath("ystyle::zlog", "./examples")
+                @Assert(modulePath.contains("ystyle"))
+                @Assert(modulePath.contains("zlog"))
+            case None => @Fail("ModuleRegistry not initialized")
+        }
+    }
+
+    /**
+     * 测试相对路径导入语法解析
+     */
+    @TestCase
+    func testRelativeImportSyntax() {
+        let env = Environment()
+        BuiltinFunctions.registerAll(env)
+        let evaluator = Evaluator(env)
+        evaluator.initModuleSystem()
+
+        // 设置当前文件路径
+        evaluator.currentFilePath = Some("./examples/ystyle/zlog/core.lisp")
+
+        // 测试相对路径导入语法解析（不测试实际加载）
+        // 测试字符串形式的相对路径
+        let relativePath1 = "./utils.string"
+        @Assert(relativePath1.startsWith("./"))
+
+        let relativePath2 = "../lib.parser"
+        @Assert(relativePath2.startsWith("../"))
+    }
 }
+

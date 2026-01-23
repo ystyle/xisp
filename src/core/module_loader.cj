@@ -67,10 +67,11 @@ public class ModuleLoader {
      */
     private func listLispFiles(directory: String): ArrayList<String> {
         let files = ArrayList<String>()
+        let basePath = Path(directory)
 
         try {
             // 使用 Directory.walk 递归遍历目录
-            Directory.walk(Path(directory), { fileInfo =>
+            Directory.walk(basePath, { fileInfo =>
                 let fileName = fileInfo.name
 
                 // 忽略以 . 开头的文件和目录
@@ -85,8 +86,32 @@ public class ModuleLoader {
 
                 // 只处理 .lisp 文件
                 if (fileName.endsWith(".lisp")) {
-                    // 获取完整路径并添加到列表
-                    files.add(fileInfo.path.toString())
+                    // 使用 Path 获取相对路径
+                    let filePath = fileInfo.path
+                    // 检查是否是当前目录下的文件
+                    let parent = filePath.parent
+                    if (parent.toString() == basePath.toString()) {
+                        // 直接在当前目录下
+                        files.add(fileName)
+                    } else {
+                        // 在子目录下，构建相对路径
+                        let parentStr = parent.toString()
+                        let basePathStr = basePath.toString()
+                        if (parentStr.startsWith(basePathStr)) {
+                            // 获取相对部分
+                            let relativePart = parentStr[basePathStr.size..]
+                            // 去掉开头的 /
+                            let cleanRelative = if (relativePart.startsWith("/")) {
+                                relativePart[1..]
+                            } else {
+                                relativePart
+                            }
+                            files.add("${cleanRelative}/${fileName}")
+                        } else {
+                            // 不在目录下，使用文件名
+                            files.add(fileName)
+                        }
+                    }
                 }
 
                 true  // 继续遍历
@@ -206,15 +231,20 @@ public class ModuleLoader {
 
         // 逐个求值表达式
         for (expr in exprs) {
-            // 保存当前环境
+            // 保存当前环境和文件路径
             let oldEnv = this.evaluator.env
+            let oldFilePath = this.evaluator.currentFilePath
+
+            // 设置当前环境和文件路径
             this.evaluator.env = env
+            this.evaluator.currentFilePath = Some(filePath)
 
             // 求值
             let result = this.evaluator.eval(expr)
 
-            // 恢复环境
+            // 恢复环境和文件路径
             this.evaluator.env = oldEnv
+            this.evaluator.currentFilePath = oldFilePath
 
             // 检查是否有错误
             match (result) {
