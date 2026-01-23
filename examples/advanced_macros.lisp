@@ -1,5 +1,5 @@
 ;; Xisp 高级宏特性演示
-;; 演示 let*, if-let, when-let* 的使用
+;; 演示 let*, if-let, when-let*, condb 的使用
 
 (println "========================================")
 (println "Xisp 高级宏特性演示")
@@ -154,6 +154,116 @@
 (println "")
 
 ;; ============================================================================
+;; condb - 增强的条件表达式
+;; ============================================================================
+
+(println "========================================")
+(println "【condb - 增强的条件表达式】")
+(println "")
+
+(println "示例 1: 单个绑定")
+(println "代码:")
+(println "  (condb")
+(println "    (:let x 5)")
+(println "    (> x 3) \"large\"")
+(println "    else \"small\")")
+(define result15 (condb (:let x 5) (> x 3) "large" else "small"))
+(println "结果: " result15)
+(println "说明: x=5, 5>3 为真，返回 \"large\"")
+(println "")
+
+(println "示例 2: 多个绑定（后面的绑定可以使用前面的）")
+(println "代码:")
+(println "  (condb")
+(println "    (:let x 5)")
+(println "    (:let y (* x 2))")
+(println "    (> y 8) \"large\"")
+(println "    else \"small\")")
+(define result16 (condb
+  (:let x 5)
+  (:let y (* x 2))
+  (> y 8) "large"
+  else "small"))
+(println "结果: " result16)
+(println "说明: x=5, y=10, 10>8 为真，返回 \"large\"")
+(println "")
+
+(println "示例 3: 多个条件分支")
+(println "代码:")
+(println "  (condb")
+(println "    (:let x 10)")
+(println "    (= x 5) \"five\"")
+(println "    (= x 10) \"ten\"")
+(println "    else \"other\")")
+(define result17 (condb
+  (:let x 10)
+  (= x 5) "five"
+  (= x 10) "ten"
+  else "other"))
+(println "结果: " result17)
+(println "说明: x=10, 匹配第二个条件，返回 \"ten\"")
+(println "")
+
+(println "示例 4: 没有绑定时（退化为普通 cond）")
+(println "代码: (condb (= 1 1) \"true\" else \"false\")")
+(define result18 (condb (= 1 1) "true" else "false"))
+(println "结果: " result18)
+(println "说明: 没有绑定，行为类似普通 cond")
+(println "")
+
+(println "示例 5: 复杂条件计算")
+(println "代码:")
+(println "  (condb")
+(println "    (:let base 100)")
+(println "    (:let rate 0.05)")
+(println "    (:let years 3)")
+(println "    (> years 5) \"long term\"")
+(println "    (= years 3) \"medium term\"")
+(println "    else \"short term\")")
+(define result19 (condb
+  (:let base 100)
+  (:let rate 0.05)
+  (:let years 3)
+  (> years 5) "long term"
+  (= years 3) "medium term"
+  else "short term"))
+(println "结果: " result19)
+(println "说明: years=3，匹配第三个条件")
+(println "")
+
+(println "示例 6: 第一个条件为假")
+(println "代码:")
+(println "  (condb")
+(println "    (:let x 2)")
+(println "    (> x 3) \"large\"")
+(println "    else \"small\")")
+(define result20 (condb
+  (:let x 2)
+  (> x 3) "large"
+  else "small"))
+(println "结果: " result20)
+(println "说明: x=2, 2>3 为假，返回 else 分支 \"small\"")
+(println "")
+
+(println "示例 7: 使用绑定变量的复杂条件")
+(println "代码:")
+(println "  (condb")
+(println "    (:let age 25)")
+(println "    (:let income 50000)")
+(println "    (and (> age 18) (< income 100000)) \"standard\"")
+(println "    (and (> age 18) (>= income 100000)) \"premium\"")
+(println "    else \"restricted\")")
+(define result21 (condb
+  (:let age 25)
+  (:let income 50000)
+  (and (> age 18) (< income 100000)) "standard"
+  (and (> age 18) (>= income 100000)) "premium"
+  else "restricted"))
+(println "结果: " result21)
+(println "说明: age=25, income=50000，匹配第一个条件")
+(println "")
+
+;; ============================================================================
 ;; 综合示例
 ;; ============================================================================
 
@@ -210,6 +320,7 @@
 (println "let*      - 顺序绑定，后面的绑定可以使用前面的变量")
 (println "if-let    - 条件绑定，类似三元运算符")
 (println "when-let* - 条件+顺序绑定，适合链式处理")
+(println "condb     - 增强的条件表达式，支持 :let 变量绑定")
 (println "")
 (println "演示完成！")
 (println "========================================")
