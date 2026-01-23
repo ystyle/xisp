@@ -500,4 +500,218 @@ extend Evaluator {
             case _ => Nil
         }
     }
+
+    /**
+     * 特殊形式：condb (增强的条件表达式，支持变量绑定)
+     * 语法：(condb (:let var value) ... condition result ... else default)
+     */
+    func evalCondb(expr: LispValue): LispValue {
+        match (expr) {
+            case Cons(cell) =>
+                // 第一遍：分离绑定和条件分支
+                // 使用 cons 构建列表（反向）
+                var bindings: LispValue = Nil
+                var clauses: LispValue = Nil
+                var current: LispValue = Cons(cell)
+
+                while (!current.isNil()) {
+                    match (current) {
+                        case Cons(currCell) =>
+                            let clause = currCell.car
+                            match (clause) {
+                                case Cons(clauseCell) =>
+                                    // 检查是否是 :let 绑定
+                                    match (clauseCell.car) {
+                                        case Symbol(":let") =>
+                                            // 这是一个 :let 绑定，提取实际绑定
+                                            // (:let x 5) -> (x 5)
+                                            bindings = consValue(clauseCell.cdr, bindings)
+                                        case _ =>
+                                            // 这是一个条件分支，添加到 clauses（反向）
+                                            clauses = consValue(clause, clauses)
+                                    }
+                                case _ =>
+                                    // 不是列表，当作条件分支
+                                    clauses = consValue(clause, clauses)
+                            }
+                            current = currCell.cdr
+                        case _ => break
+                    }
+                }
+
+                // 反转 bindings 和 clauses
+                let bindingsList = this.reverseList(bindings)
+                let clausesList = this.reverseList(clauses)
+
+                // 在 let* 环境中处理条件分支
+                match (bindingsList) {
+                    case Nil =>
+                        // 没有绑定，直接处理条件
+                        return this.evalCondbClauses(clausesList)
+                    case _ =>
+                        // 有绑定，创建 let* 环境
+                        let letEnv = this.env.createChild()
+                        let oldEnv = this.env
+                        this.env = letEnv
+
+                        // 按顺序绑定变量
+                        var currentBinding: LispValue = bindingsList
+                        while (!currentBinding.isNil()) {
+                            match (currentBinding) {
+                                case Cons(bindCell) =>
+                                    let binding = bindCell.car
+                                    match (binding) {
+                                        case Cons(bindingCell) =>
+                                            let varName = bindingCell.car
+                                            match (varName) {
+                                                case Symbol(name) =>
+                                                    match (bindingCell.cdr) {
+                                                        case Cons(valueCell) =>
+                                                            let value = this.eval(valueCell.car)
+                                                            letEnv.define(name, value)
+                                                        case _ => ()
+                                                    }
+                                                case _ => ()
+                                            }
+                                        case _ => ()
+                                    }
+                                    currentBinding = bindCell.cdr
+                                case _ => break
+                            }
+                        }
+
+                        // 恢复环境
+                        this.env = oldEnv
+
+                        // 在新环境中处理条件分支
+                        let oldEnv2 = this.env
+                        this.env = letEnv
+                        let result = this.evalCondbClauses(clausesList)
+                        this.env = oldEnv2
+
+                        result
+                }
+            case _ => Nil
+        }
+    }
+
+    /**
+     * 处理 condb 的条件分支
+     * clauses 格式：condition result condition2 result2 ... else default
+     * 例如：((= 1 1) "true" else "false") 中的元素
+     */
+    private func evalCondbClauses(clauses: LispValue): LispValue {
+        var current: LispValue = clauses
+
+        while (!current.isNil()) {
+            match (current) {
+                case Cons(currCell) =>
+                    // currCell.car 是当前项
+                    let item = currCell.car
+
+                    match (item) {
+                        case Symbol("else") =>
+                            // else 关键字，返回下一个元素作为结果
+                            match (currCell.cdr) {
+                                case Cons(resultCell) => return this.eval(resultCell.car)
+                                case _ => return Nil
+                            }
+                        case _ =>
+                            // 这是一个条件表达式
+                            let testResult = this.eval(item)
+
+                            if (testResult.isTruthy()) {
+                                // 条件为真，返回下一个元素作为结果
+                                match (currCell.cdr) {
+                                    case Cons(resultCell) => return this.eval(resultCell.car)
+                                    case _ => return testResult
+                                }
+                            }
+                            // 条件为假，跳过下一个元素（结果），继续处理后续条件
+                            current = currCell.cdr
+                            if (!current.isNil()) {
+                                match (current) {
+                                    case Cons(nextCell) => current = nextCell.cdr
+                                    case _ => current = Nil
+                                }
+                            }
+                    }
+                case _ => break
+            }
+        }
+
+        // 没有匹配的分支，返回 nil
+        Nil
+    }
+
+    /**
+     * 反转列表
+     */
+    private func reverseList(lst: LispValue): LispValue {
+        var result: LispValue = Nil
+        var current: LispValue = lst
+
+        while (!current.isNil()) {
+            match (current) {
+                case Cons(cell) =>
+                    result = consValue(cell.car, result)
+                    current = cell.cdr
+                case _ => break
+            }
+        }
+
+        result
+    }
+
+    /**
+     * 从 clauses 列表构造并求值 cond 表达式
+     * clauses 格式：(condition result) (condition2 result2) ...
+     */
+    private func evalCondFromClausesList(clauses: LispValue): LispValue {
+        var current: LispValue = clauses
+
+        while (!current.isNil()) {
+            match (current) {
+                case Cons(currCell) =>
+                    let clause = currCell.car
+                    match (clause) {
+                        case Cons(clauseCell) =>
+                            let condition = clauseCell.car
+                            let rest = clauseCell.cdr
+
+                            // 检查是否是 else 分支
+                            match (condition) {
+                                case Symbol("else") =>
+                                    // else 分支，执行结果表达式
+                                    match (rest) {
+                                        case Cons(restCell) => return this.eval(restCell.car)
+                                        case _ => return Nil
+                                    }
+                                case _ =>
+                                    // 普通条件分支
+                                    let testResult = this.eval(condition)
+                                    if (testResult.isTruthy()) {
+                                        // 条件为真，执行结果表达式
+                                        match (rest) {
+                                            case Cons(restCell) => return this.eval(restCell.car)
+                                            case _ => return testResult
+                                        }
+                                    }
+                                    // 条件为假，继续下一个分支
+                            }
+                        case _ =>
+                            // 单个元素，当作条件测试
+                            let testResult = this.eval(clause)
+                            if (testResult.isTruthy()) {
+                                return testResult
+                            }
+                    }
+                    current = currCell.cdr
+                case _ => break
+            }
+        }
+
+        // 没有匹配的分支，返回 nil
+        Nil
+    }
 }
