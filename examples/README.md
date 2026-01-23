@@ -152,10 +152,10 @@ xisp> ,exit
 
 演示 Lisp 如何调用仓颉标准库函数：
 
-- `cangjie:io:read-file` - 读取文件内容
-- `cangjie:io:write-file` - 写入文件
-- `cangjie:fs:exists?` - 检查文件/目录是否存在
-- `cangjie:fs:list-dir` - 列出目录内容
+- `cangjie::read-file` - 读取文件内容
+- `cangjie::write-file` - 写入文件
+- `cangjie::exists?` - 检查文件/目录是否存在
+- `cangjie::list-dir` - 列出目录内容
 
 **适用场景**: 理解仓颉互操作桥接层
 
@@ -182,13 +182,13 @@ cjpm run --name "ystyle::xisp.examples.extension_demo"
 
 测试真实的文件系统和文件 I/O 操作：
 
-- `cangjie:io:read-file` - 读取文件内容（真实实现）
-- `cangjie:io:write-file` - 写入文件（真实实现）
-- `cangjie:io:append-file` - 追加内容到文件（新增）
-- `cangjie:fs:exists?` - 检查文件/目录是否存在（真实实现）
-- `cangjie:fs:file?` - 判断是否为文件（新增）
-- `cangjie:fs:directory?` - 判断是否为目录（新增）
-- `cangjie:fs:list-dir` - 列出目录内容（真实实现）
+- `cangjie::read-file` - 读取文件内容（真实实现）
+- `cangjie::write-file` - 写入文件（真实实现）
+- `cangjie::append-file` - 追加内容到文件（新增）
+- `cangjie::exists?` - 检查文件/目录是否存在（真实实现）
+- `cangjie::file?` - 判断是否为文件（新增）
+- `cangjie::directory?` - 判断是否为目录（新增）
+- `cangjie::list-dir` - 列出目录内容（真实实现）
 
 **适用场景**: 验证文件 I/O 桥接功能
 

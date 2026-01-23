@@ -113,9 +113,9 @@ public func withKoreanKeywords(): InterpreterOption {
  * 启用 std.io 模块
  *
  * 注册文件读写相关的桥接函数：
- * - cangjie:io:read-file
- * - cangjie:io:write-file
- * - cangjie:io:append-file
+ * - cangjie::io:read-file
+ * - cangjie::io:write-file
+ * - cangjie::io:append-file
  */
 public func withStdIO(): InterpreterOption {
     { interpreter => interpreter.registerStdIO() }
@@ -125,10 +125,10 @@ public func withStdIO(): InterpreterOption {
  * 启用 std.fs 模块
  *
  * 注册文件系统相关的桥接函数：
- * - cangjie:fs:exists?
- * - cangjie:fs:file?
- * - cangjie:fs:directory?
- * - cangjie:fs:list-dir
+ * - cangjie::fs:exists?
+ * - cangjie::fs:file?
+ * - cangjie::fs:directory?
+ * - cangjie::fs:list-dir
  */
 public func withStdFS(): InterpreterOption {
     { interpreter => interpreter.registerStdFS() }

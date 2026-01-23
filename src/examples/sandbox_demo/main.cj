@@ -48,7 +48,7 @@ main() {
         withQuietMode()
     ])
 
-    let code3 = "(cangjie:io:write-file \"/tmp/test.txt\" \"hello\")"
+    let code3 = "(cangjie::io:write-file \"/tmp/test.txt\" \"hello\")"
     println("代码: ${code3}")
     let result3 = test3.eval(code3)
     println("结果: ${result3}")
@@ -64,12 +64,12 @@ main() {
     ])
 
     println("允许写入 /tmp/safe.txt:")
-    let code4a = "(cangjie:io:write-file \"/tmp/safe.txt\" \"safe content\")"
+    let code4a = "(cangjie::io:write-file \"/tmp/safe.txt\" \"safe content\")"
     let result4a = test4.eval(code4a)
     println("结果: ${result4a}")
 
     println("禁止写入 /etc/passwd:")
-    let code4b = "(cangjie:io:write-file \"/etc/passwd\" \"hack\")"
+    let code4b = "(cangjie::io:write-file \"/etc/passwd\" \"hack\")"
     let result4b = test4.eval(code4b)
     println("结果: ${result4b}")
     println("说明: 只有白名单中的路径可以访问")
@@ -84,7 +84,7 @@ main() {
     ])
 
     println("尝试执行危险操作:")
-    let code5 = "(cangjie:io:write-file \"/etc/passwd\" \"hack\")"
+    let code5 = "(cangjie::io:write-file \"/etc/passwd\" \"hack\")"
     let result5 = test5.eval(code5)
     println("结果: ${result5}")
     println("说明: 严格沙箱模式自动禁止文件写入和危险函数")

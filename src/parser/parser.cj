@@ -95,7 +95,7 @@ public class Parser {
     /**
      * 解析字符串或插值字符串
      * 如果是普通字符串，返回 Str
-     * 如果是插值字符串（以 ::INTERPOLATE:: 开头），转换为 (cangjie:interpolate ...)
+     * 如果是插值字符串（以 ::INTERPOLATE:: 开头），转换为 (cangjie::interpolate ...)
      */
     private func parseStringOrInterpolation(s: String): LispValue {
         if (s.startsWith("::INTERPOLATE::")) {
@@ -107,8 +107,8 @@ public class Parser {
             let content = String(contentRunes)
             let parts = content.split("::")
 
-            // 创建 (cangjie:interpolate ...)
-            let result = consValue(Symbol("cangjie:interpolate"), Nil)
+            // 创建 (cangjie::interpolate ...)
+            let result = consValue(Symbol("cangjie::interpolate"), Nil)
             var current = result
 
             for (part in parts) {
@@ -246,7 +246,7 @@ public class Parser {
 
     /**
      * 解析向量
-     * [1 2 3] → (cangjie:vector 1 2 3)
+     * [1 2 3] → (cangjie::vector 1 2 3)
      */
     private func parseVector(): LispValue {
         this.advance()  // 消费 VectorStart [
@@ -261,8 +261,8 @@ public class Parser {
             this.advance()  // 消费 VectorEnd ]
         }
 
-        // 创建 (cangjie:vector elem1 elem2 ...)
-        let result = consValue(Symbol("cangjie:vector"), Nil)
+        // 创建 (cangjie::vector elem1 elem2 ...)
+        let result = consValue(Symbol("cangjie::vector"), Nil)
         var current = result
         for (elem in elements) {
             let newCell = Cons(ConsCell(elem, Nil))
@@ -278,7 +278,7 @@ public class Parser {
 
     /**
      * 解析哈希映射
-     * {:a 1 :b 2} → (cangjie:hashmap (quote :a) 1 (quote :b) 2)
+     * {:a 1 :b 2} → (cangjie::hashmap (quote :a) 1 (quote :b) 2)
      *
      * 注意：键（特别是符号）需要被 quote，防止被求值为 nil
      */
@@ -305,8 +305,8 @@ public class Parser {
             this.advance()  // 消费 HashMapEnd }
         }
 
-        // 创建 (cangjie:hashmap (quote key1) val1 (quote key2) val2 ...)
-        let result = consValue(Symbol("cangjie:hashmap"), Nil)
+        // 创建 (cangjie::hashmap (quote key1) val1 (quote key2) val2 ...)
+        let result = consValue(Symbol("cangjie::hashmap"), Nil)
         var current = result
         for (pair in pairs) {
             let newCell = Cons(ConsCell(pair, Nil))
@@ -322,8 +322,8 @@ public class Parser {
 
     /**
      * 解析哈希集合
-     * #{1 2 3} → (cangjie:hashset 1 2 3)
-     * #{:red :green} → (cangjie:hashset (quote :red) (quote :green))
+     * #{1 2 3} → (cangjie::hashset 1 2 3)
+     * #{:red :green} → (cangjie::hashset (quote :red) (quote :green))
      *
      * 注意：符号元素需要被 quote，防止被求值为 nil
      */
@@ -346,8 +346,8 @@ public class Parser {
             this.advance()  // 消费 HashMapEnd }
         }
 
-        // 创建 (cangjie:hashset elem1 elem2 ...)
-        let result = consValue(Symbol("cangjie:hashset"), Nil)
+        // 创建 (cangjie::hashset elem1 elem2 ...)
+        let result = consValue(Symbol("cangjie::hashset"), Nil)
         var current = result
         for (elem in elements) {
             let newCell = Cons(ConsCell(elem, Nil))

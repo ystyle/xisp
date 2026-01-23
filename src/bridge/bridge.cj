@@ -25,7 +25,12 @@ public class Bridge {
      * 注册仓颉函数（带命名空间前缀）
      */
     public static func registerFuncWithNS(env: Environment, ns: String, name: String, handler: (ArrayList<LispValue>) -> LispValue) {
-        let fullName = "${ns}:${name}"
+        // 验证命名空间不能包含 ::
+        if (ns.contains("::")) {
+            eprintln("错误：命名空间 '${ns}' 不能包含 '::'，命名空间本身应该是一个简单的标识符")
+            return ()
+        }
+        let fullName = "${ns}::${name}"
         registerFunc(env, fullName, handler)
     }
 
@@ -44,7 +49,7 @@ public class Bridge {
      */
     public static func registerStdIO(env: Environment, pathChecker: ?((String, Bool) -> Bool)) {
         // 文件读取
-        registerFuncWithNS(env, "cangjie:io", "read-file", { args =>
+        registerFuncWithNS(env, "cangjie", "read-file", { args =>
             // 沙箱检查
             match (pathChecker) {
                 case Some(checker) =>
@@ -72,7 +77,7 @@ public class Bridge {
         })
 
         // 文件写入
-        registerFuncWithNS(env, "cangjie:io", "write-file", { args =>
+        registerFuncWithNS(env, "cangjie", "write-file", { args =>
             // 沙箱检查
             match (pathChecker) {
                 case Some(checker) =>
@@ -106,7 +111,7 @@ public class Bridge {
         })
 
         // 文件追加
-        registerFuncWithNS(env, "cangjie:io", "append-file", { args =>
+        registerFuncWithNS(env, "cangjie", "append-file", { args =>
             // 沙箱检查（append 也算写入）
             match (pathChecker) {
                 case Some(checker) =>
@@ -138,7 +143,7 @@ public class Bridge {
      */
     public static func registerStdFS(env: Environment) {
         // 检查文件或目录是否存在
-        registerFuncWithNS(env, "cangjie:fs", "exists?", { args =>
+        registerFuncWithNS(env, "cangjie", "exists?", { args =>
             if (args.size > 0 && let Str(path) <- args[0]) {
                 try {
                     Boolean(exists(path))
@@ -151,7 +156,7 @@ public class Bridge {
         })
 
         // 列出目录内容
-        registerFuncWithNS(env, "cangjie:fs", "list-dir", { args =>
+        registerFuncWithNS(env, "cangjie", "list-dir", { args =>
             if (args.size > 0 && let Str(path) <- args[0]) {
                 try {
                     let files = Directory.readFrom(path)
@@ -173,7 +178,7 @@ public class Bridge {
         })
 
         // 判断是否为目录
-        registerFuncWithNS(env, "cangjie:fs", "directory?", { args =>
+        registerFuncWithNS(env, "cangjie", "directory?", { args =>
             if (args.size > 0 && let Str(path) <- args[0]) {
                 try {
                     let fileInfo = FileInfo(path)
@@ -187,7 +192,7 @@ public class Bridge {
         })
 
         // 判断是否为文件
-        registerFuncWithNS(env, "cangjie:fs", "file?", { args =>
+        registerFuncWithNS(env, "cangjie", "file?", { args =>
             if (args.size > 0 && let Str(path) <- args[0]) {
                 try {
                     let fileInfo = FileInfo(path)
