@@ -14,6 +14,11 @@ extend BuiltinFunctions {
         let cdrFunc = env.lookup("cdr")
         env.define("rest", cdrFunc)
 
+        // (setq var value) - set! 的 Common Lisp 别名
+        // 注意：set! 是特殊形式，不能直接作为值引用
+        // 我们使用 keyword alias 机制
+        env.registerKeywordAlias("setq", "set!")
+
         // (second lst) - 获取第二个元素 (cadr 的现代别名)
         env.define("second", NativeFunc({ args =>
             if (args.size != 1) {

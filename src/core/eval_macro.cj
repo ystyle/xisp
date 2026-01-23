@@ -109,7 +109,22 @@ extend Evaluator {
 
             let oldEnv = this.env
             this.env = newEnv
-            let result = this.eval(body)
+
+            // body 是一个 cons cell (类似 begin 块)，需要按顺序求值
+            // 检查是否是单个表达式 (cdr 是 nil)
+            let result = if (let Cons(bodyCell) <- body) {
+                if (bodyCell.cdr.isNil()) {
+                    // 单个表达式，直接求值 car
+                    this.eval(bodyCell.car)
+                } else {
+                    // 多个表达式，按顺序求值（类似 begin）
+                    this.evalBegin(body)
+                }
+            } else {
+                // body 不是 cons，直接求值
+                this.eval(body)
+            }
+
             this.env = oldEnv
             result
         } else {
