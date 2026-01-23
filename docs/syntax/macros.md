@@ -262,36 +262,105 @@ Xisp 提供了多个常用内置宏，它们在启动时自动注册到环境中
 (negate -3)    ; => 3
 ```
 
----
-
-## 高级宏示例
-
 ### let* - 顺序绑定
 
 ```lisp
-(defmacro let* (bindings body)
-  (if (null? bindings)
-      body
-    `(let ((,(caar bindings) ,(cadar bindings)))
-       (let* ,(cdr bindings) ,body))))
-
-; 使用 - 后面的绑定可以使用前面的变量
-(let* ((a 1)
-       (b (+ a 10)))
-  (+ a b))
-; => 12
+(let* ((变量1 值1) (变量2 值2) ...) 表达式)
 ```
 
-**注意**：Xisp 当前版本不支持 `&` rest 参数语法，如需处理多个表达式，请使用 `begin` 包裹：
+顺序绑定变量，后面的绑定可以使用前面的变量。与 `let` 不同，`let*` 按顺序创建作用域。
 
 ```lisp
+; 后面的绑定可以使用前面的变量
 (let* ((a 1)
-       (b (+ a 10)))
+       (b (+ a 10))
+       (c (* b 2)))
+  c)
+; => 22 (a=1, b=11, c=22)
+
+; 没有绑定时直接执行 body
+(let* ()
+  (+ 1 2))
+; => 3
+
+; 单个绑定（退化为普通 let）
+(let* ((x 5))
+  (* x x))
+; => 25
+```
+
+**提示**：如需执行多个表达式，请使用 `begin` 包裹：
+```lisp
+(let* ((a 1) (b 2))
   (begin
     (println a)
     (println b)
     (+ a b)))
 ```
+
+### if-let - 条件绑定
+
+```lisp
+(if-let (变量 值) then表达式 else表达式)
+```
+
+如果绑定成功且值为真，执行 then 分支；否则执行 else 分支。
+
+```lisp
+; 条件为真时执行 then
+(if-let (x 5) x nil)
+; => 5
+
+; 条件为假时执行 else
+(if-let (x 0) x 100)
+; => 100
+
+; 可以使用表达式
+(if-let (x (+ 2 3)) (* x x) nil)
+; => 25
+```
+
+### when-let* - 条件+顺序绑定
+
+```lisp
+(when-let* ((变量1 值1) (变量2 值2) ...) 表达式)
+```
+
+按顺序绑定变量，如果最后一个绑定值为真，执行表达式；否则返回 `nil`。
+
+```lisp
+; 最后一个值为真时执行
+(when-let* ((x 5) (y (* x 2))) (+ x y))
+; => 15 (x=5, y=10, y 为真)
+
+; 最后一个值为假时返回 nil
+(when-let* ((x 5) (y 0)) (+ x y))
+; => nil
+
+; 多个绑定
+(when-let* ((a 10)
+            (b (* a 2))
+            (c (+ b 5)))
+  c)
+; => 25
+
+; 没有绑定时返回 nil
+(when-let* () 42)
+; => nil
+```
+
+**提示**：`when-let*` 结合了 `let*` 的顺序绑定和条件判断，适合需要链式处理并判断的场景：
+```lisp
+; 链式处理，每一步都依赖上一步
+(when-let* ((data (get-data))
+            (parsed (parse data))
+            (result (process parsed)))
+  (handle result))
+```
+
+---
+
+## 高级宏示例
 
 ### cond - 多分支条件（演示用）
 
@@ -452,10 +521,15 @@ Reader（词法分析器）将特殊语法转换为 S-表达式：
   - `examples/macro_simple.lisp` - 简单宏演示
   - `examples/macros.lisp` - 完整宏系统演示
   - `examples/macro_test.lisp` - 宏功能测试
+  - `examples/advanced_macros.lisp` - 高级宏特性演示（let*, if-let, when-let*）
 - **实现代码**：
   - `src/core/evaluator.cj` - 宏展开逻辑
+  - `src/core/eval_special_forms.cj` - 特殊形式求值（包含 let*, if-let, when-let*）
   - `src/core/builtin_macros.cj` - 内置宏定义
   - `src/parser/lexer.cj` - 反引号词法分析
   - `src/parser/parser.cj` - 反引号语法解析
 - **设计文档**：`docs/design.md`
 - **核心功能**：`docs/core.md`
+- **测试代码**：
+  - `src/evaluator_test.cj` - 包含 AdvancedMacroTest 和 MacroTest
+  - `src/letstar_test.cj` - let* 和 when-let* 的详细测试
