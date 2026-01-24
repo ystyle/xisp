@@ -5,5 +5,6 @@
 
 (define greet
   (lambda (name)
-    "Greet someone"
-    (println "Hello from pkg1, " name "!")))
+    (begin
+      (println "Hello from pkg1, " name "!")
+      "Greeting done")))

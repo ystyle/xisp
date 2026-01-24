@@ -22,7 +22,7 @@ public class Evaluator {
     // 模块系统相关字段（延迟初始化以避免循环依赖）
     public var moduleRegistry: Option<ModuleRegistry> = None
     public var moduleLoader: Option<ModuleLoader> = None
-    public var packageParser: Option<PackageParser> = None
+    public var moduleParser: Option<ModuleParser> = None
     public var currentModule: Option<Module> = None  // 当前正在求值的模块
 
     public init(env: Environment) {
@@ -38,11 +38,12 @@ public class Evaluator {
             let registry = ModuleRegistry()
 
             // 添加默认搜索路径
-            registry.addSearchPath("./examples")  // 添加 examples 目录用于测试和示例
+            registry.addSearchPath("./lisp-tests")  // 添加 lisp-tests 目录用于单元测试
+            registry.addSearchPath("./examples")    // 添加 examples 目录用于示例
 
             this.moduleRegistry = Some(registry)
             this.moduleLoader = Some(ModuleLoader(this))
-            this.packageParser = Some(PackageParser(this))
+            this.moduleParser = Some(ModuleParser(this))
         }
     }
 

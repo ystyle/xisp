@@ -4,6 +4,7 @@ import ystyle::xisp.types.*
 import std.collection.ArrayList
 import std.collection.HashMap
 import std.fs.*
+import std.env.*
 
 /**
  * 模块系统核心
@@ -13,11 +14,11 @@ import std.fs.*
 
 /**
  * 依赖项
- * 表示一个包对另一个包的依赖关系
+ * 表示一个模块对另一个模块的依赖关系
  */
 public class Dependency {
     /**
-     * 包名（完整命名空间，如：ystyle.log.zlog）
+     * 模块名（完整命名空间，如：ystyle::log）
      */
     public let packageName: String
 
@@ -33,12 +34,12 @@ public class Dependency {
 }
 
 /**
- * 包元数据
- * 从 package.lisp 文件解析而来
+ * 模块元数据
+ * 从 module.lisp 文件解析而来
  */
 public class PackageInfo {
     /**
-     * 完整包名（包含组织名，如：ystyle.log.zlog）
+     * 完整模块名（包含组织名，如：ystyle::log）
      */
     public let name: String
 
@@ -48,7 +49,7 @@ public class PackageInfo {
     public let org: String
 
     /**
-     * 包名（不含组织名，如：log.zlog）
+     * 模块名（不含组织名，如：log）
      */
     public let packageName: String
 
@@ -88,7 +89,7 @@ public class PackageInfo {
     public var exports: ArrayList<String>
 
     /**
-     * 包目录路径
+     * 模块目录路径
      */
     public var directory: String
 
@@ -110,16 +111,12 @@ public class PackageInfo {
     }
 
     /**
-     * 获取包的简短名称（路径的最后一个组件）
-     * 例如：log.zlog -> zlog, io -> io
+     * 获取模块的简短名称（路径的最后一个组件）
+     * 例如：log -> log, zlog -> zlog
      */
     public func getShortName(): String {
-        let parts = this.packageName.split('.')
-        if (parts.size > 0) {
-            parts[parts.size - 1]
-        } else {
-            this.packageName
-        }
+        // 返回包名的最后一部分（去掉点号前缀）
+        ModuleNamespace.extractPackageSimpleName(this.packageName)
     }
 }
 
@@ -214,7 +211,7 @@ public class Module {
 public class ModuleRegistry {
     /**
      * 已加载的模块表
-     * key: 完整模块名（如："ystyle::log.zlog"）
+     * key: 完整模块名（如："ystyle::log"）
      * value: Module 实例
      */
     private var modules: HashMap<String, Module>
@@ -225,7 +222,7 @@ public class ModuleRegistry {
     private var searchPaths: ArrayList<String>
 
     /**
-     * 当前项目的 package.lisp 路径（如果有）
+     * 当前项目的 module.lisp 路径（如果有）
      * 用于解析项目中的依赖版本
      */
     private var projectPackagePath: Option<String>
@@ -251,14 +248,38 @@ public class ModuleRegistry {
      * 添加默认搜索路径
      */
     private func addDefaultSearchPaths() {
-        // 添加全局模块目录
-        // TODO: 获取用户主目录需要环境变量支持
-        let globalModulesPath = Path("./.xisp/modules").toString()
+        // 添加用户主目录下的全局模块目录
+        let homeDir = getHomeDirectory()
+        let globalModulesPath = homeDir.join(".xisp/modules").toString()
         this.searchPaths.add(globalModulesPath)
 
         // 添加当前工作目录
-        let currentDir = "."
-        this.searchPaths.add(currentDir)
+        this.searchPaths.add(".")
+
+        // 从环境变量读取额外的搜索路径
+        // XISP_PATH 环境变量，使用 : 分隔多个路径
+        match (getVariable("XISP_PATH")) {
+            case Some(pathEnv) =>
+                // 使用 : 分隔路径
+                let paths = pathEnv.split(":")
+                for (path in paths) {
+                    // 去除路径两端的空白字符
+                    let trimmedPath = path.trimAscii()
+
+                    // 规范化路径：去除 ./ 前缀
+                    let normalizedPath = if (trimmedPath.startsWith("./")) {
+                        trimmedPath[2..trimmedPath.size]
+                    } else {
+                        trimmedPath
+                    }
+
+                    // 过滤掉空路径和以 . 开头的路径（隐藏目录/文件）
+                    if (!normalizedPath.isEmpty() && !normalizedPath.startsWith(".")) {
+                        this.searchPaths.add(normalizedPath)
+                    }
+                }
+            case None => ()
+        }
     }
 
     /**
@@ -271,7 +292,7 @@ public class ModuleRegistry {
     }
 
     /**
-     * 设置项目 package.lisp 路径
+     * 设置项目 module.lisp 路径
      * 用于解析项目依赖的版本
      */
     public func setProjectPackagePath(path: String) {
@@ -326,12 +347,12 @@ public class ModuleRegistry {
 
     /**
      * 解析模块名到目录路径
-     * 模块名格式：org::package.subpackage
-     * 路径格式：searchPath/org/packageDir/
-     * 注意：packageDir 是包名去掉最后一级（log.zlog → log）
+     * 模块名格式：org::module 或 org::module.subpkg
+     * 路径格式：searchPath/org/moduleDir/
+     * 注意：moduleDir 是模块名去掉最后一级（log.zlog → log）
      *
-     * @param moduleName 模块名（如："ystyle::log.zlog"）
-     * @return 找到的包目录路径，如果找不到返回 None
+     * @param moduleName 模块名（如："ystyle::log" 或 "ystyle::log.zlog"）
+     * @return 找到的模块目录路径，如果找不到返回 None
      */
     public func resolveModulePath(moduleName: String): Option<String> {
         let (org, packageName) = this.parseModuleName(moduleName)
@@ -339,7 +360,15 @@ public class ModuleRegistry {
 
         // 在所有搜索路径中查找
         for (searchPath in this.searchPaths) {
-            let packagePath = Path(searchPath).join(org).join(packageDir).toString()
+            // 根据是否有 org 构建路径
+            let packagePath = if (org.isEmpty()) {
+                // 没有 org（标准库）：searchPath/packageDir
+                Path(searchPath).join(packageDir).toString()
+            } else {
+                // 有 org：searchPath/org/packageDir
+                Path(searchPath).join(org).join(packageDir).toString()
+            }
+
             if (this.isPackageDirectory(packagePath)) {
                 return Some(packagePath)
             }
@@ -410,16 +439,16 @@ public class ModuleRegistry {
     }
 
     /**
-     * 检查路径是否是一个有效的包目录
-     * 有效包目录必须包含 package.lisp 文件
+     * 检查路径是否是一个有效的模块目录
+     * 有效模块目录必须包含 module.lisp 文件
      */
     private func isPackageDirectory(path: String): Bool {
-        let packageFile = Path(path).join("package.lisp").toString()
+        let packageFile = Path(path).join("module.lisp").toString()
         exists(packageFile)
     }
 
     /**
-     * 列出指定目录下的所有包
+     * 列出指定目录下的所有模块
      */
     public func listPackagesInDirectory(directory: String): ArrayList<String> {
         let packages = ArrayList<String>()
@@ -466,8 +495,8 @@ public class ModuleNamespace {
     /**
      * 构造完整模块名
      * @param org 组织名（可为空）
-     * @param packageName 包名
-     * @return 完整模块名（如："ystyle::log.zlog" 或 "io"）
+     * @param packageName 模块名或包路径
+     * @return 完整模块名（如："ystyle::log" 或 "ystyle::log.zlog" 或 "io"）
      */
     public static func buildModuleName(org: String, packageName: String): String {
         if (org.isEmpty()) {
@@ -478,8 +507,8 @@ public class ModuleNamespace {
     }
 
     /**
-     * 从模块名提取包名（最后一个组件）
-     * 例如：log.zlog -> zlog, io -> io
+     * 从模块名提取简单名称（最后一个组件）
+     * 例如：log.zlog -> zlog, io -> io, log -> log
      */
     public static func extractPackageSimpleName(packageName: String): String {
         let parts = packageName.split('.')
@@ -493,10 +522,9 @@ public class ModuleNamespace {
     /**
      * 验证模块名格式
      * 有效格式：
-     * - io
-     * - std.io
-     * - org::package
-     * - org::package.subpackage
+     * - io（标准库模块）
+     * - org::module（第三方模块）
+     * - org::module.subpkg（模块内的包）
      */
     public static func isValidModuleName(moduleName: String): Bool {
         if (moduleName.isEmpty()) {
@@ -524,7 +552,7 @@ public class ModuleNamespace {
     }
 
     /**
-     * 验证包名格式
+     * 验证模块名/包名格式
      * 允许字母、数字、下划线、点号
      */
     private static func isValidPackageName(packageName: String): Bool {
@@ -547,6 +575,7 @@ public class ModuleNamespace {
     /**
      * 规范化模块路径
      * 将 ./ 或 ../ 转换为绝对路径
+     * 用于相对路径导入
      */
     public static func normalizeModulePath(relativePath: String, basePath: String): String {
         if (relativePath.startsWith("./") || relativePath.startsWith("../")) {

@@ -125,8 +125,8 @@ extend Evaluator {
                     return this.evalImport(rest)
                 } else if (actualSym == "export") {
                     return this.evalExport(rest)
-                } else if (actualSym == "package") {
-                    return this.evalPackage(rest)
+                } else if (actualSym == "module") {
+                    return this.evalModule(rest)
                 } else {
                     let actualFirst = if (sym != actualSym) {
                         LispValue.Symbol(actualSym)

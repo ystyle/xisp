@@ -84,8 +84,8 @@ public class ModuleLoader {
                     return true
                 }
 
-                // 只处理 .lisp 文件
-                if (fileName.endsWith(".lisp")) {
+                // 只处理 .lisp 文件，但排除 module.lisp（它只用于元数据）
+                if (fileName.endsWith(".lisp") && fileName != "module.lisp") {
                     // 使用 Path 获取相对路径
                     let filePath = fileInfo.path
                     // 检查是否是当前目录下的文件
@@ -290,10 +290,10 @@ public class ModulePathUtils {
     /**
      * 解析模块路径
      * 从模块名生成文件系统路径
-     * 注意：目录名是包名去掉最后一级（log.zlog → log）
+     * 注意：目录名是模块名去掉最后一级（log.zlog → log）
      */
     public static func moduleToPath(moduleName: String, searchPath: String): String {
-        // 解析模块名：org::package.subpkg
+        // 解析模块名：org::module.subpkg
         let parts = moduleName.split("::")
         let (org, packageName) = if (parts.size == 2) {
             // 有组织前缀：ystyle::log.zlog
@@ -306,7 +306,7 @@ public class ModulePathUtils {
             ("", moduleName)
         }
 
-        // 提取目录名（去掉包名的最后一级）
+        // 提取目录名（去掉模块名的最后一级）
         let packageDir = extractPackageDir(packageName)
 
         if (org.isEmpty()) {
@@ -319,15 +319,15 @@ public class ModulePathUtils {
     }
 
     /**
-     * 从包名提取目录名
-     * 规则：去掉包名的最后一级
+     * 从模块名提取目录名
+     * 规则：去掉模块名的最后一级
      * 例如：
      * - io → io
      * - log.zlog → log
      * - io.file → io
      * - utils.string.parser → utils.string
      *
-     * @param packageName 包名（如："log.zlog"）
+     * @param packageName 模块名（如："log.zlog"）
      * @return 目录名（如："log"）
      */
     public static func extractPackageDir(packageName: String): String {
@@ -367,8 +367,8 @@ public class ModulePathUtils {
                 let fileInfo = FileInfo(pathObj)
 
                 if (fileInfo.isDirectory()) {
-                    // 检查是否有 package.lisp
-                    let packageFile = Path(modulePath).join("package.lisp").toString()
+                    // 检查是否有 module.lisp
+                    let packageFile = Path(modulePath).join("module.lisp").toString()
                     if (exists(packageFile)) {
                         return Some(modulePath)
                     }

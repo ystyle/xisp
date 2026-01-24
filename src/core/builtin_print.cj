@@ -32,11 +32,13 @@ extend BuiltinFunctions {
 
         // (println x1 x2 ...) - 打印值并换行（参数间用空格分隔）
         env.define("println", NativeFunc({ args =>
-            for (i in 0..args.size) {
+            var i = 0
+            while (i < args.size) {
                 if (i > 0) {
                     print(" ")
                 }
                 print(args[i].toString())
+                i = i + 1
             }
             println("")
             Nil

@@ -390,3 +390,43 @@ public func withNoModuleLoad(): InterpreterOption {
 public func withAllowedModulePaths(paths: Array<String>): InterpreterOption {
     { interpreter => interpreter.setAllowedPaths(paths) }
 }
+
+/**
+ * 添加模块搜索路径
+ * @param path 要添加的模块搜索路径
+ *
+ * 向模块搜索路径中添加一个目录，用于查找模块。
+ * 可以多次调用此选项来添加多个搜索路径。
+ *
+ * 示例：
+ * ```cangjie
+ * let interpreter = LispInterpreter([
+ *     withModulePath("./lib/modules"),
+ *     withModulePath("/usr/share/xisp/modules")
+ * ])
+ * ```
+ */
+public func withModulePath(path: String): InterpreterOption {
+    { interpreter => interpreter.addModuleSearchPath(path) }
+}
+
+/**
+ * 添加多个模块搜索路径
+ * @param paths 要添加的模块搜索路径数组
+ *
+ * 向模块搜索路径中添加多个目录。
+ *
+ * 示例：
+ * ```cangjie
+ * let interpreter = LispInterpreter([
+ *     withModulePaths(["./lib/modules", "/usr/share/xisp/modules"])
+ * ])
+ * ```
+ */
+public func withModulePaths(paths: Array<String>): InterpreterOption {
+    { interpreter =>
+        for (path in paths) {
+            interpreter.addModuleSearchPath(path)
+        }
+    }
+}

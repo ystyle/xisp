@@ -367,6 +367,20 @@ public class LispInterpreter {
     }
 
     /**
+     * 添加模块搜索路径
+     */
+    public func addModuleSearchPath(path: String) {
+        match (this.evaluator.moduleRegistry) {
+            case Some(registry) =>
+                registry.addSearchPath(path)
+                if (this.verbose) {
+                    this.outputFn("添加模块搜索路径: ${path}")
+                }
+            case None => ()
+        }
+    }
+
+    /**
      * 获取最大栈深度
      */
     public func getMaxStackDepth(): Int64 {

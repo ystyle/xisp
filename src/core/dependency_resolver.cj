@@ -12,11 +12,11 @@ import std.fs.*
  */
 public class DependencyResolver {
     private var moduleRegistry: ModuleRegistry
-    private var packageParser: PackageParser
+    private var moduleParser: ModuleParser
 
     /**
      * 版本缓存
-     * key: 包名（如：ystyle.log.zlog）
+     * key: 模块名（如：ystyle::log）
      * value: 可用版本列表
      */
     private var versionCache: HashMap<String, ArrayList<String>>
@@ -28,17 +28,17 @@ public class DependencyResolver {
      */
     private var dependencyCache: HashMap<String, HashMap<String, String>>
 
-    public init(moduleRegistry: ModuleRegistry, packageParser: PackageParser) {
+    public init(moduleRegistry: ModuleRegistry, moduleParser: ModuleParser) {
         this.moduleRegistry = moduleRegistry
-        this.packageParser = packageParser
+        this.moduleParser = moduleParser
         this.versionCache = HashMap<String, ArrayList<String>>()
         this.dependencyCache = HashMap<String, HashMap<String, String>>()
     }
 
     /**
      * 解析模块导入，确定使用的版本
-     * @param moduleName 模块名（如："ystyle::log.zlog"）
-     * @param projectPath 项目根路径（用于查找 package.lisp）
+     * @param moduleName 模块名（如："ystyle::log"）
+     * @param projectPath 项目根路径（用于查找 module.lisp）
      * @return (完整模块名, 版本) 或 None
      */
     public func resolveImport(moduleName: String, projectPath: Option<String>): Option<(String, String)> {
@@ -76,7 +76,7 @@ public class DependencyResolver {
                     }
                 }
 
-                // 解析项目的 package.lisp
+                // 解析项目的 module.lisp
                 match (this.parseProjectDependencies(path)) {
                     case Some(deps) =>
                         this.dependencyCache[path] = deps
@@ -98,11 +98,11 @@ public class DependencyResolver {
     }
 
     /**
-     * 解析版本要求，找到合适的包
-     * @param packageName 包名（如：log.zlog）
+     * 解析版本要求，找到合适的模块
+     * @param packageName 模块名（如：log 或 log.zlog）
      * @param versionRequirement 版本要求（如："0.2.0"、"latest"）
      * @param org 组织名（可选）
-     * @return (组织名, 包名, 版本) 或 None
+     * @return (组织名, 模块名, 版本) 或 None
      */
     private func resolveVersion(packageName: String, versionRequirement: String, org: String): Option<(String, String, String)> {
         // 如果指定了组织，直接在该组织下查找
@@ -113,7 +113,7 @@ public class DependencyResolver {
             }
         }
 
-        // 遍历所有搜索路径，查找包
+        // 遍历所有搜索路径，查找模块
         for (searchPath in this.moduleRegistry.getSearchPaths()) {
             // 列出搜索路径下的所有组织目录
             let orgs = this.listOrganizations(searchPath)
@@ -130,7 +130,7 @@ public class DependencyResolver {
     }
 
     /**
-     * 在指定组织下查找包
+     * 在指定组织下查找模块
      */
     private func findPackageInOrg(packageName: String, versionRequirement: String, org: String): Option<String> {
         let basePath = Path(ModuleRegistry.GLOBAL_MODULES_DIR).join(org).toString()
@@ -165,19 +165,19 @@ public class DependencyResolver {
     }
 
     /**
-     * 解析项目的 package.lisp，提取依赖信息
+     * 解析项目的 module.lisp，提取依赖信息
      */
     private func parseProjectDependencies(projectPath: String): Option<HashMap<String, String>> {
-        let packageFile = Path(projectPath).join("package.lisp").toString()
+        let moduleFile = Path(projectPath).join("module.lisp").toString()
 
-        if (!exists(packageFile)) {
+        if (!exists(moduleFile)) {
             return None
         }
 
-        // 使用 PackageParser 解析
-        match (this.packageParser.parse(projectPath)) {
+        // 使用 ModuleParser 解析
+        match (this.moduleParser.parse(projectPath)) {
             case Some(packageInfo) =>
-                // 构建 HashMap<包名, 版本要求>
+                // 构建 HashMap<模块名, 版本要求>
                 let deps = HashMap<String, String>()
                 for (dependency in packageInfo.dependencies) {
                     deps[dependency.packageName] = dependency.versionRequirement
@@ -222,8 +222,8 @@ public class DependencyResolver {
 
     /**
      * 解析并加载模块的所有依赖（递归）
-     * @param packageInfo 包信息
-     * @param loaded 已加载的包（防止循环依赖）
+     * @param packageInfo 模块信息
+     * @param loaded 已加载的模块（防止循环依赖）
      * @return 加载的模块列表
      */
     public func loadDependencies(packageInfo: PackageInfo, loaded: HashMap<String, Bool>): ArrayList<Module> {
@@ -272,7 +272,7 @@ public class DependencyResolver {
     }
 
     /**
-     * 获取包的所有可用版本
+     * 获取模块的所有可用版本
      */
     public func getAvailableVersions(packageName: String, org: String): ArrayList<String> {
         let cacheKey = "${org}::${packageName}"
@@ -286,7 +286,7 @@ public class DependencyResolver {
 
         let versions = ArrayList<String>()
 
-        // 扫描目录，查找所有版本化的包目录
+        // 扫描目录，查找所有版本化的模块目录
         for (searchPath in this.moduleRegistry.getSearchPaths()) {
             let orgPath = Path(searchPath).join(org).toString()
 
@@ -295,7 +295,7 @@ public class DependencyResolver {
             }
 
             try {
-                // 列出组织目录下的所有包目录
+                // 列出组织目录下的所有模块目录
                 let fileInfos = Directory.readFrom(orgPath)
 
                 for (fileInfo in fileInfos) {
@@ -305,14 +305,14 @@ public class DependencyResolver {
                         continue
                     }
 
-                    // 检查是否是版本化目录（格式：packageName@version）
+                    // 检查是否是版本化目录（格式：moduleName@version）
                     if (dirName.contains("@")) {
                         let parts = dirName.split('@')
                         if (parts.size == 2) {
                             let baseName = parts[0]
                             let version = parts[1]
 
-                            // 匹配目标包名
+                            // 匹配目标模块名
                             if (baseName == packageName) {
                                 versions.add(version)
                             }

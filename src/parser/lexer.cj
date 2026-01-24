@@ -144,7 +144,7 @@ public class Lexer {
         r == r'_' || r == r'+' || r == r'-' || r == r'*' || r == r'/' ||
         r == r'<' || r == r'>' || r == r'=' || r == r'!' || r == r'?' ||
         r == r'%' || r == r'$' || r == r'#' || r == r'@' || r == r':' ||
-        r == r'&' ||  // 添加 & 符号用于 rest 参数
+        r == r'&' || r == r'.' ||  // 添加 & 符号用于 rest 参数，添加 . 用于模块符号
         r.isAsciiNumber() || r.isLetter()  // 使用 isLetter() 支持 Unicode（包括中文）
         // 移除了 []{} 因为它们是独立的 token
     }

@@ -32,13 +32,13 @@ extend Evaluator {
     }
 
     /**
-     * 获取包解析器（如果未初始化则返回错误）
+     * 获取模块解析器（如果未初始化则返回错误）
      */
-    private func getPackageParser(): PackageParser {
-        if (let Some(parser) <- this.packageParser) {
+    private func getModuleParser(): ModuleParser {
+        if (let Some(parser) <- this.moduleParser) {
             parser
         } else {
-            PackageParser(this)  // 不应该发生，但提供默认值
+            ModuleParser(this)  // 不应该发生，但提供默认值
         }
     }
 
@@ -85,6 +85,10 @@ extend Evaluator {
                     // 格式2: (import (module::name :as alias))
                     case Cons(specCell) =>
                         this.parseImportSpec(specCell)
+
+                    // 格式3: (import "./local") - 相对路径导入
+                    case Str(relativePath) =>
+                        this.importRelativeModule(relativePath)
 
                     case _ =>
                         Str("Error: invalid import syntax")
@@ -206,6 +210,7 @@ extend Evaluator {
 
     /**
      * 导入相对路径模块：("./local.module") 或 ("../parent.module")
+     * 新逻辑：区分文件导入和目录包导入
      */
     private func importRelativeModule(relativePath: String): LispValue {
         // 获取当前文件路径
@@ -214,24 +219,168 @@ extend Evaluator {
                 // 获取当前文件所在目录
                 let currentDir = Path(filePath).parent.toString()
 
-                // 解析相对路径
-                let modulePath = this.resolveRelativePath(currentDir, relativePath)
-
-                match (modulePath) {
-                    case Some(path) =>
-                        // 查找路径对应的包
-                        match (this.findPackageByPath(path)) {
-                            case Some(moduleName) =>
-                                // 导入找到的模块
-                                this.importModuleByName(moduleName, None, ArrayList<String>())
-                            case None =>
-                                Str("Error: module not found at path '${path}'")
-                        }
-                    case None =>
-                        Str("Error: invalid relative path '${relativePath}'")
+                // 判断是文件导入还是目录包导入
+                if (this.isFileImport(relativePath)) {
+                    // 文件导入：无前缀，直接加载文件
+                    this.loadRelativeFile(currentDir, relativePath)
+                } else {
+                    // 目录包导入：有前缀，加载目录下的所有文件
+                    this.loadRelativePackage(currentDir, relativePath)
                 }
             case None =>
-                Str("Error: cannot resolve relative import: no current file context")
+                // REPL 环境：使用当前工作目录作为基准路径
+                let currentDir = "."
+
+                if (this.isFileImport(relativePath)) {
+                    this.loadRelativeFile(currentDir, relativePath)
+                } else {
+                    this.loadRelativePackage(currentDir, relativePath)
+                }
+        }
+    }
+
+    /**
+     * 判断是否是文件导入
+     * 文件导入：以 .lisp 结尾
+     * 目录包导入：不以 .lisp 结尾
+     */
+    private func isFileImport(relativePath: String): Bool {
+        relativePath.endsWith(".lisp")
+    }
+
+    /**
+     * 加载相对文件（无前缀）
+     * @param baseDir 基础目录（当前文件所在目录）
+     * @param relativePath 相对路径（如 "./utils.lisp"）
+     */
+    private func loadRelativeFile(baseDir: String, relativePath: String): LispValue {
+        // 解析相对路径
+        var normalizedPath = relativePath
+
+        // 处理 ./ 开头
+        if (normalizedPath.startsWith("./")) {
+            normalizedPath = normalizedPath[2..normalizedPath.size]
+        }
+
+        // 构建完整路径
+        let fullPath = Path(baseDir).join(normalizedPath).toString()
+
+        // 检查文件是否存在
+        if (!exists(fullPath)) {
+            return Str("Error: file not found at '${relativePath}'")
+        }
+
+        // 检查文件是否是模块（不能导入模块）
+        let parentDir = Path(fullPath).parent.toString()
+        let moduleFile = Path(parentDir).join("module.lisp").toString()
+
+        if (exists(moduleFile)) {
+            return Str("Error: Cannot import module '${relativePath}' using relative import. Use (import moduleName) or (import org::moduleName) instead.")
+        }
+
+        // 使用 ModuleLoader 加载单个文件
+        let loader = this.getModuleLoader()
+
+        // 直接加载文件到当前环境（无前缀）
+        if (loader.loadFile(fullPath, this.env)) {
+            Nil
+        } else {
+            Str("Error: failed to load file '${relativePath}'")
+        }
+    }
+
+    /**
+     * 加载相对目录包（有前缀）
+     * @param baseDir 基础目录（当前文件所在目录）
+     * @param relativePath 相对路径（如 "./helpers" 或 "./math.stats"）
+     */
+    private func loadRelativePackage(baseDir: String, relativePath: String): LispValue {
+        // 解析相对路径
+        var normalizedPath = relativePath
+
+        // 处理 ./ 开头
+        if (normalizedPath.startsWith("./")) {
+            normalizedPath = normalizedPath[2..normalizedPath.size]
+        }
+
+        // 将 . 转换为路径分隔符
+        let pathPart = normalizedPath.replace(".", "/")
+
+        // 构建完整路径
+        let fullPath = Path(baseDir).join(pathPart).toString()
+
+        // 检查目录是否存在
+        if (!exists(fullPath)) {
+            return Str("Error: directory not found at '${relativePath}'")
+        }
+
+        // 检查是否是模块（不能相对导入模块）
+        let moduleFile = Path(fullPath).join("module.lisp").toString()
+        if (exists(moduleFile)) {
+            return Str("Error: Cannot import module '${relativePath}' using relative import. Use (import moduleName) or (import org::moduleName) instead.")
+        }
+
+        // 提取前缀（路径的最后一级）
+        let prefix = this.extractPrefix(normalizedPath)
+
+        // 创建一个新的环境用于包
+        let packageEnv = this.env.createChild()
+
+        // 使用 ModuleLoader 加载包目录下的所有文件
+        let loader = this.getModuleLoader()
+
+        if (loader.loadPackage(fullPath, packageEnv)) {
+            // 将包环境中的导出符号绑定到当前环境（带前缀）
+            this.bindPackageSymbols(packageEnv, prefix)
+            Nil
+        } else {
+            Str("Error: failed to load package '${relativePath}'")
+        }
+    }
+
+    /**
+     * 从相对路径提取前缀
+     * 例如：
+     * - "helpers" → "helpers"
+     * - "math.stats" → "stats"
+     * - "utils" → "utils"
+     */
+    private func extractPrefix(relativePath: String): String {
+        let parts = relativePath.split('.')
+        if (parts.size > 0) {
+            parts[parts.size - 1]
+        } else {
+            relativePath
+        }
+    }
+
+    /**
+     * 将包环境中的符号绑定到当前环境（带前缀）
+     * @param packageEnv 包环境
+     * @param prefix 前缀名
+     */
+    private func bindPackageSymbols(packageEnv: Environment, prefix: String) {
+        // 获取包环境中所有导出的符号
+        let exportedBindings = packageEnv.getExportedBindings()
+
+        // 如果没有显式导出任何符号，导出所有符号
+        if (exportedBindings.isEmpty()) {
+            // 获取所有符号（除了特殊符号）
+            let allKeys = packageEnv.getKeys()
+            for (key in allKeys) {
+                // 跳过内部符号（以下划线开头）
+                if (!key.startsWith("_")) {
+                    let value = packageEnv.lookup(key)
+                    let prefixedKey = "${prefix}.${key}"
+                    this.env.define(prefixedKey, value)
+                }
+            }
+        } else {
+            // 只绑定导出的符号
+            for ((key, value) in exportedBindings) {
+                let prefixedKey = "${prefix}.${key}"
+                this.env.define(prefixedKey, value)
+            }
         }
     }
 
@@ -307,19 +456,19 @@ extend Evaluator {
     }
 
     /**
-     * 向上查找包含 package.lisp 的目录
+     * 向上查找包含 module.lisp 的目录
      * @param path 文件路径
-     * @return 包目录路径，或 None
+     * @return 模块目录路径，或 None
      */
     private func findPackageDirectory(path: String): Option<String> {
         var currentPath = path
 
         while (!currentPath.isEmpty()) {
-            // 检查当前目录是否有 package.lisp
-            let packageFile = Path(currentPath).join("package.lisp").toString()
+            // 检查当前目录是否有 module.lisp
+            let packageFile = Path(currentPath).join("module.lisp").toString()
 
             if (exists(packageFile)) {
-                // 找到了包目录
+                // 找到了模块目录
                 return Some(currentPath)
             }
 
@@ -381,11 +530,11 @@ extend Evaluator {
      * @return 模块名或 None
      */
     private func findPackageByPath(path: String): Option<String> {
-        // 向上查找包含 package.lisp 的目录
+        // 向上查找包含 module.lisp 的目录
         match (this.findPackageDirectory(path)) {
             case Some(packageDir) =>
-                // 使用 PackageParser 解析包目录获取模块名
-                match (this.getPackageParser().parse(packageDir)) {
+                // 使用 ModuleParser 解析模块目录获取模块名
+                match (this.getModuleParser().parse(packageDir)) {
                     case Some(packageInfo) =>
                         // 构建模块名：org::packageName
                         Some(ModuleNamespace.buildModuleName(packageInfo.org, packageInfo.packageName))
@@ -480,8 +629,8 @@ extend Evaluator {
         // 解析模块路径
         match (this.getModuleRegistry().resolveModulePath(moduleName)) {
             case Some(packagePath) =>
-                // 解析 package.lisp
-                match (this.parsePackageFile(packagePath)) {
+                // 解析 module.lisp
+                match (this.parseModuleFile(packagePath)) {
                     case Some(packageInfo) =>
                         // 创建模块环境
                         let moduleEnv = this.env.createChild()
@@ -516,13 +665,13 @@ extend Evaluator {
     }
 
     /**
-     * 解析 package.lisp 文件
-     * @param packagePath 包目录路径
-     * @return 解析的包信息，失败返回 None
+     * 解析 module.lisp 文件
+     * @param packagePath 模块目录路径
+     * @return 解析的模块信息，失败返回 None
      */
-    private func parsePackageFile(packagePath: String): Option<PackageInfo> {
-        // 使用 PackageParser 解析 package.lisp
-        let parser = this.getPackageParser()
+    private func parseModuleFile(packagePath: String): Option<PackageInfo> {
+        // 使用 ModuleParser 解析 module.lisp
+        let parser = this.getModuleParser()
         parser.parse(packagePath)
     }
 
@@ -586,34 +735,27 @@ extend Evaluator {
     }
 
     /**
-     * 特殊形式：package
-     * 定义包元数据
+     * 特殊形式：module
+     * 定义模块元数据
      *
-     * 语法：(package org.name
+     * 语法：(module name
      *          (version "0.1.0")
      *          (description "..."))
      */
-    func evalPackage(expr: LispValue): LispValue {
+    func evalModule(expr: LispValue): LispValue {
         match (expr) {
             case Cons(cell) =>
                 let first = cell.car
 
                 match (first) {
-                    case Symbol(packageName) =>
-                        // 解析包名：org.name 或 name
-                        let parts = packageName.split('.')
-                        let (org, pkg) = if (parts.size >= 2) {
-                            (parts[0], packageName)
-                        } else {
-                            ("", packageName)
-                        }
-
-                        // TODO: 创建并注册包信息
+                    case Symbol(moduleName) =>
+                        // 模块名是当前目录名
+                        // TODO: 创建并注册模块信息
                         // 需要解析后面的元数据字段
                         Nil
-                    case _ => Str("Error: package requires a package name")
+                    case _ => Str("Error: module requires a module name")
                 }
-            case _ => Str("Error: package requires a package name")
+            case _ => Str("Error: module requires a module name")
         }
     }
 }

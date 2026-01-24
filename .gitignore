@@ -2,6 +2,10 @@ target
 .claude
 .cache
 .vscode
+cov_output
 xisp
 test.sh
 *.cj.macrocall
+temp-test
+*.gcda
+*.gcno

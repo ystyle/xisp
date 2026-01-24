@@ -2,6 +2,7 @@ package ystyle::xisp.types
 
 import std.collection.ArrayList
 import std.collection.HashMap
+import std.collection.HashSet
 
 
 /**
@@ -28,12 +29,19 @@ public open class Environment {
     private var keywordAliases: HashMap<String, String>
 
     /**
+     * 导出符号集合
+     * 用于跟踪哪些符号被导出（用于包导入）
+     */
+    private var exportedSymbols: HashSet<String>
+
+    /**
      * 默认构造函数
      */
     public init() {
         this.parent = None
         this.bindings = HashMap<String, LispValue>()
         this.keywordAliases = HashMap<String, String>()
+        this.exportedSymbols = HashSet<String>()
     }
 
     /**
@@ -43,6 +51,7 @@ public open class Environment {
         this.parent = Some(parent)
         this.bindings = HashMap<String, LispValue>()
         this.keywordAliases = HashMap<String, String>()
+        this.exportedSymbols = HashSet<String>()
     }
 
     /**
@@ -56,16 +65,34 @@ public open class Environment {
      * 查找变量（在当前环境和所有父环境中查找）
      */
     public func lookup(name: String): LispValue {
+        // DEBUG: 输出查找信息
+        if (name.contains("stats") || name.contains("average")) {
+            println("[DEBUG] lookup: searching for '${name}'")
+            println("[DEBUG]   current env has ${this.bindings.size} bindings")
+        }
+
         if (this.bindings.contains(name)) {
             let opt = this.bindings.get(name)
             match (opt) {
-                case Some(v) => v
+                case Some(v) =>
+                    if (name.contains("stats") || name.contains("average")) {
+                        println("[DEBUG]   found in current env: ${v.toString()}")
+                    }
+                    v
                 case None => Nil
             }
         } else {
             match (this.parent) {
-                case Some(env) => env.lookup(name)
-                case None => Nil
+                case Some(env) =>
+                    if (name.contains("stats") || name.contains("average")) {
+                        println("[DEBUG]   not in current env, searching parent...")
+                    }
+                    env.lookup(name)
+                case None =>
+                    if (name.contains("stats") || name.contains("average")) {
+                        println("[DEBUG]   not found in any env!")
+                    }
+                    Nil
             }
         }
     }
@@ -117,6 +144,61 @@ public open class Environment {
             keys.add(key)
         }
         keys
+    }
+
+    // ==================== 导出符号管理 ====================
+
+    /**
+     * 添加导出符号
+     * @param symbolName 符号名称
+     */
+    public func addExportedSymbol(symbolName: String) {
+        this.exportedSymbols.add(symbolName)
+    }
+
+    /**
+     * 批量添加导出符号
+     * @param symbolNames 符号名称列表
+     */
+    public func addExportedSymbols(symbolNames: ArrayList<String>) {
+        for (name in symbolNames) {
+            this.exportedSymbols.add(name)
+        }
+    }
+
+    /**
+     * 检查符号是否已导出
+     * @param symbolName 符号名称
+     * @return 如果符号已导出返回 true，否则返回 false
+     */
+    public func isExported(symbolName: String): Bool {
+        this.exportedSymbols.contains(symbolName)
+    }
+
+    /**
+     * 获取所有导出的符号名称
+     * @return 导出符号名称列表
+     */
+    public func getExportedSymbols(): ArrayList<String> {
+        let symbols = ArrayList<String>()
+        for (sym in this.exportedSymbols) {
+            symbols.add(sym)
+        }
+        symbols
+    }
+
+    /**
+     * 获取导出符号的值（只获取已导出的符号）
+     * @return 导出符号的键值对列表
+     */
+    public func getExportedBindings(): ArrayList<(String, LispValue)> {
+        let bindings = ArrayList<(String, LispValue)>()
+        for ((key, value) in this.bindings) {
+            if (this.exportedSymbols.contains(key)) {
+                bindings.add((key, value))
+            }
+        }
+        bindings
     }
 
     /**

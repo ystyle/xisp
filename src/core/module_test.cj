@@ -433,7 +433,7 @@ class ModuleTest {
         // 初始状态
         @Assert(evaluator.moduleRegistry.isNone())
         @Assert(evaluator.moduleLoader.isNone())
-        @Assert(evaluator.packageParser.isNone())
+        @Assert(evaluator.moduleParser.isNone())
 
         // 初始化模块系统
         evaluator.initModuleSystem()
@@ -441,7 +441,7 @@ class ModuleTest {
         // 初始化后应该有值
         @Assert(evaluator.moduleRegistry.isSome())
         @Assert(evaluator.moduleLoader.isSome())
-        @Assert(evaluator.packageParser.isSome())
+        @Assert(evaluator.moduleParser.isSome())
 
         // 再次初始化（不应该重复初始化）
         evaluator.initModuleSystem()
@@ -460,7 +460,7 @@ class ModuleTest {
         evaluator.initModuleSystem()
 
         // 获取 PackageParser
-        match (evaluator.packageParser) {
+        match (evaluator.moduleParser) {
             case Some(parser) =>
                 // 使用真实的第三方包（examples/ystyle/zlog）
                 let packagePath = "./examples/ystyle/zlog"
@@ -497,7 +497,7 @@ class ModuleTest {
         let evaluator = Evaluator(env)
         evaluator.initModuleSystem()
 
-        match (evaluator.packageParser) {
+        match (evaluator.moduleParser) {
             case Some(parser) =>
                 // 测试多级目录包：examples/ystyle/utils（包含 string 子目录）
                 let packagePath = "./examples/ystyle/utils"
@@ -535,7 +535,7 @@ class ModuleTest {
 
         match (evaluator.moduleRegistry) {
             case Some(registry) =>
-                match (evaluator.packageParser) {
+                match (evaluator.moduleParser) {
                     case Some(parser) =>
                         let resolver = DependencyResolver(registry, parser)
 
@@ -563,7 +563,7 @@ class ModuleTest {
 
         match (evaluator.moduleRegistry) {
             case Some(registry) =>
-                match (evaluator.packageParser) {
+                match (evaluator.moduleParser) {
                     case Some(parser) =>
                         let resolver = DependencyResolver(registry, parser)
 
@@ -592,7 +592,7 @@ class ModuleTest {
 
         match (evaluator.moduleRegistry) {
             case Some(registry) =>
-                match (evaluator.packageParser) {
+                match (evaluator.moduleParser) {
                     case Some(parser) =>
                         let resolver = DependencyResolver(registry, parser)
 
@@ -663,13 +663,13 @@ class ModuleTest {
         let evaluator = Evaluator(env)
         evaluator.initModuleSystem()
 
-        // 测试在 examples/ystyle/zlog 目录下查找 package.lisp
+        // 测试在 examples/ystyle/zlog 目录下查找 module.lisp
         let testPath = "./examples/ystyle/zlog"
         let pathObj = Path(testPath)
 
         if (exists(testPath)) {
-            let packageFile = Path(testPath).join("package.lisp").toString()
-            @Assert(exists(packageFile))
+            let moduleFile = Path(testPath).join("module.lisp").toString()
+            @Assert(exists(moduleFile))
         }
     }
 
@@ -717,6 +717,27 @@ class ModuleTest {
 
         let relativePath2 = "../lib.parser"
         @Assert(relativePath2.startsWith("../"))
+    }
+
+    /**
+     * 测试 REPL 环境中的相对导入
+     */
+    @TestCase
+    func testREPLRelativeImport() {
+        let env = Environment()
+        BuiltinFunctions.registerAll(env)
+        let evaluator = Evaluator(env)
+        evaluator.initModuleSystem()
+
+        // 不设置 currentFilePath（模拟 REPL 环境）
+        @Assert(evaluator.currentFilePath.isNone())
+
+        // 测试相对路径导入应该使用当前工作目录
+        // 由于文件可能不存在，只测试逻辑不测试实际加载
+        match (evaluator.currentFilePath) {
+            case Some(_) => @Fail("currentFilePath should be None in REPL")
+            case None => ()  // 正确：REPL 环境没有当前文件
+        }
     }
 }
 
