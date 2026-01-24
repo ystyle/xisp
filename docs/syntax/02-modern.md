@@ -721,24 +721,34 @@ Xisp 支持管道操作符 `->`（thread-first macro），让代码更易读、�
 ### 在函数中使用
 
 ```lisp
+; 定义辅助函数
+(define (inc x) (+ x 1))
+(define (double x) (* x 2))
+
 ; 定义管道式函数
 (define (process-data data)
   (-> data
-      validate
-      transform
-      save))
+      inc
+      double))
+
+(process-data 5)
+; => 12  (5 + 1 = 6, 6 * 2 = 12)
 
 ; 在 lambda 中使用
 ((lambda (x) (-> x (+ 10) (* 2))) 5)
-; => 30
+; => 30  (5 + 10 = 15, 15 * 2 = 30)
 
 ; 组合函数
-(define process
-  (lambda (x)
-    (-> x
-        (map square)
-        (filter even?)
-        length)))
+(define (square x) (* x x))
+
+(define (process-even-squares lst)
+  (-> lst
+      (map square)
+      (filter even?)
+      length))
+
+(process-even-squares [1 2 3 4 5])
+; => 2  (只有 4 和 16 是偶数)
 ```
 
 ### 可读性对比
