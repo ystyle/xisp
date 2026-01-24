@@ -360,6 +360,9 @@ Xisp 提供了 Redis 风格的哈希操作 API，简短易用：
 #### 2. 数据处理
 
 ```lisp
+; 定义辅助函数
+(define (square x) (* x x))
+
 (define process-data
   (lambda (data)
     {:result (map square data)
@@ -380,12 +383,12 @@ Xisp 提供了 Redis 风格的哈希操作 API，简短易用：
 
 (define add-todo
   (lambda (state text)
-    {:todos (prepend {:id (state :next-id)
+    {:todos (prepend {:id (hget state :next-id)
                      :text text
                      :done #f}
-                     (state :todos))
-     :filter (state :filter)
-     :next-id (+ (state :next-id) 1)}))
+                     (hget state :todos))
+     :filter (hget state :filter)
+     :next-id (+ (hget state :next-id) 1)}))
 
 ; 添加待办事项
 (define state1 (add-todo initial-state "Learn Xisp"))
@@ -948,23 +951,23 @@ Xisp 提供强大的模式匹配功能，通过 `match` 表达式实现复杂的
    {:name "Bob" :age 25 :city "Shanghai"}
    {:name "Charlie" :age 35 :city "Beijing"}])
 
-; 处理函数
-(define (filter-by-city users city)
-  (filter (lambda (u) (= (u :city) city)) users))
+; 处理函数 - 过滤年龄大于30的用户
+(define (filter-by-age users min-age)
+  (filter (lambda (u) (> (hget u :age) min-age)) users))
 
 (define (get-names users)
-  (map (lambda (u) (u :name)) users))
+  (map (lambda (u) (hget u :name)) users))
 
 (define (format-names names)
   (string-append "Users: " (str names)))
 
 ; 管道式处理
 (-> users
-    (filter-by-city "Beijing")
+    (filter-by-age 30)
     get-names
     format-names
     println)
-; => Users: (Alice Charlie)
+; => Users: (Charlie)
 ```
 
 ### 示例2：配置解析
@@ -977,12 +980,12 @@ Xisp 提供强大的模式匹配功能，通过 `match` 表达式实现复杂的
    :debug #t})
 
 ; 解构配置
-(let [[{:host server-host :port server-port} (config :server)
-       {:host db-host :port db-port} (config :database)
-       debug (config :debug)]
-  (println #"Server: #{server-host}:#{server-port}")
-  (println #"Database: #{db-host}:#{db-port}")
-  (println #"Debug: #{debug}"))
+(let ((server-config (hget config :server))
+      (db-config (hget config :database))
+      (debug (hget config :debug)))
+  (println "Server:" (hget server-config :host) ":" (hget server-config :port))
+  (println "Database:" (hget db-config :host) ":" (hget db-config :port))
+  (println "Debug:" debug))
 ; => Server: localhost:8080
 ; => Database: db.example.com:5432
 ; => Debug: #t
@@ -999,23 +1002,23 @@ Xisp 提供强大的模式匹配功能，通过 `match` 表达式实现复杂的
 
 ; 添加 todo
 (define (add-todo state text)
-  (let [[todos (state :todos)
-         next-id (state :next-id)]
+  (let ((todos (hget state :todos))
+        (next-id (hget state :next-id)))
     {:todos (prepend {:id next-id :text text :done #f} todos)
-     :filter (state :filter)
+     :filter (hget state :filter)
      :next-id (+ next-id 1)}))
 
 ; 切换完成状态
 (define (toggle-todo state id)
   {:todos (map (lambda (todo)
-                 (if (= (todo :id) id)
-                     {:id (todo :id)
-                      :text (todo :text)
-                      :done (not (todo :done))}
+                 (if (= (hget todo :id) id)
+                     {:id (hget todo :id)
+                      :text (hget todo :text)
+                      :done (not (hget todo :done))}
                      todo))
-               (state :todos))
-   :filter (state :filter)
-   :next-id (state :next-id)})
+               (hget state :todos))
+   :filter (hget state :filter)
+   :next-id (hget state :next-id)})
 
 ; 使用
 (define state1 (add-todo state "Learn Xisp"))
