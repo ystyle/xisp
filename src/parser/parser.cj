@@ -238,6 +238,9 @@ public class Parser {
         } else if (this.peek() == Token.RightParen) {
             // 单元素列表，不消费 RightParen，由 parseList() 消费
             consValue(first, Nil)
+        } else if (this.peek() == Token.EOF) {
+            // 防止无限递归：到达输入末尾时停止
+            consValue(first, Nil)
         } else {
             // 递归解析剩余元素
             let rest = this.parseListBody()
