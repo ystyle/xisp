@@ -53,17 +53,17 @@
 ;; ==================== 5. 解构绑定 (let) ====================
 (println "\n=== 5. 解构绑定 (let) ===")
 (println "解构 [x y z]:")
-(define r1 (let [[x y z] (quote (1 2 3))]
+(define r1 (let [[x y z] [1 2 3]]
   (str "x=" x ", y=" y ", z=" z)))
 (println r1)
 
 (println "\n使用 & 收集剩余元素 [x y & rest]:")
-(define r2 (let [[x y & rest] (quote (1 2 3 4 5))]
+(define r2 (let [[x y & rest] [1 2 3 4 5]]
   (str "x=" x ", y=" y ", rest=" rest)))
 (println r2)
 
 (println "\n嵌套解构 [[a b] [c d]]:")
-(define r3 (let [[[a b] [c d]] (quote ((1 2) (3 4)))]
+(define r3 (let [[[a b] [c d]] [[1 2] [3 4]])]
   (str "a=" a ", b=" b ", c=" c ", d=" d)))
 (println r3)
 
@@ -74,7 +74,7 @@
 (println p1)
 
 (println "\n复杂管道操作 (map square, filter > 5, reduce +):")
-(define p2 (-> (quote (1 2 3 4 5))
+(define p2 (-> [1 2 3 4 5]
   (map (lambda (x) (* x x)))
   (filter (lambda (x) (> x 5)))
   (reduce + 0)))
@@ -84,15 +84,15 @@
 ;; ==================== 7. 高阶函数 lambda 支持 ====================
 (println "\n=== 7. 高阶函数 lambda 支持 ===")
 (println "map lambda 平方:")
-(define map1 (map (lambda (x) (* x x)) (quote (1 2 3 4 5))))
+(define map1 (map (lambda (x) (* x x)) [1 2 3 4 5]))
 (println map1)
 
 (println "\nfilter lambda 过滤 > 3:")
-(define filter1 (filter (lambda (x) (> x 3)) (quote (1 2 3 4 5))))
+(define filter1 (filter (lambda (x) (> x 3)) [1 2 3 4 5]))
 (println filter1)
 
 (println "\nreduce lambda 求和:")
-(define reduce1 (reduce (lambda (acc x) (+ acc x)) 0 (quote (1 2 3 4 5))))
+(define reduce1 (reduce (lambda (acc x) (+ acc x)) 0 [1 2 3 4 5]))
 (println reduce1)
 
 ;; ==================== 8. 组合使用 ====================

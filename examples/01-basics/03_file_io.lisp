@@ -1,0 +1,76 @@
+;; ======================================
+;; 文件 I/O (File I/O) 示例
+;; ======================================
+
+(println "=== Xisp 文件 I/O 演示 ===")
+(println "")
+
+(println "1. 写入文件")
+(println "代码: (cangjie::write-file \"test.txt\" \"Hello Xisp!\")")
+(define write-result (cangjie::write-file "test.txt" "Hello Xisp!\n"))
+(println #"结果: #{write-result}")
+(println "期望: true")
+(println "")
+
+(println "2. 读取文件")
+(println "代码: (cangjie::read-file \"test.txt\")")
+(define content (cangjie::read-file "test.txt"))
+(println #"结果: #{content}")
+(println "期望: Hello Xisp!")
+(println "")
+
+(println "3. 追加内容")
+(println "代码: (cangjie::append-file \"test.txt\" \"Appended text\")")
+(define append-result (cangjie::append-file "test.txt" "Appended text\n"))
+(println #"结果: #{append-result}")
+(println "期望: true")
+(println "")
+
+(println "4. 读取追加后的内容")
+(println "代码: (cangjie::read-file \"test.txt\")")
+(define updated-content (cangjie::read-file "test.txt"))
+(println #"结果: #{updated-content}")
+(println "期望: Hello Xisp! 后面跟着 Appended text")
+(println "")
+
+(println "5. 检查文件存在")
+(println "代码: (cangjie::exists? \"test.txt\")")
+(define exists (cangjie::exists? "test.txt"))
+(println #"结果: #{exists}")
+(println "期望: true")
+(println "")
+
+(println "6. 检查不存在的文件")
+(println "代码: (cangjie::exists? \"nonexistent.txt\")")
+(define not-exists (cangjie::exists? "nonexistent.txt"))
+(println #"结果: #{not-exists}")
+(println "期望: false")
+(println "")
+
+(println "7. 判断是否为文件")
+(println "代码: (cangjie::file? \"test.txt\")")
+(define is-file (cangjie::file? "test.txt"))
+(println #"结果: #{is-file}")
+(println "期望: true")
+(println "")
+
+(println "8. 判断是否为目录")
+(println "代码: (cangjie::directory? \".\")")
+(define is-dir (cangjie::directory? "."))
+(println #"结果: #{is-dir}")
+(println "期望: true")
+(println "")
+
+(println "9. 列出当前目录")
+(println "代码: (cangjie::list-dir \".\")")
+(define files (cangjie::list-dir "."))
+(println #"文件数量: #{(length files)}")
+(println "前 3 个文件:")
+(println #"  - #{(first files)}")
+(println #"  - #{(first (rest files))}")
+(println #"  - #{(first (rest (rest files)))}")
+(println "")
+
+(println "=== 文件 I/O 演示完成 ===")
+(println "")
+(println "提示: 测试文件 'test.txt' 已创建在当前目录")
