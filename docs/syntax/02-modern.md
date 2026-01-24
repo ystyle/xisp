@@ -838,20 +838,20 @@ Xisp 提供强大的模式匹配功能，通过 `match` 表达式实现复杂的
 ```lisp
 ; 值匹配
 (match 5
-  [1 "one"]
-  [2 "two"]
-  [5 "five"]
-  [_ "other"])
+  1 "one"
+  2 "two"
+  5 "five"
+  _ "other")
 ; => "five"
 
 ; 符号匹配
 (define value :admin)
 
 (match value
-  [:admin "Administrator"]
-  [:user "Normal user"]
-  [:guest "Guest"]
-  [_ "Unknown"])
+  :admin "Administrator"
+  :user "Normal user"
+  :guest "Guest"
+  _ "Unknown")
 ; => "Administrator"
 ```
 
@@ -860,20 +860,20 @@ Xisp 提供强大的模式匹配功能，通过 `match` 表达式实现复杂的
 ```lisp
 ; 匹配列表结构
 (match '(1 2 3)
-  [(a b c) (list "three elements" a b c)]
-  [(a b) (list "two elements" a b)]
-  [_ "other"])
+  (a b c) (list "three elements" a b c)
+  (a b) (list "two elements" a b)
+  _ "other")
 ; => ("three elements" 1 2 3)
 
 ; 使用 & 收集剩余
 (match '(1 2 3 4 5)
-  [(first & rest) (list "First:" first "Rest:" rest)])
+  (first & rest) (list "First:" first "Rest:" rest))
 ; => ("First:" 1 "Rest:" (2 3 4 5))
 
 ; 嵌套匹配
 (match '((1 2) 3)
-  [((a b) c) (list "nested" a b c)]
-  [_ "other"])
+  ((a b) c) (list "nested" a b c)
+  _ "other")
 ; => ("nested" 1 2 3)
 ```
 
@@ -882,13 +882,13 @@ Xisp 提供强大的模式匹配功能，通过 `match` 表达式实现复杂的
 ```lisp
 ; 匹配向量
 (match [1 2 3]
-  [[a b c] (list "matched" a b c)]
-  [_ "other"])
+  (a b c) (list "matched" a b c)
+  _ "other")
 ; => ("matched" 1 2 3)
 
 ; 带剩余的向量匹配
 (match [1 2 3 4 5]
-  [[x y & rest] (list x y rest)])
+  (x y & rest) (list x y rest))
 ; => (1 2 (3 4 5))
 ```
 
@@ -907,16 +907,17 @@ Xisp 提供强大的模式匹配功能，通过 `match` 表达式实现复杂的
 ```lisp
 ; 使用守卫添加额外条件
 (match 15
-  [x (when (> x 10)) "large"]
-  [x (when (< x 5)) "small"]
-  [_ "medium"])
-; => "large"
+  (x when (> x 10)) (str "large: " x)
+  (x when (< x 5)) (str "small: " x)
+  _ "medium")
+; => "large: 15"
 
 ; 复杂守卫
 (match '(5 10)
-  [(x y) (when (> x y)) "x > y"]
-  [(x y) (when (< x y)) "x < y"]
-  [(x y) (when (= x y)) "x = y"])
+  (x y) when (> x y) "x > y"
+  (x y) when (< x y) "x < y"
+  (x y) when (= x y) "x = y"
+  _ "other")
 ; => "x < y"
 ```
 
@@ -927,10 +928,10 @@ Xisp 提供强大的模式匹配功能，通过 `match` 表达式实现复杂的
 ```lisp
 (define (describe-value x)
   (match x
-    [(n) (when (number? n)) "a number"]
-    [(s) (when (string? s)) "a string"]
-    [(lst) (when (list? lst)) "a list"]
-    [_ "something else"]))
+    (n) when (number? n) "a number"
+    (s) when (string? s) "a string"
+    (lst) when (list? lst) "a list"
+    _ "something else"))
 
 (describe-value 42)
 ; => "a number"
@@ -944,10 +945,10 @@ Xisp 提供强大的模式匹配功能，通过 `match` 表达式实现复杂的
 ```lisp
 (define (process-command cmd)
   (match cmd
-    [('load file) (println "Loading:" file)]
-    [('save file) (println "Saving:" file)]
-    [('quit) (println "Quitting...")]
-    [_ (println "Unknown command")]))
+    ('load file) (println "Loading:" file)
+    ('save file) (println "Saving:" file)
+    ('quit) (println "Quitting...")
+    _ (println "Unknown command")))
 
 (process-command '(load "data.txt"))
 ; => Loading: data.txt
@@ -958,8 +959,8 @@ Xisp 提供强大的模式匹配功能，通过 `match` 表达式实现复杂的
 ```lisp
 (define (sum-list lst)
   (match lst
-    [('acc)] acc]
-    [(first & rest) (sum-list rest (+ acc first))]))
+    () 0
+    (first & rest) (+ first (sum-list rest))))
 
 (sum-list '(1 2 3 4 5))
 ; => 15
