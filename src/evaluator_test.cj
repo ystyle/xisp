@@ -457,6 +457,23 @@ class MacroTest {
             case _ => @Fail("comma outside backquote should return error")
         }
     }
+
+    @TestCase
+    func testMacroexpandAfterMacroCall() {
+        // 测试调用宏后使用 macroexpand 和 define (bug 重现)
+        let env = Environment()
+        BuiltinFunctions.registerAll(env)
+
+        // 定义 when 宏
+        evalCode("(defmacro when (test then) `(if ,test ,then nil))", env)
+        // 调用 when 宏
+        evalCode("(when 1 (println \"x\"))", env)
+        // 使用 define + macroexpand (这曾在 CLI 模式下导致栈溢出，现已修复)
+        let result = evalCode("(define x (macroexpand (quote (when 1 2))))", env)
+
+        // 如果能执行到这里，说明没有栈溢出，测试通过
+        @Assert(true)
+    }
 }
 
 /**
