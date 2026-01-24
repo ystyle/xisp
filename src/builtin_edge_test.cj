@@ -361,4 +361,227 @@ class BuiltinEdgeTest {
         let result3 = evaluator.eval(expr3)
         @Assert(result3.isNil())  // 除零返回 nil
     }
+
+    @TestCase
+    func testZeroPredicate() {
+        println("\n=== 测试 zero? 谓词 ===")
+        let env = Environment()
+        BuiltinFunctions.registerAll(env)
+        let evaluator = Evaluator(env)
+
+        // 整数测试
+        let expr1 = Parser.parseSingleFromString("(zero? 0)")
+        let result1 = evaluator.eval(expr1)
+        match (result1) {
+            case LispValue.Boolean(b) => @Assert(b)
+            case _ => @Fail("zero? 0 should return true")
+        }
+
+        let expr2 = Parser.parseSingleFromString("(zero? 1)")
+        let result2 = evaluator.eval(expr2)
+        match (result2) {
+            case LispValue.Boolean(b) => @Assert(!b)
+            case _ => @Fail("zero? 1 should return false")
+        }
+
+        // 浮点数测试
+        let expr3 = Parser.parseSingleFromString("(zero? 0.0)")
+        let result3 = evaluator.eval(expr3)
+        match (result3) {
+            case LispValue.Boolean(b) => @Assert(b)
+            case _ => @Fail("zero? 0.0 should return true")
+        }
+
+        let expr4 = Parser.parseSingleFromString("(zero? 0.1)")
+        let result4 = evaluator.eval(expr4)
+        match (result4) {
+            case LispValue.Boolean(b) => @Assert(!b)
+            case _ => @Fail("zero? 0.1 should return false")
+        }
+    }
+
+    @TestCase
+    func testPositivePredicate() {
+        println("\n=== 测试 positive? 谓词 ===")
+        let env = Environment()
+        BuiltinFunctions.registerAll(env)
+        let evaluator = Evaluator(env)
+
+        // 正数测试
+        let expr1 = Parser.parseSingleFromString("(positive? 5)")
+        let result1 = evaluator.eval(expr1)
+        match (result1) {
+            case LispValue.Boolean(b) => @Assert(b)
+            case _ => @Fail("positive? 5 should return true")
+        }
+
+        let expr2 = Parser.parseSingleFromString("(positive? -5)")
+        let result2 = evaluator.eval(expr2)
+        match (result2) {
+            case LispValue.Boolean(b) => @Assert(!b)
+            case _ => @Fail("positive? -5 should return false")
+        }
+
+        let expr3 = Parser.parseSingleFromString("(positive? 0)")
+        let result3 = evaluator.eval(expr3)
+        match (result3) {
+            case LispValue.Boolean(b) => @Assert(!b)
+            case _ => @Fail("positive? 0 should return false")
+        }
+
+        // 浮点数测试
+        let expr4 = Parser.parseSingleFromString("(positive? 3.14)")
+        let result4 = evaluator.eval(expr4)
+        match (result4) {
+            case LispValue.Boolean(b) => @Assert(b)
+            case _ => @Fail("positive? 3.14 should return true")
+        }
+    }
+
+    @TestCase
+    func testNegativePredicate() {
+        println("\n=== 测试 negative? 谓词 ===")
+        let env = Environment()
+        BuiltinFunctions.registerAll(env)
+        let evaluator = Evaluator(env)
+
+        // 负数测试
+        let expr1 = Parser.parseSingleFromString("(negative? -5)")
+        let result1 = evaluator.eval(expr1)
+        match (result1) {
+            case LispValue.Boolean(b) => @Assert(b)
+            case _ => @Fail("negative? -5 should return true")
+        }
+
+        let expr2 = Parser.parseSingleFromString("(negative? 5)")
+        let result2 = evaluator.eval(expr2)
+        match (result2) {
+            case LispValue.Boolean(b) => @Assert(!b)
+            case _ => @Fail("negative? 5 should return false")
+        }
+
+        let expr3 = Parser.parseSingleFromString("(negative? 0)")
+        let result3 = evaluator.eval(expr3)
+        match (result3) {
+            case LispValue.Boolean(b) => @Assert(!b)
+            case _ => @Fail("negative? 0 should return false")
+        }
+
+        // 浮点数测试
+        let expr4 = Parser.parseSingleFromString("(negative? -3.14)")
+        let result4 = evaluator.eval(expr4)
+        match (result4) {
+            case LispValue.Boolean(b) => @Assert(b)
+            case _ => @Fail("negative? -3.14 should return true")
+        }
+    }
+
+    @TestCase
+    func testEvenPredicate() {
+        println("\n=== 测试 even? 谓词 ===")
+        let env = Environment()
+        BuiltinFunctions.registerAll(env)
+        let evaluator = Evaluator(env)
+
+        // 偶数测试
+        let expr1 = Parser.parseSingleFromString("(even? 4)")
+        let result1 = evaluator.eval(expr1)
+        match (result1) {
+            case LispValue.Boolean(b) => @Assert(b)
+            case _ => @Fail("even? 4 should return true")
+        }
+
+        let expr2 = Parser.parseSingleFromString("(even? 3)")
+        let result2 = evaluator.eval(expr2)
+        match (result2) {
+            case LispValue.Boolean(b) => @Assert(!b)
+            case _ => @Fail("even? 3 should return false")
+        }
+
+        let expr3 = Parser.parseSingleFromString("(even? 0)")
+        let result3 = evaluator.eval(expr3)
+        match (result3) {
+            case LispValue.Boolean(b) => @Assert(b)
+            case _ => @Fail("even? 0 should return true")
+        }
+
+        // 负数测试
+        let expr4 = Parser.parseSingleFromString("(even? -2)")
+        let result4 = evaluator.eval(expr4)
+        match (result4) {
+            case LispValue.Boolean(b) => @Assert(b)
+            case _ => @Fail("even? -2 should return true")
+        }
+
+        // 非整数类型应该返回 false
+        let expr5 = Parser.parseSingleFromString("(even? 3.14)")
+        let result5 = evaluator.eval(expr5)
+        match (result5) {
+            case LispValue.Boolean(b) => @Assert(!b)
+            case _ => @Fail("even? 3.14 should return false")
+        }
+    }
+
+    @TestCase
+    func testOddPredicate() {
+        println("\n=== 测试 odd? 谓词 ===")
+        let env = Environment()
+        BuiltinFunctions.registerAll(env)
+        let evaluator = Evaluator(env)
+
+        // 奇数测试
+        let expr1 = Parser.parseSingleFromString("(odd? 3)")
+        let result1 = evaluator.eval(expr1)
+        match (result1) {
+            case LispValue.Boolean(b) => @Assert(b)
+            case _ => @Fail("odd? 3 should return true")
+        }
+
+        let expr2 = Parser.parseSingleFromString("(odd? 4)")
+        let result2 = evaluator.eval(expr2)
+        match (result2) {
+            case LispValue.Boolean(b) => @Assert(!b)
+            case _ => @Fail("odd? 4 should return false")
+        }
+
+        let expr3 = Parser.parseSingleFromString("(odd? 1)")
+        let result3 = evaluator.eval(expr3)
+        match (result3) {
+            case LispValue.Boolean(b) => @Assert(b)
+            case _ => @Fail("odd? 1 should return true")
+        }
+
+        // 负数测试
+        let expr4 = Parser.parseSingleFromString("(odd? -3)")
+        let result4 = evaluator.eval(expr4)
+        match (result4) {
+            case LispValue.Boolean(b) => @Assert(b)
+            case _ => @Fail("odd? -3 should return true")
+        }
+
+        // 非整数类型应该返回 false
+        let expr5 = Parser.parseSingleFromString("(odd? 3.14)")
+        let result5 = evaluator.eval(expr5)
+        match (result5) {
+            case LispValue.Boolean(b) => @Assert(!b)
+            case _ => @Fail("odd? 3.14 should return false")
+        }
+    }
+
+    @TestCase
+    func testPrognAlias() {
+        println("\n=== 测试 progn 别名 ===")
+        let env = Environment()
+        BuiltinFunctions.registerAll(env)
+        let evaluator = Evaluator(env)
+
+        // progn 应该和 begin 行为相同
+        let expr1 = Parser.parseSingleFromString("(progn (println \"a\") (println \"b\"))")
+        let result1 = evaluator.eval(expr1)
+        @Assert(result1.isNil())  // progn 返回 nil
+
+        let expr2 = Parser.parseSingleFromString("(begin (println \"c\") (println \"d\"))")
+        let result2 = evaluator.eval(expr2)
+        @Assert(result2.isNil())  // begin 返回 nil
+    }
 }

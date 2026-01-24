@@ -20,6 +20,9 @@ extend BuiltinFunctions {
         // 我们使用 keyword alias 机制
         env.registerKeywordAlias("setq", "set!")
 
+        // (progn form1 form2 ...) - begin 的 Common Lisp 别名
+        env.registerKeywordAlias("progn", "begin")
+
         // (second lst) - 获取第二个元素 (cadr 的现代别名)
         env.define("second", NativeFunc({ args =>
             if (args.size != 1) {
@@ -62,5 +65,9 @@ extend BuiltinFunctions {
 
         // (more lst) - rest 的另一个别名
         env.define("more", cdrFunc)  // 复用上面的 cdrFunc
+
+        // (string-append x1 x2 ...) - str 的 Common Lisp 风格别名
+        let strFunc = env.lookup("str")
+        env.define("string-append", strFunc)
     }
 }
