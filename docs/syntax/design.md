@@ -114,19 +114,45 @@
 
 **实现**: Reader层将插值展开为`string-append`调用。
 
-#### **5. 异步/await**
+#### **5. 异步支持 (spawn + Future<T>)**
 ```lisp
-;; 传统回调
-(http-get url (lambda (res) (process res)))
+;; 创建异步任务
+(let [future (spawn (http-get url))]
+  ;; 在主线程做其他事情
+  (println "请求已发送...")
+  ;; 获取结果（阻塞等待）
+  (let [data (future.get)]
+    (process data)))
 
-;; 现代：await宏（展开为仓颉的async/await）
-(let [data (await (http-get url))]
-  (process data))
+;; 带超时的获取
+(let [future (spawn (long-computation))]
+  (match (future.get(timeout: 5000))
+    (Some result) (println "结果:" result)
+    (None) (println "超时")))
 
-;; 并行
-(let [(res1 res2) (await-all [(req1) (req2)])]
-  (combine res1 res2))
+;; 并行执行多个任务
+(let [f1 (spawn (task1))
+      f2 (spawn (task2))
+      f3 (spawn (task3))]
+  ;; 获取所有结果
+  (let [r1 (f1.get)
+        r2 (f2.get)
+        r3 (f3.get)]
+    (combine r1 r2 r3)))
+
+;; 取消任务
+(let [future (spawn (long-task))]
+  (if (should-cancel?)
+    (future.cancel)))
 ```
+
+**说明**：
+- `spawn` 创建新线程并返回 `Future<T>` 对象
+- `Future.get()` 阻塞等待结果
+- `Future.get(timeout)` 带超时等待，返回 `Option<T>`
+- `Future.tryGet()` 非阻塞检查是否完成
+- `Future.cancel()` 取消任务
+- `Thread.currentThread` 获取当前线程信息
 
 ---
 
@@ -138,8 +164,8 @@
 std.io          → cangjie:io
 std.fs          → cangjie:fs
 std.net         → cangjie:net
-std.async       → cangjie:async
-std.collection  → cangjie:collection
+std.sync        → cangjie:sync   (spawn, Future<T>, Thread)
+std.collection  → cangjie:collection (内部使用，Lisp用户用Cons)
 ```
 
 ### 3.2 常用函数示例
@@ -188,7 +214,6 @@ http = { path = "../local/http" }
 
 [cangjie-dependencies]
 std = "0.53.4"
-async4cj = { git = "https://gitcode.com/cj-awaresome/async4cj.git" }  # 参考
 ```
 
 ### 4.3 加载机制
@@ -242,7 +267,7 @@ lisp.register("http-get", { url: String =>
 (eval-with-timeout code "5s")
 ```
 
-**实现**: 通过自定义`Env`类限制符号查找，结合仓颉的`async`超时机制。
+**实现**: 通过自定义`Env`类限制符号查找，结合仓颉的 `Future<T>.get(timeout)` 超时机制。
 
 ---
 
@@ -317,7 +342,7 @@ class LispParser {
 - [ ] 向量/哈希字面量`[]`/`{}`
 - [ ] 字符串插值`#"..."`
 - [ ] 模式匹配`match`
-- [ ] `await`异步语法
+- [ ] `spawn`异步语法（Future<T>）
 
 ### **阶段4：生产级（持续）**
 - [ ] 性能优化（字节码缓存）

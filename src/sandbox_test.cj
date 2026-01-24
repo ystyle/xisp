@@ -47,7 +47,8 @@ class SandboxTest {
         // 允许的函数应该能正常工作
         let result1 = interp.eval("(+ 1 2)")
         match (result1) {
-            case Number(n) => @Assert(n == 3.0)
+            case LispValue.Int(i) => @Assert(i == 3)
+            case LispValue.Float(f) => @Assert(f == 3.0)
             case _ => @Fail("Allowed function should work")
         }
 
@@ -83,7 +84,8 @@ class SandboxTest {
 
         match (result) {
             case Str(s) => @Assert(s.contains("stack depth"))
-            case Number(n) => @Fail("Should hit stack depth limit, got number: ${n}")
+            case LispValue.Int(i) => @Fail("Should hit stack depth limit, got int: ${i}")
+            case LispValue.Float(f) => @Fail("Should hit stack depth limit, got float: ${f}")
             case _ => @Fail("Should hit stack depth limit")
         }
     }
@@ -110,7 +112,8 @@ class SandboxTest {
         // 未被禁止的函数应该正常工作
         let result = interp.eval("(+ 1 2)")
         match (result) {
-            case Number(n) => @Assert(n == 3.0)
+            case LispValue.Int(i) => @Assert(i == 3)
+            case LispValue.Float(f) => @Assert(f == 3.0)
             case _ => @Fail("Allowed function should work")
         }
     }
@@ -128,25 +131,29 @@ class SandboxTest {
         // 测试所有允许的函数 - 测试算术运算
         let result1 = interp.eval("(+ 1 2)")
         match (result1) {
-            case Number(n) => @Assert(n == 3.0)
+            case LispValue.Int(i) => @Assert(i == 3)
+            case LispValue.Float(f) => @Assert(f == 3.0)
             case _ => @Fail("+ should work")
         }
 
         let result2 = interp.eval("(- 5 2)")
         match (result2) {
-            case Number(n) => @Assert(n == 3.0)
+            case LispValue.Int(i) => @Assert(i == 3)
+            case LispValue.Float(f) => @Assert(f == 3.0)
             case _ => @Fail("- should work")
         }
 
         let result3 = interp.eval("(* 2 3)")
         match (result3) {
-            case Number(n) => @Assert(n == 6.0)
+            case LispValue.Int(i) => @Assert(i == 6)
+            case LispValue.Float(f) => @Assert(f == 6.0)
             case _ => @Fail("* should work")
         }
 
         let result4 = interp.eval("(/ 6 2)")
         match (result4) {
-            case Number(n) => @Assert(n == 3.0)
+            case LispValue.Int(i) => @Assert(i == 3)
+            case LispValue.Float(f) => @Assert(f == 3.0)
             case _ => @Fail("/ should work")
         }
 
@@ -192,7 +199,8 @@ class SandboxTest {
         // 在白名单中但未被黑名单阻止的函数
         let result2 = interp.eval("(* 2 3)")
         match (result2) {
-            case Number(n) => @Assert(n == 6.0)
+            case LispValue.Int(i) => @Assert(i == 6)
+            case LispValue.Float(f) => @Assert(f == 6.0)
             case _ => @Fail("Allowed function should work")
         }
     }

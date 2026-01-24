@@ -26,69 +26,69 @@ public interface LispConvertible {
 // 整数类型
 extend Int8 <: LispConvertible {
     public func toLisp(): LispValue {
-        Number(Float64(this))
+        LispValue.Int(Int64(this))
     }
 }
 
 extend Int16 <: LispConvertible {
     public func toLisp(): LispValue {
-        Number(Float64(this))
+        LispValue.Int(Int64(this))
     }
 }
 
 extend Int32 <: LispConvertible {
     public func toLisp(): LispValue {
-        Number(Float64(this))
+        LispValue.Int(Int64(this))
     }
 }
 
 extend Int64 <: LispConvertible {
     public func toLisp(): LispValue {
-        Number(Float64(this))
+        LispValue.Int(this)
     }
 }
 
 // 无符号整数
 extend UInt8 <: LispConvertible {
     public func toLisp(): LispValue {
-        Number(Float64(this))
+        LispValue.Int(Int64(this))
     }
 }
 
 extend UInt16 <: LispConvertible {
     public func toLisp(): LispValue {
-        Number(Float64(this))
+        LispValue.Int(Int64(this))
     }
 }
 
 extend UInt32 <: LispConvertible {
     public func toLisp(): LispValue {
-        Number(Float64(this))
+        LispValue.Int(Int64(this))
     }
 }
 
 extend UInt64 <: LispConvertible {
     public func toLisp(): LispValue {
-        Number(Float64(this))
+        LispValue.Int(Int64(this))
     }
 }
 
 // 浮点类型
 extend Float16 <: LispConvertible {
     public func toLisp(): LispValue {
-        Number(Float64(this))
+        LispValue.Float(Float64(this))
     }
 }
 
 extend Float32 <: LispConvertible {
     public func toLisp(): LispValue {
-        Number(Float64(this))
+        LispValue.Float(Float64(this))
     }
 }
 
 extend Float64 <: LispConvertible {
     public func toLisp(): LispValue {
-        Number(this)
+        LispValue.Float(this)
     }
 }
 
@@ -222,7 +222,8 @@ public class TypeConverter {
      */
     public static func asFloat(value: LispValue): ?Float64 {
         match (value) {
-            case Number(n) => Some(n)
+            case LispValue.Int(i) => Some(Float64(i))
+            case LispValue.Float(f) => Some(f)
             case _ => None
         }
     }
@@ -232,7 +233,8 @@ public class TypeConverter {
      */
     public static func asInt64(value: LispValue): ?Int64 {
         match (value) {
-            case Number(n) => Some(Int64(n))
+            case LispValue.Int(i) => Some(i)
+            case LispValue.Float(f) => Some(Int64(f))
             case _ => None
         }
     }

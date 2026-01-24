@@ -32,9 +32,9 @@ extend BuiltinFunctions {
         // (not x) - 逻辑非
         env.define("not", NativeFunc({ args =>
             if (args.size != 1) {
-                return Boolean(true)
+                return LispValue.Boolean(true)
             }
-            Boolean(!args[0].isTruthy())
+            LispValue.Boolean(!args[0].isTruthy())
         }))
     }
 }

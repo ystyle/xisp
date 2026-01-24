@@ -18,7 +18,6 @@
 [package.package-configuration."ystyle::xisp.cli"]
 output-type = "executable"
 
-
 [package.package-configuration."ystyle::xisp.examples.extension_demo"]
 output-type = "executable"
 

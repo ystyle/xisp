@@ -20,7 +20,7 @@ var lexerTests = ArrayList<LexerTestItem>([
     // 数字
     LexerTestItem(
         "42 3.14",
-        [Token.Number(42.0), Token.Number(3.14)]
+        [Token.Int(42), Token.Float(3.14)]
     ),
     // 符号
     LexerTestItem(
@@ -40,7 +40,7 @@ var lexerTests = ArrayList<LexerTestItem>([
     // 注释
     LexerTestItem(
         "42 ; comment\n100",
-        [Token.Number(42.0), Token.Number(100.0)]
+        [Token.Int(42), Token.Int(100)]
     ),
     // 空白符
     LexerTestItem(
@@ -93,7 +93,7 @@ var lexerTests = ArrayList<LexerTestItem>([
     // 中文在注释中
     LexerTestItem(
         "42 ; 这是一个中文注释\n100",
-        [Token.Number(42.0), Token.Number(100.0)]
+        [Token.Int(42), Token.Int(100)]
     ),
     // 中文符号表达式
     LexerTestItem(
@@ -135,9 +135,9 @@ var lexerTests = ArrayList<LexerTestItem>([
         "(match 5 1 \"one\" 5 \"five\")",
         [
             Token.LeftParen, Token.Symbol("match"),
-            Token.Number(5.0),
-            Token.Number(1.0), Token.String("one"),
-            Token.Number(5.0), Token.String("five"),
+            Token.Int(5),
+            Token.Int(1), Token.String("one"),
+            Token.Int(5), Token.String("five"),
             Token.RightParen
         ]
     ),

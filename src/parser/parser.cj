@@ -84,7 +84,8 @@ public class Parser {
         let token = this.advance()
 
         match (token) {
-            case Token.Number(n) => Number(n)
+            case Token.Int(i) => LispValue.Int(i)
+            case Token.Float(f) => LispValue.Float(f)
             case Token.String(s) => this.parseStringOrInterpolation(s)
             case Token.Boolean(b) => Boolean(b)
             case Token.Symbol(s) => Symbol(s)

@@ -27,7 +27,8 @@ extend Evaluator {
         match (expr) {
             case Nil => expr
             case Boolean(_) => expr
-            case Number(_) => expr
+            case LispValue.Int(_) => expr
+            case LispValue.Float(_) => expr
             case Str(_) => expr
             case Symbol(_) => expr
             case Cons(cell) => this.macroExpandConsCell(cell)
@@ -257,8 +258,14 @@ extend Evaluator {
                 case Boolean(b2) => b1 == b2
                 case _ => false
             }
-            case Number(n1) => match (b) {
-                case Number(n2) => n1 == n2
+            case LispValue.Int(n1) => match (b) {
+                case LispValue.Int(n2) => n1 == n2
+                case LispValue.Float(f) => Float64(n1) == f
+                case _ => false
+            }
+            case LispValue.Float(f1) => match (b) {
+                case LispValue.Int(n) => f1 == Float64(n)
+                case LispValue.Float(f2) => f1 == f2
                 case _ => false
             }
             case Str(s1) => match (b) {

@@ -369,9 +369,14 @@ public enum LispValue <: ToString {
     | Boolean(Bool)
 
     /**
-     * 数字（使用 Float64 支持小数）
+     * 整数
      */
-    | Number(Float64)
+    | Int(Int64)
+
+    /**
+     * 浮点数
+     */
+    | Float(Float64)
 
     /**
      * 字符串（使用 Str 避免与仓颉 String 类型冲突）
@@ -419,7 +424,8 @@ public enum LispValue <: ToString {
         match (this) {
             case Nil => false
             case Boolean(false) => false
-            case Number(0.0) => false
+            case Int(0) => false
+            case Float(0.0) => false
             case _ => true
         }
     }
@@ -435,11 +441,32 @@ public enum LispValue <: ToString {
     }
 
     /**
-     * 判断是否为数字
+     * 判断是否为数字（整数或浮点数）
      */
     public func isNumber(): Bool {
         match (this) {
-            case Number(_) => true
+            case Int(_) => true
+            case Float(_) => true
+            case _ => false
+        }
+    }
+
+    /**
+     * 判断是否为整数
+     */
+    public func isInteger(): Bool {
+        match (this) {
+            case Int(_) => true
+            case _ => false
+        }
+    }
+
+    /**
+     * 判断是否为浮点数
+     */
+    public func isFloat(): Bool {
+        match (this) {
+            case Float(_) => true
             case _ => false
         }
     }
@@ -515,7 +542,8 @@ public enum LispValue <: ToString {
         match (this) {
             case Nil => "nil"
             case Boolean(b) => if (b) { "true" } else { "false" }
-            case Number(n) => n.toString()
+            case Int(i) => i.toString()
+            case Float(f) => f.toString()
             case Str(s) => "\"${s}\""
             case Symbol(s) => s
             case Cons(c) => c.toString()
@@ -532,7 +560,8 @@ public enum LispValue <: ToString {
         match (this) {
             case Nil => Nil
             case Boolean(b) => Boolean(b)
-            case Number(n) => Number(n)
+            case Int(i) => Int(i)
+            case Float(f) => Float(f)
             case Str(s) => Str(s)
             case Symbol(s) => Symbol(s)
             case Cons(cell) => Cons(cell.clone())
@@ -556,6 +585,14 @@ public func isTruthy(value: LispValue): Bool {
 
 public func isNumber(value: LispValue): Bool {
     value.isNumber()
+}
+
+public func isInteger(value: LispValue): Bool {
+    value.isInteger()
+}
+
+public func isFloat(value: LispValue): Bool {
+    value.isFloat()
 }
 
 public func isString(value: LispValue): Bool {
@@ -585,8 +622,12 @@ public func boolValue(b: Bool): LispValue {
     Boolean(b)
 }
 
-public func numberValue(n: Float64): LispValue {
-    Number(n)
+public func intValue(i: Int64): LispValue {
+    LispValue.Int(i)
+}
+
+public func floatValue(f: Float64): LispValue {
+    LispValue.Float(f)
 }
 
 public func stringValue(s: String): LispValue {

@@ -47,7 +47,8 @@ extend Evaluator {
         match (expr) {
             case Nil => Nil
             case Symbol(s) => Symbol(s)
-            case Number(_) => expr
+            case LispValue.Int(_) => expr
+            case LispValue.Float(_) => expr
             case Str(_) => expr
             case Boolean(_) => expr
             case Cons(cell) => this.expandBackquoteCons(cell)

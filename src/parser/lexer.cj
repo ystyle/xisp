@@ -106,6 +106,7 @@ public class Lexer {
      */
     private func readNumber(): Token {
         let start = this.pos
+        var hasDecimalPoint = false
 
         // 处理负号
         if (let Some(r) <- this.peek() && r == r'-') {
@@ -125,6 +126,7 @@ public class Lexer {
         if (let Some(r1) <- this.peek() && r1 == r'.') {
             if (let Some(r2) <- this.peekAhead(1) && r2.isAsciiNumber()) {
                 this.advance()  // 跳过 '.'
+                hasDecimalPoint = true
                 while (let Some(r) <- this.peek() && r.isAsciiNumber()) {
                     this.advance()
                 }
@@ -133,8 +135,16 @@ public class Lexer {
 
         let runeSlice = this.runeArray[start..this.pos]
         let numStr = String(runeSlice)
-        let num = Float64.parse(numStr)
-        Token.Number(num)
+
+        if (hasDecimalPoint) {
+            // 浮点数
+            let num = Float64.parse(numStr)
+            Token.Float(num)
+        } else {
+            // 整数
+            let num = Int64.parse(numStr)
+            Token.Int(num)
+        }
     }
 
     /**

@@ -50,8 +50,8 @@ extend BuiltinFunctions {
                 return Nil
             }
             match (args[0]) {
-                case Cons(cell) => Number(Float64(cell.length()))
-                case _ => Number(0.0)
+                case Cons(cell) => LispValue.Float(Float64(cell.length()))
+                case _ => LispValue.Float(0.0)
             }
         }))
 

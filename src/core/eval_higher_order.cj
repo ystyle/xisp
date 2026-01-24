@@ -102,7 +102,7 @@ extend Evaluator {
                 // 检查是否是值列表（来自管道，已经求值）
                 match (arg) {
                     case Cons(argCell) => match (argCell.car) {
-                        case Number(_) | Str(_) | Boolean(_) | Nil => arg
+                        case LispValue.Int(_) | LispValue.Float(_) | Str(_) | Boolean(_) | Nil => arg
                         case _ => this.eval(arg)
                     }
                     case _ => this.eval(arg)
@@ -148,7 +148,7 @@ extend Evaluator {
                 let arg = cdrCell.car
                 match (arg) {
                     case Cons(argCell) => match (argCell.car) {
-                        case Number(_) | Str(_) | Boolean(_) | Nil => arg
+                        case LispValue.Int(_) | LispValue.Float(_) | Str(_) | Boolean(_) | Nil => arg
                         case _ => this.eval(arg)
                     }
                     case _ => this.eval(arg)
@@ -197,7 +197,7 @@ extend Evaluator {
                 let arg = cdrCell.car
                 match (arg) {
                     case Cons(argCell) => match (argCell.car) {
-                        case Number(_) | Str(_) | Boolean(_) | Nil => arg
+                        case LispValue.Int(_) | LispValue.Float(_) | Str(_) | Boolean(_) | Nil => arg
                         case _ => this.eval(arg)
                     }
                     case _ => this.eval(arg)
@@ -211,7 +211,7 @@ extend Evaluator {
                     let arg = cdr2Cell.car
                     match (arg) {
                         case Cons(argCell) => match (argCell.car) {
-                            case Number(_) | Str(_) | Boolean(_) | Nil => arg
+                            case LispValue.Int(_) | LispValue.Float(_) | Str(_) | Boolean(_) | Nil => arg
                             case _ => this.eval(arg)
                         }
                         case _ => this.eval(arg)

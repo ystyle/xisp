@@ -58,7 +58,8 @@ class BuiltinEdgeTest {
         let expr = Parser.parseSingleFromString("(second (quote (1 2 3)))")
         let result = evaluator.eval(expr)
         match (result) {
-            case Number(n) => @Assert(n == 2.0)
+            case LispValue.Int(i) => @Assert(i == 2)
+            case LispValue.Float(f) => @Assert(f == 2.0)
             case _ => @Fail("second should return second element")
         }
     }
@@ -73,7 +74,8 @@ class BuiltinEdgeTest {
         let expr = Parser.parseSingleFromString("(third (quote (1 2 3 4)))")
         let result = evaluator.eval(expr)
         match (result) {
-            case Number(n) => @Assert(n == 3.0)
+            case LispValue.Int(i) => @Assert(i == 3)
+            case LispValue.Float(f) => @Assert(f == 3.0)
             case _ => @Fail("third should return third element")
         }
     }
@@ -91,7 +93,7 @@ class BuiltinEdgeTest {
         match (result) {
             case Cons(cell) =>
                 println("prepend cell.car: ${cell.car.toString()}")
-                @Assert(cell.car.toString() == "1.000000")
+                @Assert(cell.car.toString() == "1")
             case _ => @Fail("prepend should work like cons")
         }
     }
@@ -109,7 +111,7 @@ class BuiltinEdgeTest {
         match (result) {
             case Cons(cell) =>
                 println("more cell.car: ${cell.car.toString()}")
-                @Assert(cell.car.toString() == "2.000000")
+                @Assert(cell.car.toString() == "2")
             case _ => @Fail("more should work like cdr")
         }
     }
@@ -124,7 +126,8 @@ class BuiltinEdgeTest {
         let expr = Parser.parseSingleFromString("(product (quote (2 3 4)))")
         let result = evaluator.eval(expr)
         match (result) {
-            case Number(n) => @Assert(n == 24.0)  // 2 * 3 * 4
+            case LispValue.Int(i) => @Assert(i == 24)  // 2 * 3 * 4
+            case LispValue.Float(f) => @Assert(f == 24.0)
             case _ => @Fail("product should multiply all elements")
         }
 
@@ -132,7 +135,8 @@ class BuiltinEdgeTest {
         let expr2 = Parser.parseSingleFromString("(product (quote ()))")
         let result2 = evaluator.eval(expr2)
         match (result2) {
-            case Number(n) => @Assert(n == 1.0)  // 空列表返回1
+            case LispValue.Int(i) => @Assert(i == 1)  // 空列表返回1
+            case LispValue.Float(f) => @Assert(f == 1.0)
             case _ => @Fail("product of empty list should be 1")
         }
     }
@@ -154,7 +158,7 @@ class BuiltinEdgeTest {
                 if (let Cons(secondCell) <- cell.cdr) {
                     if (let Cons(thirdCell) <- secondCell.cdr) {
                         println("thirdCell.car: ${thirdCell.car.toString()}")
-                        @Assert(thirdCell.car.toString() == "1.000000")
+                        @Assert(thirdCell.car.toString() == "1")
                     }
                 }
             case _ => @Fail("reverse should reverse the list")
@@ -182,7 +186,8 @@ class BuiltinEdgeTest {
         let expr3 = Parser.parseSingleFromString("(length (range 0 5))")
         let result3 = evaluator.eval(expr3)
         match (result3) {
-            case Number(n) => @Assert(n == 5.0)
+            case LispValue.Int(i) => @Assert(i == 5)
+            case LispValue.Float(f) => @Assert(f == 5.0)
             case _ => @Fail("range 0 5 should have 5 elements")
         }
 
@@ -190,7 +195,8 @@ class BuiltinEdgeTest {
         let expr4 = Parser.parseSingleFromString("(length (range 0 10 2))")
         let result4 = evaluator.eval(expr4)
         match (result4) {
-            case Number(n) => @Assert(n == 5.0)  // 0, 2, 4, 6, 8
+            case LispValue.Int(i) => @Assert(i == 5)  // 0, 2, 4, 6, 8
+            case LispValue.Float(f) => @Assert(f == 5.0)
             case _ => @Fail("range 0 10 2 should have 5 elements")
         }
     }
@@ -205,7 +211,8 @@ class BuiltinEdgeTest {
         let expr = Parser.parseSingleFromString("(sum (quote (1 2 3 4 5)))")
         let result = evaluator.eval(expr)
         match (result) {
-            case Number(n) => @Assert(n == 15.0)
+            case LispValue.Int(i) => @Assert(i == 15)
+            case LispValue.Float(f) => @Assert(f == 15.0)
             case _ => @Fail("sum should add all elements")
         }
 
@@ -213,7 +220,8 @@ class BuiltinEdgeTest {
         let expr2 = Parser.parseSingleFromString("(sum (quote ()))")
         let result2 = evaluator.eval(expr2)
         match (result2) {
-            case Number(n) => @Assert(n == 0.0)
+            case LispValue.Int(i) => @Assert(i == 0)
+            case LispValue.Float(f) => @Assert(f == 0.0)
             case _ => @Fail("sum of empty list should be 0")
         }
     }
@@ -228,7 +236,8 @@ class BuiltinEdgeTest {
         let expr = Parser.parseSingleFromString("(max (quote (1 5 3 9 2)))")
         let result = evaluator.eval(expr)
         match (result) {
-            case Number(n) => @Assert(n == 9.0)
+            case LispValue.Int(i) => @Assert(i == 9)
+            case LispValue.Float(f) => @Assert(f == 9.0)
             case _ => @Fail("max should return maximum value")
         }
 
@@ -236,7 +245,8 @@ class BuiltinEdgeTest {
         let expr2 = Parser.parseSingleFromString("(max (quote (7)))")
         let result2 = evaluator.eval(expr2)
         match (result2) {
-            case Number(n) => @Assert(n == 7.0)
+            case LispValue.Int(i) => @Assert(i == 7)
+            case LispValue.Float(f) => @Assert(f == 7.0)
             case _ => @Fail("max of single element should return that element")
         }
     }
@@ -251,7 +261,8 @@ class BuiltinEdgeTest {
         let expr = Parser.parseSingleFromString("(min (quote (1 5 3 9 2)))")
         let result = evaluator.eval(expr)
         match (result) {
-            case Number(n) => @Assert(n == 1.0)
+            case LispValue.Int(i) => @Assert(i == 1)
+            case LispValue.Float(f) => @Assert(f == 1.0)
             case _ => @Fail("min should return minimum value")
         }
 
@@ -259,7 +270,8 @@ class BuiltinEdgeTest {
         let expr2 = Parser.parseSingleFromString("(min (quote (7)))")
         let result2 = evaluator.eval(expr2)
         match (result2) {
-            case Number(n) => @Assert(n == 7.0)
+            case LispValue.Int(i) => @Assert(i == 7)
+            case LispValue.Float(f) => @Assert(f == 7.0)
             case _ => @Fail("min of single element should return that element")
         }
     }
@@ -329,7 +341,8 @@ class BuiltinEdgeTest {
         let result1 = evaluator.eval(expr1)
         println("mod 10 3 result: ${result1.toString()}")
         match (result1) {
-            case Number(n) => @Assert(n == 1.0)
+            case LispValue.Int(i) => @Assert(i == 1)
+            case LispValue.Float(f) => @Assert(f == 1.0)
             case _ => @Fail("mod 10 3 should be 1")
         }
 
@@ -338,7 +351,8 @@ class BuiltinEdgeTest {
         let result2 = evaluator.eval(expr2)
         println("mod -10 3 result: ${result2.toString()}")
         match (result2) {
-            case Number(n) => @Assert(n == -1.0)  // fmod 风格：-10 = 3*(-3) - 1
+            case LispValue.Int(i) => @Assert(i == -1)  // fmod 风格：-10 = 3*(-3) - 1
+            case LispValue.Float(f) => @Assert(f == -1.0)
             case _ => @Fail("mod -10 3 should be -1")
         }
 
