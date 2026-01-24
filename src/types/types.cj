@@ -65,34 +65,16 @@ public open class Environment {
      * 查找变量（在当前环境和所有父环境中查找）
      */
     public func lookup(name: String): LispValue {
-        // DEBUG: 输出查找信息
-        if (name.contains("stats") || name.contains("average")) {
-            println("[DEBUG] lookup: searching for '${name}'")
-            println("[DEBUG]   current env has ${this.bindings.size} bindings")
-        }
-
         if (this.bindings.contains(name)) {
             let opt = this.bindings.get(name)
             match (opt) {
-                case Some(v) =>
-                    if (name.contains("stats") || name.contains("average")) {
-                        println("[DEBUG]   found in current env: ${v.toString()}")
-                    }
-                    v
+                case Some(v) => v
                 case None => Nil
             }
         } else {
             match (this.parent) {
-                case Some(env) =>
-                    if (name.contains("stats") || name.contains("average")) {
-                        println("[DEBUG]   not in current env, searching parent...")
-                    }
-                    env.lookup(name)
-                case None =>
-                    if (name.contains("stats") || name.contains("average")) {
-                        println("[DEBUG]   not found in any env!")
-                    }
-                    Nil
+                case Some(env) => env.lookup(name)
+                case None => Nil
             }
         }
     }
