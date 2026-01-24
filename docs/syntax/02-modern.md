@@ -613,16 +613,16 @@ Xisp 支持现代化的解构绑定语法，使用向量 `[]` 和 `&` 符号，�
 
 ```lisp
 (define (process-result result)
-  (let [[status & data] result]
-    (if (= status :ok)
-        (println "Success:" data)
-        (println "Error:" data))))
+  (let [[status msg] result]
+    (if (= status 1)
+        (println "Success:" msg)
+        (println "Error:" msg))))
 
-(process-result '(:ok "Data loaded"))
-; => Success: (Data loaded)
+(process-result '(1 "Data loaded"))
+; => Success: Data loaded
 
-(process-result '(:error "Connection failed"))
-; => Error: (Connection failed)
+(process-result '(0 "Connection failed"))
+; => Error: Connection failed
 ```
 
 ### 传统语法兼容
