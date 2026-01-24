@@ -7,5 +7,6 @@ xisp
 test.sh
 *.cj.macrocall
 temp-test
+temp-docs
 *.gcda
 *.gcno
