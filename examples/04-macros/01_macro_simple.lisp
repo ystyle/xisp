@@ -24,13 +24,13 @@
 (println "测试 1: (when-simple 1 100)")
 (define r1 (when-simple 1 100))
 (println #"结果: #{r1}")
-(println "期望: 100.000000")
+(println "期望: 100")
 (println "")
 
 (println "测试 2: (when-simple 0 100)")
 (define r2 (when-simple 0 100))
 (println #"结果: #{r2}")
-(println "期望: 0.000000 (nil)")
+(println "期望: 0 (nil)")
 (println "")
 
 ;; ======================================
@@ -52,7 +52,7 @@
 (println #"incf counter => #{counter}")
 (incf counter)
 (println #"incf counter => #{counter}")
-(println "期望: 1.000000, 2.000000")
+(println "期望: 1, 2")
 (println "")
 
 ;; ======================================
@@ -70,7 +70,7 @@
 (println "测试: (negate 5)")
 (define r3 (negate 5))
 (println #"结果: #{r3}")
-(println "期望: -5.000000")
+(println "期望: -5")
 (println "")
 
 ;; ======================================

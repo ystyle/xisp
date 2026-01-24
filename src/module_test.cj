@@ -464,8 +464,8 @@ class ModuleTest {
         // 获取 PackageParser
         match (evaluator.moduleParser) {
             case Some(parser) =>
-                // 使用真实的第三方包（examples/ystyle/zlog）
-                let packagePath = "./examples/ystyle/zlog"
+                // 使用真实的第三方包（lisp-tests/ystyle/zlog）
+                let packagePath = "./lisp-tests/ystyle/zlog"
 
                 // 解析
                 match (parser.parse(packagePath)) {
@@ -501,8 +501,8 @@ class ModuleTest {
 
         match (evaluator.moduleParser) {
             case Some(parser) =>
-                // 测试多级目录包：examples/ystyle/utils（包含 string 子目录）
-                let packagePath = "./examples/ystyle/utils"
+                // 测试多级目录包：lisp-tests/ystyle/utils（包含 string 子目录）
+                let packagePath = "./lisp-tests/ystyle/utils"
 
                 match (parser.parse(packagePath)) {
                     case Some(packageInfo) =>
@@ -537,6 +537,7 @@ class ModuleTest {
 
         match (evaluator.moduleRegistry) {
             case Some(registry) =>
+                // 现在应该可以找到组织了
                 match (evaluator.moduleParser) {
                     case Some(parser) =>
                         let resolver = DependencyResolver(registry, parser)
@@ -619,8 +620,8 @@ class ModuleTest {
         let evaluator = Evaluator(env)
         evaluator.initModuleSystem()
 
-        // 设置当前文件路径（模拟在 examples/ystyle/test.lisp 中）
-        evaluator.currentFilePath = Some("./examples/ystyle/zlog/core.lisp")
+        // 设置当前文件路径（模拟在 lisp-tests/ystyle/test.lisp 中）
+        evaluator.currentFilePath = Some("./lisp-tests/ystyle/zlog/core.lisp")
 
         // 测试相对路径解析：./utils.string -> 应该找到 examples/ystyle/utils/string
         match (evaluator.currentFilePath) {
@@ -642,8 +643,8 @@ class ModuleTest {
         let evaluator = Evaluator(env)
         evaluator.initModuleSystem()
 
-        // 设置当前文件路径（模拟在 examples/ystyle/zlog/core.lisp 中）
-        evaluator.currentFilePath = Some("./examples/ystyle/zlog/core.lisp")
+        // 设置当前文件路径（模拟在 lisp-tests/ystyle/zlog/core.lisp 中）
+        evaluator.currentFilePath = Some("./lisp-tests/ystyle/zlog/core.lisp")
 
         match (evaluator.currentFilePath) {
             case Some(filePath) =>
@@ -665,8 +666,8 @@ class ModuleTest {
         let evaluator = Evaluator(env)
         evaluator.initModuleSystem()
 
-        // 测试在 examples/ystyle/zlog 目录下查找 module.lisp
-        let testPath = "./examples/ystyle/zlog"
+        // 测试在 lisp-tests/ystyle/zlog 目录下查找 module.lisp
+        let testPath = "./lisp-tests/ystyle/zlog"
         let pathObj = Path(testPath)
 
         if (exists(testPath)) {
@@ -688,11 +689,11 @@ class ModuleTest {
         match (evaluator.moduleRegistry) {
             case Some(registry) =>
                 // 添加测试路径
-                registry.addSearchPath("./examples")
+                registry.addSearchPath("./lisp-tests")
 
-                // 测试转换：examples/ystyle/zlog -> ystyle::zlog
+                // 测试转换：lisp-tests/ystyle/zlog -> ystyle::zlog
                 // 注意：extractPackageDir 会去掉最后一级，所以 zlog 的目录名就是 zlog
-                let modulePath = ModulePathUtils.moduleToPath("ystyle::zlog", "./examples")
+                let modulePath = ModulePathUtils.moduleToPath("ystyle::zlog", "./lisp-tests")
                 @Assert(modulePath.contains("ystyle"))
                 @Assert(modulePath.contains("zlog"))
             case None => @Fail("ModuleRegistry not initialized")
@@ -710,7 +711,7 @@ class ModuleTest {
         evaluator.initModuleSystem()
 
         // 设置当前文件路径
-        evaluator.currentFilePath = Some("./examples/ystyle/zlog/core.lisp")
+        evaluator.currentFilePath = Some("./lisp-tests/ystyle/zlog/core.lisp")
 
         // 测试相对路径导入语法解析（不测试实际加载）
         // 测试字符串形式的相对路径

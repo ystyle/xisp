@@ -25,5 +25,5 @@
   (match lst
     () 0
     (head & tail) (+ 1 (my-length tail))))
-(define r4 (my-length (quote (1 2 3 4 5))))
+(define r4 (my-length [1 2 3 4 5]))
 (println r4)

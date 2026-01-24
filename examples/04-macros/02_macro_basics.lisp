@@ -48,7 +48,7 @@
 (println "测试: (double 5)")
 (define r1 (double 5))
 (println #"结果: #{r1}")
-(println "期望: 10.000000")
+(println "期望: 10")
 (println "")
 
 ;; ======================================

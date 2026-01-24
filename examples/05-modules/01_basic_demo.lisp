@@ -19,4 +19,4 @@
 (export demo-result)
 (define demo-result
   (lambda ()
-    (str "Module system demo completed!")))
+    (str "Module syste  demo completed!")))
