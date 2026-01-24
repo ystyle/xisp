@@ -7,7 +7,7 @@
 ### 5 分钟快速体验
 
 ```bash
-./xisp examples/01-basics/01_quick_start.lisp
+./target/release/bin/ystyle::xisp.cli examples/01-basics/01_quick_start.lisp
 ```
 
 你将快速了解 Xisp 的核心特性：
@@ -29,11 +29,11 @@
 │  🟢 初级 (35分钟)                                            │
 │  └─ 01-basics → 02-intermediate                              │
 │                                                              │
-│  🟡 有经验 (65分钟)                                           │
+│  🟡 中级 (85分钟)                                            │
 │  └─ 03-advanced → 04-macros → 05-modules                     │
 │                                                              │
-│  🔴 专家 (45分钟)                                             │
-│  └─ 06-interop → 07-real-world                               │
+│  🔴 高级 (50分钟)                                             │
+│  └─ 06-interop → legacy                                  │
 │                                                              │
 └─────────────────────────────────────────────────────────────┘
 ```
@@ -58,8 +58,9 @@
 - 函数定义与调用
 - 条件判断与递归
 - 高阶函数入门
+- 文件 I/O 操作
 
-→ [详细说明](./01-basics/README.md)
+[详细说明 →](./01-basics/README.md)
 
 ---
 
@@ -82,7 +83,7 @@
 - 优雅的守卫条件
 - 现代化语法特性
 
-→ [详细说明](./02-intermediate/README.md)
+[详细说明 →](./02-intermediate/README.md)
 
 ---
 
@@ -94,8 +95,8 @@
 
 | 文件 | 主题 | 时间 |
 |------|------|------|
-| 01_closures.lisp | 闭包与函数组合 | 20分钟 |
-| 02_higher_order.lisp | 高阶函数深度 | 15分钟 |
+| [01_closures.lisp](./03-advanced/01_closures.lisp) | 闭包与函数组合 | 20分钟 |
+| [02_higher_order.lisp](./03-advanced/02_higher_order.lisp) | 高阶函数深度 | 15分钟 |
 | [03_thread_macro.lisp](./03-advanced/03_thread_macro.lisp) | 管道操作符 | 10分钟 |
 | [04_apply_demo.lisp](./03-advanced/04_apply_demo.lisp) | Apply 函数 | 5分钟 |
 
@@ -105,7 +106,7 @@
 - 管道式编程
 - 元编程基础
 
-→ [详细说明](./03-advanced/README.md)
+[详细说明 →](./03-advanced/README.md)
 
 ---
 
@@ -134,7 +135,7 @@
 - 创建 DSL
 - 编译时计算
 
-→ [详细说明](./04-macros/README.md)
+[详细说明 →](./04-macros/README.md)
 
 ---
 
@@ -155,7 +156,7 @@
 - 项目结构组织
 - 依赖管理
 
-→ [详细说明](./05-modules/README.md)
+[详细说明 →](./05-modules/README.md)
 
 ---
 
@@ -167,8 +168,8 @@
 
 | 文件 | 主题 | 时间 |
 |------|------|------|
-| 01_cangjie_bridge.lisp | 仓颉标准库调用 | 15分钟 |
-| 02_file_io.lisp | 文件 I/O | 10分钟 |
+| [01_cangjie_bridge.lisp](./06-interop/01_cangjie_bridge.lisp) | 仓颉标准库调用 | 15分钟 |
+| [02_file_io.lisp](./06-interop/02_file_io.lisp) | 文件 I/O 实践 | 10分钟 |
 
 **学习内容**：
 - 调用仓颉标准库
@@ -176,39 +177,26 @@
 - 目录遍历
 - 错误处理
 
-→ [详细说明](./06-interop/README.md)
+[详细说明 →](./06-interop/README.md)
 
 ---
 
-### 07-real-world - 实际应用 🔴
+### legacy - 特色功能 ✨
 
-**适合人群**：准备开发实际项目的开发者
-**学习时间**：45 分钟
-**前置知识**：完成 05-modules
+**特色功能**：中文编程和 Unicode 支持
 
-| 目录/文件 | 主题 | 说明 |
-|----------|------|------|
-| [ystyle/](./07-real-world/ystyle/) | 第三方库 | zlog, utils |
-| 01_logger.lisp | 日志使用示例 | 使用 zlog |
-| 02_data_processing.lisp | 数据处理 | 真实场景 |
+| 文件 | 说明 | 功能 |
+|------|------|------|
+| [chinese_demo.lisp](./legacy/chinese_demo.lisp) | 中文编程演示 | 完整的中文关键字支持 |
 
-**应用场景**：
-- 日志记录
-- 数据处理
-- 文件操作
-- 脚本自动化
+**学习内容**：
+- 中文关键字（定义、过程、打印等）
+- Unicode 变量名（中文、日文、韩文等）
+- 中文编程最佳实践
 
-→ [详细说明](./07-real-world/README.md)
+[详细说明 →](./legacy/README.md)
 
----
-
-### legacy - 旧版示例 ⚠️
-
-保留用于向后兼容和参考。
-
-**注意**：这些示例可能使用过时语法，建议参考新分类目录。
-
-→ [详细说明](./legacy/README.md)
+**📖 相关文档**：[Unicode 支持完整文档](../docs/unicode/chinese_support.md)
 
 ---
 
@@ -217,19 +205,19 @@
 ### 运行单个文件
 
 ```bash
-./xisp examples/01-basics/01_quick_start.lisp
+./target/release/bin/ystyle::xisp.cli examples/01-basics/01_quick_start.lisp
 ```
 
 ### REPL 交互式学习
 
 ```bash
-./xisp
+./target/release/bin/ystyle::xisp.cli
 ```
 
-在 REPL 中加载文件：
+在 REPL 中导入并运行文件：
 
 ```lisp
-xisp> ,load examples/01-basics/02_tutorial.lisp
+xisp> (import "examples/01-basics/02_tutorial.lisp")
 ```
 
 ### 运行指定目录的所有示例
@@ -237,7 +225,7 @@ xisp> ,load examples/01-basics/02_tutorial.lisp
 ```bash
 # 运行所有基础教程
 for file in examples/01-basics/*.lisp; do
-    ./xisp "$file"
+    ./target/release/bin/ystyle::xisp.cli "$file"
 done
 ```
 
@@ -248,6 +236,7 @@ done
 - 🟢 **初级**：适合初学者，无前置知识要求
 - 🟡 **中级**：需要掌握基础语法
 - 🔴 **高级**：需要深入理解 Lisp 和函数式编程
+- ✨ **特色**：特殊功能（中文编程等）
 
 ---
 
@@ -255,14 +244,14 @@ done
 
 | 类别 | 示例数量 | 总时长 |
 |------|---------|--------|
-| 基础教程 | 2 | 35分钟 |
+| 基础教程 | 3 | 35分钟 |
 | 中级特性 | 4 | 55分钟 |
 | 高级特性 | 4 | 50分钟 |
 | 宏系统 | 3 | 65分钟 |
 | 模块系统 | 2 | 30分钟 |
 | 互操作 | 2 | 25分钟 |
-| 实际应用 | 3 | 45分钟 |
-| **总计** | **20+** | **~5小时** |
+| 特色功能 | 1 | - |
+| **总计** | **19** | **~4.5小时** |
 
 ---
 
@@ -279,7 +268,7 @@ done
 
 **A**:
 - 如果熟悉 Common Lisp：直接看 `02-intermediate` 和 `04-macros`
-- 如果熟悉 Clojure：重点关注 `03-advanced` 和 `07-real-world`
+- 如果熟悉 Clojure：重点关注 `03-advanced` 和 `05-modules`
 - 如果熟悉 Scheme：查看 `05-modules` 和 `06-interop`
 
 ### Q: 示例文件中的代码可以复制使用吗？
@@ -294,7 +283,7 @@ done
 **A**:
 1. 在 REPL 中逐步运行
 2. 使用 `println` 查看中间结果
-3. 使用 `,load` 加载文件
+3. 使用 `(import "文件路径")` 导入文件
 4. 参考错误提示修改
 
 ---
@@ -305,10 +294,11 @@ done
 
 - [项目 README](../README.md) - 项目概述
 - [任务追踪](../task.md) - 开发计划
-- [核心设计](../docs/core.md) - 核心功能说明
+- [核心功能](../docs/core.md) - 核心功能说明
 - [设计文档](../docs/design.md) - 详细设计
 - [宏系统语法](../docs/syntax/macros.md) - 宏语法手册
 - [模块系统](../docs/modules.md) - 模块系统文档
+- [集成文档](../docs/integration/) - 桥接和集成
 
 ### 仓颉示例程序
 
@@ -334,26 +324,6 @@ cjpm build
 - 提交 Issue
 - 发起 Pull Request
 - 在讨论区交流
-
----
-
-## 📝 更新日志
-
-### v0.2.0 (2026-01-24)
-
-- ✨ 重新组织示例目录结构
-- ✨ 添加难度标识和学习时间
-- ✨ 创建学习路线图
-- ✨ 拆分大文件为主题分类
-- ✨ 新增快速体验示例
-- ✨ 改进 README 文档
-
-### v0.1.0 (2026-01-23)
-
-- 🎉 初始版本
-- 📚 基础教程
-- 📚 宏系统示例
-- 📚 现代语法特性
 
 ---
 
