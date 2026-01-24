@@ -115,6 +115,7 @@
 **实现**: Reader层将插值展开为`string-append`调用。
 
 #### **5. 异步支持 (spawn + Future<T>)**
+>尚未实现
 ```lisp
 ;; 创建异步任务
 (let [future (spawn (http-get url))]
@@ -156,118 +157,242 @@
 
 ---
 
-## 三、标准库与仓颉对接
+## 三、模块系统
 
-### 3.1 命名空间映射
+Xisp 提供了完整的模块系统，支持代码组织、命名空间隔离和依赖管理。
+
+### 3.1 核心概念
+
+**术语对照**：
+- **模块**：有 `module.lisp` 的目录（类似仓颉的包）
+- **包**：模块内的子目录组织
+- **组织**：模块的命名空间前缀（类似仓颉的包名）
+
+**导入语法**：
 ```lisp
-;; 仓颉模块 → Lisp命名空间
-std.io          → cangjie:io
-std.fs          → cangjie:fs
-std.net         → cangjie:net
-std.sync        → cangjie:sync   (spawn, Future<T>, Thread)
-std.collection  → cangjie:collection (内部使用，Lisp用户用Cons)
+;; 绝对导入 - 导入外部模块
+(import ystyle::log)           ; 导入 ystyle 组织的 log 模块
+(import pkg1)                  ; 从搜索路径导入 pkg1 模块
+
+;; 相对导入 - 导入项目内文件/包
+(import "./utils.lisp")        ; 导入文件（无前缀）
+(import "./helpers")           ; 导入目录包（有前缀）
 ```
 
-### 3.2 常用函数示例
+**分隔符规则**：
+- `.`：用于模块名/相对路径的层级分隔
+- `::`：用于绝对导入时的组织和模块名分隔
+
+### 3.2 基本示例
+
 ```lisp
-;; IO模块
-(cangjie:io:println "Hello")      ; 打印
-(cangjie:io:read-line)            ; 读取输入
+;; 导入第三方模块（绝对导入）
+(import ystyle::log)
+(log.init "myapp")             ; 使用 log. 前缀
 
-;; 文件系统
-(cangjie:fs:read-to-string "config.json")  ; 读文件
-(cangjie:fs:exists? "/tmp")      ; 检查存在
+;; 导入项目内包（相对导入）- 有前缀
+(import "./helpers")
+(helpers.validateEmail "test@example.com")  ; 使用 helpers. 前缀
 
-;; HTTP客户端（生产级）
-(let [resp (cangjie:net:http-get "https://api.github.com/users")]
-  (println (cangjie:io:read-to-end resp)))
+;; 导入项目内文件（相对导入）- 无前缀
+(import "./utils.lisp")
+(processData "test")           ; 直接使用，无前缀
 ```
 
-**实现机制**: 解释器启动时自动扫描仓颉`std`模块，通过FFI动态绑定函数指针。
+### 3.3 module.lisp 格式
+
+每个模块目录下必须有 `module.lisp` 文件：
+
+```lisp
+(module myapp
+  (version "1.0.0")
+  (description "My application")
+  (author "Me")
+
+  (dependencies
+    (ystyle::log "0.2.0")))    ; 依赖声明
+```
+
+**详细文档**：完整的模块系统说明请参见 **[docs/modules.md](modules.md)**，包括：
+- 目录结构设计
+- 符号导出与导入
+- 版本管理
+- 错误处理
+- 最佳实践
+- 完整示例项目
 
 ---
 
-## 四、三方库管理（cjlpm）- 待定
+## 四、仓颉桥接与互操作
 
-### 4.1 项目结构
-```
-my-app/
-├── cjlpm.toml          ; 依赖配置
-├── cjlpm.lock          ; 版本锁定
-├── main.cj             ; 仓颉主程序
-└── lisp-src/
-    ├── app.lisp        ; 入口脚本
-    └── libs/
-        ├── utils.lisp  ; 本地库
-        └── http.lisp   ; 三方库
+Xisp 提供了完整的桥接层 API，实现 Lisp 与仓颉的双向互操作。
+
+### 4.1 创建解释器
+
+```cangjie
+import ystyle::xisp.*
+
+let interpreter = LispInterpreter()
 ```
 
-### 4.2 配置文件示例
-```toml
-[package]
-name = "my-lisp-app"
-version = "0.1.0"
+创建解释器时会自动：
+- 初始化 Lisp 环境
+- 注册所有内置函数
+- 注册标准桥接函数（std.io, std.fs）
 
-[lisp-dependencies]
-json = { git = "https://github.com/cj-lisp/json", tag = "v1.0" }
-http = { path = "../local/http" }
+### 4.2 仓颉调用 Lisp
 
-[cangjie-dependencies]
-std = "0.53.4"
+在仓颉代码中求值 Lisp 表达式：
+
+```cangjie
+// 求值单个表达式
+let result = interpreter.eval("(+ 1 2 3)")  // => Number(6.0)
+
+// 求值多个表达式
+let code = "
+    (define x 10)
+    (define y 20)
+    (+ x y)
+"
+let result2 = interpreter.evalMultiple(code)  // => Number(30.0)
 ```
 
-### 4.3 加载机制
+### 4.3 注册自定义函数
+
+在仓颉中注册函数到 Lisp 环境：
+
+```cangjie
+// 注册不带命名空间的函数
+interpreter.registerBridgeFunction("square", { args =>
+    if (args.size > 0 && let Number(n) <- args[0]) {
+        Number(n * n)
+    } else {
+        Str("Error: argument must be a number")
+    }
+})
+
+// 注册带命名空间的函数
+interpreter.registerBridgeFunctionWithNS("mycalc", "add", { args =>
+    if (args.size >= 2 && let Number(a) <- args[0] && let Number(b) <- args[1]) {
+        Number(a + b)
+    } else {
+        Str("Error: requires 2 numbers")
+    }
+})
+```
+
+然后在 Lisp 中使用：
+
 ```lisp
-;; 在Lisp中
-(import "json")            ; 从cjlpm缓存加载
-(import "http")            ; 加载HTTP库
-(load-file "src/utils.lisp")  ; 加载本地文件
-(eval-string "(+ 1 2)")    ; 动态求值
+;; 调用无命名空间函数
+(square 5)  ; => 25.0
+
+;; 调用带命名空间的函数
+(mycalc::add 3 4)  ; => 7.0
 ```
+
+### 4.4 类型转换
+
+所有仓颉基本类型都实现了 `LispConvertible` 接口：
+
+```cangjie
+// 数值类型
+let num: Int64 = 42
+let lispNum = num.toLisp()  // Number(42.0)
+
+// 字符串
+let str: String = "Hello"
+let lispStr = str.toLisp()  // Str("Hello")
+
+// ArrayList
+let numbers = ArrayList<Int64>()
+numbers.append(1)
+numbers.append(2)
+let lispList = numbers.toLisp()  // (1.0 2.0)
+
+// HashMap
+let map = HashMap<String, Int64>()
+map["a"] = 1
+map["b"] = 2
+let lispMap = map.toLisp()  // (("a" 1.0) ("b" 2.0))
+```
+
+### 4.5 标准库桥接
+
+Xisp 已实现 std.io 和 std.fs 的桥接函数：
+
+```lisp
+;; 文件操作
+(cangjie::write-file "config.txt" "name=Xisp\nversion=0.1.0")
+(define config (cangjie::read-file "config.txt"))
+(cangjie::append-file "log.txt" "\nNew entry")
+
+;; 文件系统操作
+(cangjie::exists? "config.txt")      ; => true
+(cangjie::file? "config.txt")        ; => true
+(cangjie::directory? "/tmp")         ; => true
+(cangjie::list-dir ".")              ; => ("file1.txt" "file2.cj" ...)
+```
+
+**详细文档**：完整的桥接 API 文档请参见 **[docs/integration/bridge.md](integration/bridge.md)**，包括：
+- LispInterpreter 完整 API
+- LispConvertible 接口
+- TypeConverter 工具类
+- 错误处理最佳实践
+- 完整使用示例
 
 ---
 
 ## 五、核心功能实现
 
-### 5.1 双向互调用
+### 5.1 沙箱系统
 
-#### **仓颉 → Lisp**
+Xisp 提供了完整的安全沙箱系统，可以安全地执行不受信任的 Lisp 代码。
+
+#### **核心功能**
+
 ```cangjie
-let lisp = LispInterpreter()
-lisp.evalString("(define (add a b) (+ a b))")
-let result = lisp.call("add", 10, 20)  // Int64: 30
+import ystyle::xisp.*
+
+// 严格沙箱模式（推荐用于不受信任的代码）
+let interpreter = LispInterpreter([
+    withSandbox(),        // 栈深度 500，超时 30s
+    withStdIO(),          // 受限的文件 I/O
+    withQuietMode()       // 不显示 Banner
+])
+
+// 危险操作将被阻止
+interpreter.eval("(cangjie::write-file \"/etc/passwd\" \"hack\")")
+// 返回: "Error: File write denied: /etc/passwd"
 ```
 
-#### **Lisp → 仓颉**
-```lisp
-// 仓颉端：注册函数到Lisp环境
-lisp.register("http-get", { url: String =>
-    let client = HttpClient()
-    client.get(url).body
-})
+#### **沙箱选项**
 
-// Lisp端调用
-(http-get "https://api.example.com/data")
+```cangjie
+// 自定义配置
+let interpreter = LispInterpreter([
+    // 栈深度限制
+    withMaxStackDepth(200),
+
+    // 执行超时
+    withTimeout(Some(Duration.second * 60)),
+
+    // 函数黑名单
+    withBlockedFunctions(["eval", "apply", "load"]),
+
+    // 路径白名单
+    withAllowedPaths(["/tmp/sandbox/"]),
+    withStdIO()
+])
 ```
 
-### 5.2 `eval`系统与沙箱
-
-#### **基础eval**
-```lisp
-(eval '(+ 1 2 3))          ; 表达式求值
-(eval-string "(def! x 100)") ; 字符串求值
-```
-
-#### **安全沙箱**
-```lisp
-;; 受限环境执行
-(safe-eval code :allow '(+ - * /) :deny '(file-delete system-call))
-
-;; 超时控制
-(eval-with-timeout code "5s")
-```
-
-**实现**: 通过自定义`Env`类限制符号查找，结合仓颉的 `Future<T>.get(timeout)` 超时机制。
+**详细文档**：完整的沙箱系统文档请参见 **[docs/integration/sandbox.md](integration/sandbox.md)**，包括：
+- 完整的选项列表
+- 栈深度限制
+- 执行超时控制
+- 函数访问控制
+- 文件访问控制
+- 使用示例和最佳实践
 
 ---
 
@@ -333,15 +458,15 @@ class LispParser {
 - [ ] 对接`std.io`/`std.fs`
 
 ### **阶段2：功能完备（3周）**
-- [ ] `let`解构绑定
-- [ ] `->`管道操作符
-- [ ] `eval-string`与沙箱
-- [ ] 基础`cjlpm`包管理
+- [x] `let`解构绑定
+- [x] `->`管道操作符
+- [x] `eval-string`与沙箱
+- [x] 模块系统（import/export）
 
 ### **阶段3：现代化（2周）**
-- [ ] 向量/哈希字面量`[]`/`{}`
-- [ ] 字符串插值`#"..."`
-- [ ] 模式匹配`match`
+- [x] 向量/哈希字面量`[]`/`{}`
+- [x] 字符串插值`#"..."`
+- [x] 模式匹配`match`
 - [ ] `spawn`异步语法（Future<T>）
 
 ### **阶段4：生产级（持续）**
