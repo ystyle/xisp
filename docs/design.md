@@ -41,7 +41,7 @@
 | `cadr` | `second` | `(second '(a b c))` → `b` | 第2个元素 |
 | `caddr` | `third` | `(third '(a b c))` → `c` | 第3个元素 |
 | `cons` | `prepend` | `(prepend 1 '(2 3))` → `(1 2 3)` | 前缀添加 |
-| `cond` | `match` | `(match lst [[a b] -> a])` | 模式匹配（扩展） |
+| `cond` | `condb`/`match` | `(condb test1 expr1 test2 expr2)` | 条件表达式/模式匹配 |
 | `progn` | `begin` | `(begin (println 1) 2)` | 顺序执行 |
 
 

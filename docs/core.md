@@ -32,10 +32,10 @@ nil          ; 空值
 
 ;; 3. 条件判断
 (if condition then-expr else-expr)
-(cond 
-  [test1 expr1]
-  [test2 expr2]
-  [else default])
+(condb
+  test1 expr1
+  test2 expr2
+  else default)
 
 ;; 4. 引用与求值
 (quote x)   ; 或 'x - 不求值
@@ -48,7 +48,7 @@ nil          ; 空值
   expr3)
 
 ;; 6. 局部绑定
-(let ([x 1] [y 2])
+(let ((x 1) (y 2))
   (+ x y))
 
 ;; 7. 函数应用
@@ -322,12 +322,12 @@ fn eval_if(&mut self, args: LispValue, env: &Environment) {
 
 ;; 测试3：闭包
 (define (make-counter)
-  (let ([count 0])
+  (let ((count 0))
     (lambda ()
       (set! count (+ count 1))
       count)))
 
-(let ([c (make-counter)])
+(let ((c (make-counter)))
   (c)  ; => 1
   (c)) ; => 2
 
