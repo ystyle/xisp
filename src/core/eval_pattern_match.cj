@@ -58,7 +58,8 @@ extend Evaluator {
         match (elem) {
             case Symbol(_) => true
             case Cons(_) => true
-            case Number(_) => true  // 数字也算作模式（用于列表模式中的常量）
+            case LispValue.Int(_) => true  // 数字也算作模式（用于列表模式中的常量）
+            case LispValue.Float(_) => true  // 数字也算作模式（用于列表模式中的常量）
             case _ => false  // 其他（字符串、布尔值）不是模式
         }
     }
@@ -228,7 +229,18 @@ extend Evaluator {
                         let isMatch = match (clause) {
                             case Symbol("_") => true  // 通配符
                             case Symbol(s) => true     // 变量符号，总是匹配
-                            case Number(n) => if (let Number(v) <- value) { v == n } else { false }
+                            case LispValue.Int(n) =>
+                                match (value) {
+                                    case LispValue.Int(v) => v == n
+                                    case LispValue.Float(f) => Float64(n) == f
+                                    case _ => false
+                                }
+                            case LispValue.Float(f) =>
+                                match (value) {
+                                    case LispValue.Int(i) => f == Float64(i)
+                                    case LispValue.Float(v) => f == v
+                                    case _ => false
+                                }
                             case Str(s) => if (let Str(v) <- value) { v == s } else { false }
                             case Boolean(b) => if (let Boolean(v) <- value) { v == b } else { false }
                             case Nil => value.isNil()
@@ -318,8 +330,18 @@ extend Evaluator {
             case Symbol("_") => Some(env)
 
             // 常量匹配
-            case Number(n) =>
-                if (let Number(v) <- value && v == n) { Some(env) } else { None<Environment> }
+            case LispValue.Int(n) =>
+                match (value) {
+                    case LispValue.Int(v) => if (v == n) { Some(env) } else { None<Environment> }
+                    case LispValue.Float(f) => if (f == Float64(n)) { Some(env) } else { None<Environment> }
+                    case _ => None<Environment>
+                }
+            case LispValue.Float(f) =>
+                match (value) {
+                    case LispValue.Int(i) => if (Float64(i) == f) { Some(env) } else { None<Environment> }
+                    case LispValue.Float(v) => if (v == f) { Some(env) } else { None<Environment> }
+                    case _ => None<Environment>
+                }
             case Str(s) =>
                 if (let Str(v) <- value && v == s) { Some(env) } else { None<Environment> }
             case Boolean(b) =>
@@ -481,14 +503,36 @@ extend Evaluator {
     private func matchPatternValue(value: LispValue, pattern: LispValue): Bool {
         match (pattern) {
             case Symbol("_") => true
-            case Number(n) => if (let Number(v) <- value) { v == n } else { false }
+            case LispValue.Int(n) =>
+                match (value) {
+                    case LispValue.Int(v) => v == n
+                    case LispValue.Float(f) => f == Float64(n)
+                    case _ => false
+                }
+            case LispValue.Float(f) =>
+                match (value) {
+                    case LispValue.Int(i) => Float64(i) == f
+                    case LispValue.Float(v) => v == f
+                    case _ => false
+                }
             case Str(s) => if (let Str(v) <- value) { v == s } else { false }
             case Boolean(b) => if (let Boolean(v) <- value) { v == b } else { false }
             case Nil => value.isNil()
             case _ =>
                 // 尝试深度比较
                 match (value) {
-                    case Number(v) => if (let Number(p) <- pattern) { v == p } else { false }
+                    case LispValue.Int(v) =>
+                        match (pattern) {
+                            case LispValue.Int(p) => v == p
+                            case LispValue.Float(f) => Float64(v) == f
+                            case _ => false
+                        }
+                    case LispValue.Float(v) =>
+                        match (pattern) {
+                            case LispValue.Int(i) => v == Float64(i)
+                            case LispValue.Float(f) => v == f
+                            case _ => false
+                        }
                     case Str(v) => if (let Str(p) <- pattern) { v == p } else { false }
                     case Boolean(v) => if (let Boolean(p) <- pattern) { v == p } else { false }
                     case _ => false

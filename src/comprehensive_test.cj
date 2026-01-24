@@ -28,7 +28,8 @@ class ComprehensiveTest {
         println("max result: ${maxResult.toString()}")
 
         match (maxResult) {
-            case Number(n) => @Assert(n == 9.0)
+            case LispValue.Int(i) => @Assert(i == 9)
+            case LispValue.Float(f) => @Assert(f == 9.0)
             case _ => @Fail("max should return Number")
         }
 
@@ -38,7 +39,8 @@ class ComprehensiveTest {
         println("min result: ${minResult.toString()}")
 
         match (minResult) {
-            case Number(n) => @Assert(n == 1.0)
+            case LispValue.Int(i) => @Assert(i == 1)
+            case LispValue.Float(f) => @Assert(f == 1.0)
             case _ => @Fail("min should return Number")
         }
     }
@@ -96,7 +98,8 @@ class ComprehensiveTest {
         println("Thread-first result: ${result.toString()}")
 
         match (result) {
-            case Number(n) => @Assert(n == 30.0)
+            case LispValue.Int(i) => @Assert(i == 30)
+            case LispValue.Float(f) => @Assert(f == 30.0)
             case NativeFunc(_) => @Fail("Thread-first should not return NativeFunc")
             case _ => @Fail("Unexpected result type")
         }
@@ -154,7 +157,8 @@ class ComprehensiveTest {
         println("Apply result: ${result.toString()}")
 
         match (result) {
-            case Number(n) => @Assert(n == 6.0)
+            case LispValue.Int(i) => @Assert(i == 6)
+            case LispValue.Float(f) => @Assert(f == 6.0)
             case _ => @Fail("apply should return Number")
         }
     }
@@ -285,7 +289,8 @@ class ComprehensiveTest {
         println("Reduce with lambda result: ${result.toString()}")
 
         match (result) {
-            case Number(n) => @Assert(n == 15.0)
+            case LispValue.Int(i) => @Assert(i == 15)
+            case LispValue.Float(f) => @Assert(f == 15.0)
             case _ => @Fail("reduce should return Number")
         }
     }
@@ -330,7 +335,8 @@ class ComprehensiveTest {
         let result1 = evaluator.eval(expr1)
         println("Vector destruct [x y] x result: ${result1.toString()}")
         match (result1) {
-            case Number(n) => @Assert(n == 1.0)
+            case LispValue.Int(i) => @Assert(i == 1)
+            case LispValue.Float(f) => @Assert(f == 1.0)
             case _ => @Fail("Vector destruct should return Number 1.0")
         }
 
@@ -366,7 +372,8 @@ class ComprehensiveTest {
         let result1 = evaluator.eval(expr1)
         println("Dot-pair (x . y) x result: ${result1.toString()}")
         match (result1) {
-            case Number(n) => @Assert(n == 1.0)
+            case LispValue.Int(i) => @Assert(i == 1)
+            case LispValue.Float(f) => @Assert(f == 1.0)
             case _ => @Fail("Dot-pair destruct should return Number 1.0")
         }
 
@@ -393,7 +400,8 @@ class ComprehensiveTest {
         let result1 = evaluator.eval(expr1)
         println("max '(1 2 3 4 5) result: ${result1.toString()}")
         match (result1) {
-            case Number(n) => @Assert(n == 5.0)
+            case LispValue.Int(i) => @Assert(i == 5)
+            case LispValue.Float(f) => @Assert(f == 5.0)
             case _ => @Fail("max should return Number 5.0")
         }
 
@@ -402,7 +410,8 @@ class ComprehensiveTest {
         let result2 = evaluator.eval(expr2)
         println("apply max result: ${result2.toString()}")
         match (result2) {
-            case Number(n) => @Assert(n == 5.0)
+            case LispValue.Int(i) => @Assert(i == 5)
+            case LispValue.Float(f) => @Assert(f == 5.0)
             case _ => @Fail("apply max should return Number 5.0")
         }
 
@@ -411,7 +420,8 @@ class ComprehensiveTest {
         let result3 = evaluator.eval(expr3)
         println("min '(1 2 3 4 5) result: ${result3.toString()}")
         match (result3) {
-            case Number(n) => @Assert(n == 1.0)
+            case LispValue.Int(i) => @Assert(i == 1)
+            case LispValue.Float(f) => @Assert(f == 1.0)
             case _ => @Fail("min should return Number 1.0")
         }
 
@@ -420,7 +430,8 @@ class ComprehensiveTest {
         let result4 = evaluator.eval(expr4)
         println("apply min result: ${result4.toString()}")
         match (result4) {
-            case Number(n) => @Assert(n == 1.0)
+            case LispValue.Int(i) => @Assert(i == 1)
+            case LispValue.Float(f) => @Assert(f == 1.0)
             case _ => @Fail("apply min should return Number 1.0")
         }
     }
@@ -439,7 +450,8 @@ class ComprehensiveTest {
         println("append '(1 2) '(3 4) result: ${result1.toString()}")
         match (result1) {
             case Cons(cell) => match (cell.car) {
-                case Number(n) => @Assert(n == 1.0)
+                case LispValue.Int(i) => @Assert(i == 1)
+                case LispValue.Float(f) => @Assert(f == 1.0)
                 case _ => @Fail("first element should be 1.0")
             }
             case _ => @Fail("append should return a list")
@@ -451,7 +463,8 @@ class ComprehensiveTest {
         println("apply append result: ${result2.toString()}")
         match (result2) {
             case Cons(cell) => match (cell.car) {
-                case Number(n) => @Assert(n == 1.0)
+                case LispValue.Int(i) => @Assert(i == 1)
+                case LispValue.Float(f) => @Assert(f == 1.0)
                 case _ => @Fail("first element should be 1.0")
             }
             case _ => @Fail("apply append should return a list")

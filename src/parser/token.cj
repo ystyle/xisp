@@ -47,9 +47,14 @@ public enum Token <: Equatable<Token> {
     | Symbol(String)
 
     /**
-     * 数字
+     * 整数
      */
-    | Number(Float64)
+    | Int(Int64)
+
+    /**
+     * 浮点数
+     */
+    | Float(Float64)
 
     /**
      * 字符串
@@ -109,7 +114,8 @@ public enum Token <: Equatable<Token> {
             case (Comma, Comma) => true
             case (CommaAt, CommaAt) => true
             case (Symbol(s1), Symbol(s2)) => s1 == s2
-            case (Number(n1), Number(n2)) => n1 == n2
+            case (Int(i1), Int(i2)) => i1 == i2
+            case (Float(f1), Float(f2)) => f1 == f2
             case (String(s1), String(s2)) => s1 == s2
             case (Boolean(b1), Boolean(b2)) => b1 == b2
             case (VectorStart, VectorStart) => true
@@ -136,7 +142,8 @@ public enum Token <: Equatable<Token> {
             case Comma => ","
             case CommaAt => ",@"
             case Symbol(s) => "<symbol: ${s}>"
-            case Number(n) => "<number: ${n}>"
+            case Int(i) => "<int: ${i}>"
+            case Float(f) => "<float: ${f}>"
             case String(s) => "<string: \"${s}\">"
             case Boolean(b) => if (b) { "#t" } else { "#f" }
             case VectorStart => "["
@@ -154,7 +161,8 @@ public enum Token <: Equatable<Token> {
      */
     public func isLiteral(): Bool {
         match (this) {
-            case Number(_) => true
+            case Int(_) => true
+            case Float(_) => true
             case String(_) => true
             case Boolean(_) => true
             case _ => false

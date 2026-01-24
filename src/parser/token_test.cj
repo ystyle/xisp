@@ -18,8 +18,8 @@ var tokenTests = ArrayList<TokenTestItem>([
     TokenTestItem(Token.Quote, "'"),
     TokenTestItem(Token.EOF, "<EOF>"),
     TokenTestItem(Token.Symbol("foo"), "<symbol: foo>"),
-    TokenTestItem(Token.Number(42.0), "number:"),  // 只检查关键字，避免浮点精度问题
-    TokenTestItem(Token.Number(3.14), "number:"),
+    TokenTestItem(Token.Int(42), "int:"),
+    TokenTestItem(Token.Float(3.14), "float:"),
     TokenTestItem(Token.String("hello"), "<string: \"hello\">"),
     TokenTestItem(Token.Boolean(true), "#t"),
     TokenTestItem(Token.Boolean(false), "#f"),
@@ -41,11 +41,15 @@ class TokenTest {
                 @Fail("[${i}] Expected '${result}' to contain '${test.expectedStr}'")
             }
 
-            // 额外检查：Number 类型应该包含 "number:" 关键字
+            // 额外检查：Int 和 Float 类型应该包含 "int:" 或 "float:" 关键字
             match (test.token) {
-                case Token.Number(_) =>
-                    if (!result.contains("number:")) {
-                        @Fail("[${i}] Number token should contain 'number:' in '${result}'")
+                case Token.Int(_) =>
+                    if (!result.contains("int:")) {
+                        @Fail("[${i}] Int token should contain 'int:' in '${result}'")
+                    }
+                case Token.Float(_) =>
+                    if (!result.contains("float:")) {
+                        @Fail("[${i}] Float token should contain 'float:' in '${result}'")
                     }
                 case _ => ()
             }
@@ -60,7 +64,8 @@ class TokenTest {
         @Assert(Token.Quote == Token.Quote)
         @Assert(Token.EOF == Token.EOF)
         @Assert(Token.Symbol("foo") == Token.Symbol("foo"))
-        @Assert(Token.Number(42.0) == Token.Number(42.0))
+        @Assert(Token.Int(42) == Token.Int(42))
+        @Assert(Token.Float(3.14) == Token.Float(3.14))
         @Assert(Token.String("hello") == Token.String("hello"))
         @Assert(Token.Boolean(true) == Token.Boolean(true))
 
@@ -70,7 +75,8 @@ class TokenTest {
 
     @TestCase
     func testIsLiteral() {
-        @Assert(Token.Number(42.0).isLiteral())
+        @Assert(Token.Int(42).isLiteral())
+        @Assert(Token.Float(3.14).isLiteral())
         @Assert(Token.String("hello").isLiteral())
         @Assert(Token.Boolean(true).isLiteral())
 

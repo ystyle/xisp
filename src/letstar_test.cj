@@ -31,7 +31,8 @@ class LetStarTest {
         let result = evalCode("(let* ((a 1) (b (+ a 10))) (+ a b))", env)
 
         match (result) {
-            case Number(n) => @Assert(n > 11.0 && n < 13.0)  // 应该是 12
+            case LispValue.Int(i) => @Assert(i > 11 && i < 13)  // 应该是 12
+            case LispValue.Float(f) => @Assert(f > 11.0 && f < 13.0)
             case _ => @Fail("let* should return number")
         }
     }
@@ -46,7 +47,8 @@ class LetStarTest {
         let result = evalCode("(let* ((a 1) (b (+ a 2)) (c (* b 3))) c)", env)
 
         match (result) {
-            case Number(n) => @Assert(n > 8.0 && n < 10.0)  // 应该是 9
+            case LispValue.Int(i) => @Assert(i > 8 && i < 10)  // 应该是 9
+            case LispValue.Float(f) => @Assert(f > 8.0 && f < 10.0)
             case _ => @Fail("let* with multiple bindings should work")
         }
     }
@@ -61,7 +63,8 @@ class LetStarTest {
         let result = evalCode("(let* ((a 5)) (* a a))", env)
 
         match (result) {
-            case Number(n) => @Assert(n > 24.0 && n < 26.0)  // 应该是 25
+            case LispValue.Int(i) => @Assert(i > 24 && i < 26)  // 应该是 25
+            case LispValue.Float(f) => @Assert(f > 24.0 && f < 26.0)
             case _ => @Fail("let* with single binding should work")
         }
     }
@@ -76,7 +79,8 @@ class LetStarTest {
         let result = evalCode("(let* () (+ 1 2))", env)
 
         match (result) {
-            case Number(n) => @Assert(n > 2.0 && n < 4.0)  // 应该是 3
+            case LispValue.Int(i) => @Assert(i > 2 && i < 4)  // 应该是 3
+            case LispValue.Float(f) => @Assert(f > 2.0 && f < 4.0)
             case _ => @Fail("let* with no bindings should execute body")
         }
     }
@@ -91,7 +95,8 @@ class LetStarTest {
         let result = evalCode("(let* ((a 1) (b 2)) (begin (+ a b)))", env)
 
         match (result) {
-            case Number(n) => @Assert(n > 2.0 && n < 4.0)  // 应该是 3
+            case LispValue.Int(i) => @Assert(i > 2 && i < 4)  // 应该是 3
+            case LispValue.Float(f) => @Assert(f > 2.0 && f < 4.0)
             case _ => @Fail("let* with begin should work")
         }
     }
@@ -109,14 +114,16 @@ class LetStarTest {
         let result = evalCode("(let* ((x 1) (y (+ x 10))) y)", env)
 
         match (result) {
-            case Number(n) => @Assert(n > 10.0 && n < 12.0)  // 应该是 11
+            case LispValue.Int(i) => @Assert(i > 10 && i < 12)  // 应该是 11
+            case LispValue.Float(f) => @Assert(f > 10.0 && f < 12.0)
             case _ => @Fail("let* should create lexical scope")
         }
 
         // 外层的 x 不应该被修改
         let outerX = evalCode("x", env)
         match (outerX) {
-            case Number(n) => @Assert(n > 99.0 && n < 101.0)  // 应该还是 100
+            case LispValue.Int(i) => @Assert(i > 99 && i < 101)  // 应该还是 100
+            case LispValue.Float(f) => @Assert(f > 99.0 && f < 101.0)
             case _ => @Fail("outer x should not be modified")
         }
     }
@@ -132,7 +139,8 @@ class LetStarTest {
         let result = evalCode("(when-let* ((x 5) (y (+ x 10))) y)", env)
 
         match (result) {
-            case Number(n) => @Assert(n > 14.0 && n < 16.0)  // 应该是 15
+            case LispValue.Int(i) => @Assert(i > 14 && i < 16)  // 应该是 15
+            case LispValue.Float(f) => @Assert(f > 14.0 && f < 16.0)
             case _ => @Fail("when-let* should return number when condition is true")
         }
     }
@@ -163,7 +171,8 @@ class LetStarTest {
         let result = evalCode("(when-let* ((a 10) (b (* a 2)) (c (+ b 5))) c)", env)
 
         match (result) {
-            case Number(n) => @Assert(n > 24.0 && n < 26.0)  // 应该是 25 (10*2+5)
+            case LispValue.Int(i) => @Assert(i > 24 && i < 26)  // 应该是 25 (10*2+5)
+            case LispValue.Float(f) => @Assert(f > 24.0 && f < 26.0)
             case _ => @Fail("when-let* with multiple bindings should work")
         }
     }
@@ -179,7 +188,8 @@ class LetStarTest {
         let result = evalCode("(when-let* ((x 5) (y (* x 2))) (begin (* x y)))", env)
 
         match (result) {
-            case Number(n) => @Assert(n > 49.0 && n < 51.0)  // 应该是 50 (5 * 10)
+            case LispValue.Int(i) => @Assert(i > 49 && i < 51)  // 应该是 50 (5 * 10)
+            case LispValue.Float(f) => @Assert(f > 49.0 && f < 51.0)
             case _ => @Fail("when-let* with begin should work")
         }
     }

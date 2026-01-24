@@ -35,9 +35,9 @@ var parserTests = ArrayList<ParserTestItem>([
     // 复杂表达式
     ParserTestItem("(define square (lambda (x) (* x x)))", "(define square (lambda (x) (* x x)))"),
     // match 表达式 - 验证嵌套列表解析正确
-    ParserTestItem("(match 5 1 \"one\" 5 \"five\")", "(match 5.000000 1.000000 \"one\" 5.000000 \"five\")"),
+    ParserTestItem("(match 5 1 \"one\" 5 \"five\")", "(match 5 1 \"one\" 5 \"five\")"),
     // match 嵌套列表
-    ParserTestItem("(match (quote (1 2 3)) (x y z) \"ok\")", "(match (quote (1.000000 2.000000 3.000000)) (x y z) \"ok\")"),
+    ParserTestItem("(match (quote (1 2 3)) (x y z) \"ok\")", "(match (quote (1 2 3)) (x y z) \"ok\")"),
 ])
 
 /**
@@ -70,16 +70,22 @@ class ParserTest {
         @Assert(exprs.size, 3)
 
         match (exprs[0]) {
-            case Number(n) =>
-                println("[0] Number: ${n}")
-                @Assert(n > 40.0)
+            case LispValue.Int(i) =>
+                println("[0] Int: ${i}")
+                @Assert(i > 40)
+            case LispValue.Float(f) =>
+                println("[0] Float: ${f}")
+                @Assert(f > 40.0)
             case _ => @Fail("[0] Expected Number")
         }
 
         match (exprs[1]) {
-            case Number(n) =>
-                println("[1] Number: ${n}")
-                @Assert(n > 99.0)
+            case LispValue.Int(i) =>
+                println("[1] Int: ${i}")
+                @Assert(i > 99)
+            case LispValue.Float(f) =>
+                println("[1] Float: ${f}")
+                @Assert(f > 99.0)
             case _ => @Fail("[1] Expected Number")
         }
 

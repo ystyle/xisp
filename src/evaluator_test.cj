@@ -109,7 +109,8 @@ class EvaluatorTest {
         @Assert(result.isNumber())
 
         match (result) {
-            case Number(n) => @Assert(n > 14.0 && n < 16.0)
+            case LispValue.Int(i) => @Assert(i > 14 && i < 16)
+            case LispValue.Float(f) => @Assert(f > 14.0 && f < 16.0)
             case _ => @Fail("Expected Number")
         }
     }
@@ -135,7 +136,8 @@ class EvaluatorTest {
         println("Factorial test result: ${result.toString()}")
 
         match (result) {
-            case Number(n) => @Assert(n > 119.0 && n < 121.0)
+            case LispValue.Int(i) => @Assert(i > 119 && i < 121)
+            case LispValue.Float(f) => @Assert(f > 119.0 && f < 121.0)
             case _ => @Fail("Expected Number")
         }
     }
@@ -147,21 +149,23 @@ class EvaluatorTest {
         BuiltinFunctions.registerAll(env)  // 注册基础函数
         let evaluator = Evaluator(env)
 
-        env.define("x", Number(10.0))
+        env.define("x", LispValue.Int(10))
 
         // (let ((x 20)) x)
         let letExpr = Parser.parseSingleFromString("(let ((x 20)) x)")
         let result = evaluator.eval(letExpr)
 
         match (result) {
-            case Number(n) => @Assert(n > 19.0 && n < 21.0)
+            case LispValue.Int(i) => @Assert(i > 19 && i < 21)
+            case LispValue.Float(f) => @Assert(f > 19.0 && f < 21.0)
             case _ => @Fail("Expected Number")
         }
 
         // 外层的 x 应该还是 10
         let outerX = env.lookup("x")
         match (outerX) {
-            case Number(n) => @Assert(n > 9.0 && n < 11.0)
+            case LispValue.Int(i) => @Assert(i > 9 && i < 11)
+            case LispValue.Float(f) => @Assert(f > 9.0 && f < 11.0)
             case _ => @Fail("Expected Number")
         }
     }
@@ -213,7 +217,7 @@ class EvaluatorTest {
         }
 
         // 结果应该包含期望的字符串
-        if (!resultStr.contains("x=") && !resultStr.contains("1.000000")) {
+        if (!resultStr.contains("x=") && !resultStr.contains("1")) {
             @Fail("Expected result to contain pattern match results, got: ${resultStr}")
         }
     }
@@ -258,7 +262,8 @@ class MacroTest {
         evalCode("(defmacro identity (x) x)", env)
         let result = evalCode("(identity 123)", env)
         match (result) {
-            case Number(n) => @Assert(n == 123.0)
+            case LispValue.Int(i) => @Assert(i == 123)
+            case LispValue.Float(f) => @Assert(f == 123.0)
             case _ => @Fail("identity macro should return number")
         }
     }
@@ -270,12 +275,14 @@ class MacroTest {
         evalCode("(defmacro when (test then) (list (quote if) test then (quote 0)))", env)
         let result1 = evalCode("(when 1 100)", env)
         match (result1) {
-            case Number(n) => @Assert(n == 100.0)
+            case LispValue.Int(i) => @Assert(i == 100)
+            case LispValue.Float(f) => @Assert(f == 100.0)
             case _ => @Fail("when with true condition should return 100")
         }
         let result2 = evalCode("(when 0 100)", env)
         match (result2) {
-            case Number(n) => @Assert(n == 0.0)
+            case LispValue.Int(i) => @Assert(i == 0)
+            case LispValue.Float(f) => @Assert(f == 0.0)
             case _ => @Fail("when with false condition should return 0")
         }
     }
@@ -288,12 +295,14 @@ class MacroTest {
         evalCode("(define counter 0)", env)
         let result1 = evalCode("(incf counter)", env)
         match (result1) {
-            case Number(n) => @Assert(n == 1.0)
+            case LispValue.Int(i) => @Assert(i == 1)
+            case LispValue.Float(f) => @Assert(f == 1.0)
             case _ => @Fail("first incf should return 1")
         }
         let counter1 = evalCode("counter", env)
         match (counter1) {
-            case Number(n) => @Assert(n == 1.0)
+            case LispValue.Int(i) => @Assert(i == 1)
+            case LispValue.Float(f) => @Assert(f == 1.0)
             case _ => @Fail("counter should be 1 after first incf")
         }
     }
@@ -308,12 +317,14 @@ class MacroTest {
         evalCode("(swap x y)", env)
         let x = evalCode("x", env)
         match (x) {
-            case Number(n) => @Assert(n == 2.0)
+            case LispValue.Int(i) => @Assert(i == 2)
+            case LispValue.Float(f) => @Assert(f == 2.0)
             case _ => @Fail("x should be 2 after swap")
         }
         let y = evalCode("y", env)
         match (y) {
-            case Number(n) => @Assert(n == 1.0)
+            case LispValue.Int(i) => @Assert(i == 1)
+            case LispValue.Float(f) => @Assert(f == 1.0)
             case _ => @Fail("y should be 1 after swap")
         }
     }
@@ -326,7 +337,8 @@ class MacroTest {
         evalCode("(defmacro add-two (x) (list (quote +) (list (quote add-one) x) 1))", env)
         let result = evalCode("(add-two 10)", env)
         match (result) {
-            case Number(n) => @Assert(n == 12.0)
+            case LispValue.Int(i) => @Assert(i == 12)
+            case LispValue.Float(f) => @Assert(f == 12.0)
             case _ => @Fail("nested macro call should return 12")
         }
     }
@@ -340,13 +352,15 @@ class MacroTest {
         // 测试 when 宏（已自动注册，无需手动定义）
         let result1 = evalCode("(when 1 100)", env)
         match (result1) {
-            case Number(n) => @Assert(n == 100.0)
+            case LispValue.Int(i) => @Assert(i == 100)
+            case LispValue.Float(f) => @Assert(f == 100.0)
             case _ => @Fail("builtin when macro should return 100")
         }
 
         let result2 = evalCode("(when 0 200)", env)
         match (result2) {
-            case Number(n) => @Assert(n == 0.0)
+            case LispValue.Int(i) => @Assert(i == 0)
+            case LispValue.Float(f) => @Assert(f == 0.0)
             case _ => @Fail("builtin when macro should return 0")
         }
 
@@ -354,13 +368,15 @@ class MacroTest {
         evalCode("(define counter 0)", env)
         let result3 = evalCode("(incf counter)", env)
         match (result3) {
-            case Number(n) => @Assert(n == 1.0)
+            case LispValue.Int(i) => @Assert(i == 1)
+            case LispValue.Float(f) => @Assert(f == 1.0)
             case _ => @Fail("builtin incf should return 1")
         }
 
         let counterVal = evalCode("counter", env)
         match (counterVal) {
-            case Number(n) => @Assert(n == 1.0)
+            case LispValue.Int(i) => @Assert(i == 1)
+            case LispValue.Float(f) => @Assert(f == 1.0)
             case _ => @Fail("counter should be 1 after incf")
         }
 
@@ -368,14 +384,15 @@ class MacroTest {
         evalCode("(define lst '(2 3))", env)
         let result4 = evalCode("(push 1 lst)", env)
         match (result4) {
-            case Cons(cell) => @Assert(cell.car.toString() == "1.000000")
+            case Cons(cell) => @Assert(cell.car.toString() == "1")
             case _ => @Fail("push should return new list")
         }
 
         // 测试 negate 宏
         let result5 = evalCode("(negate 5)", env)
         match (result5) {
-            case Number(n) => @Assert(n < 0.0)
+            case LispValue.Int(i) => @Assert(i < 0)
+            case LispValue.Float(f) => @Assert(f < 0.0)
             case _ => @Fail("negate should return negative number")
         }
     }
@@ -397,7 +414,7 @@ class MacroTest {
         evalCode("(define x 2)", env)
         let result2 = evalCode("`(a ,x c)", env)
         match (result2) {
-            case Cons(cell) => @Assert(cell.toString().contains("2.000000"))
+            case Cons(cell) => @Assert(cell.toString().contains("2"))
             case _ => @Fail("backquote with comma should evaluate x")
         }
 
@@ -405,7 +422,7 @@ class MacroTest {
         evalCode("(define y 3)", env)
         let result3 = evalCode("`(a ,x ,y)", env)
         match (result3) {
-            case Cons(cell) => @Assert(cell.toString().contains("2.000000") || cell.toString().contains("3.000000"))
+            case Cons(cell) => @Assert(cell.toString().contains("2") || cell.toString().contains("3"))
             case _ => @Fail("backquote with multiple commas should work")
         }
     }
@@ -466,7 +483,8 @@ class AdvancedMacroTest {
         let result = evalCode("(let* ((a 1) (b (+ a 10))) (+ a b))", env)
 
         match (result) {
-            case Number(n) => @Assert(n > 11.0 && n < 13.0)  // 应该是 12
+            case LispValue.Int(i) => @Assert(i > 11 && i < 13)  // 应该是 12
+            case LispValue.Float(f) => @Assert(f > 11.0 && f < 13.0)
             case _ => @Fail("let* basic should return number")
         }
     }
@@ -480,7 +498,8 @@ class AdvancedMacroTest {
         let result = evalCode("(let* ((a 1) (b (+ a 2)) (c (* b 3))) c)", env)
 
         match (result) {
-            case Number(n) => @Assert(n > 8.0 && n < 10.0)  // 应该是 9
+            case LispValue.Int(i) => @Assert(i > 8 && i < 10)  // 应该是 9
+            case LispValue.Float(f) => @Assert(f > 8.0 && f < 10.0)
             case _ => @Fail("let* with multiple bindings should work")
         }
     }
@@ -494,7 +513,8 @@ class AdvancedMacroTest {
         let result = evalCode("(let* ((a 5)) (* a a))", env)
 
         match (result) {
-            case Number(n) => @Assert(n > 24.0 && n < 26.0)  // 应该是 25
+            case LispValue.Int(i) => @Assert(i > 24 && i < 26)  // 应该是 25
+            case LispValue.Float(f) => @Assert(f > 24.0 && f < 26.0)
             case _ => @Fail("let* with single binding should work")
         }
     }
@@ -508,7 +528,8 @@ class AdvancedMacroTest {
         let result = evalCode("(let* () (+ 1 2))", env)
 
         match (result) {
-            case Number(n) => @Assert(n > 2.0 && n < 4.0)  // 应该是 3
+            case LispValue.Int(i) => @Assert(i > 2 && i < 4)  // 应该是 3
+            case LispValue.Float(f) => @Assert(f > 2.0 && f < 4.0)
             case _ => @Fail("let* with no bindings should execute body")
         }
     }
@@ -525,14 +546,16 @@ class AdvancedMacroTest {
         let result = evalCode("(let* ((x 1) (y (+ x 10))) y)", env)
 
         match (result) {
-            case Number(n) => @Assert(n > 10.0 && n < 12.0)  // 应该是 11
+            case LispValue.Int(i) => @Assert(i > 10 && i < 12)  // 应该是 11
+            case LispValue.Float(f) => @Assert(f > 10.0 && f < 12.0)
             case _ => @Fail("let* should create lexical scope")
         }
 
         // 外层的 x 不应该被修改
         let outerX = evalCode("x", env)
         match (outerX) {
-            case Number(n) => @Assert(n > 99.0 && n < 101.0)  // 应该还是 100
+            case LispValue.Int(i) => @Assert(i > 99 && i < 101)  // 应该还是 100
+            case LispValue.Float(f) => @Assert(f > 99.0 && f < 101.0)
             case _ => @Fail("outer x should not be modified")
         }
     }
@@ -546,7 +569,8 @@ class AdvancedMacroTest {
         let result = evalCode("(if-let (x 5) x nil)", env)
 
         match (result) {
-            case Number(n) => @Assert(n > 4.0 && n < 6.0)  // 应该是 5
+            case LispValue.Int(i) => @Assert(i > 4 && i < 6)  // 应该是 5
+            case LispValue.Float(f) => @Assert(f > 4.0 && f < 6.0)
             case _ => @Fail("if-let should return bound value when true")
         }
     }
@@ -574,7 +598,8 @@ class AdvancedMacroTest {
         let result = evalCode("(if-let (x (+ 2 3)) (* x x) nil)", env)
 
         match (result) {
-            case Number(n) => @Assert(n > 24.0 && n < 26.0)  // 应该是 25
+            case LispValue.Int(i) => @Assert(i > 24 && i < 26)  // 应该是 25
+            case LispValue.Float(f) => @Assert(f > 24.0 && f < 26.0)
             case _ => @Fail("if-let should work with expressions")
         }
     }
@@ -588,7 +613,8 @@ class AdvancedMacroTest {
         let result = evalCode("(if-let (x 0) x 100)", env)
 
         match (result) {
-            case Number(n) => @Assert(n > 99.0 && n < 101.0)  // 应该返回 else 分支的 100
+            case LispValue.Int(i) => @Assert(i > 99 && i < 101)  // 应该返回 else 分支的 100
+            case LispValue.Float(f) => @Assert(f > 99.0 && f < 101.0)
             case _ => @Fail("if-let should execute else branch when false")
         }
     }
@@ -602,7 +628,8 @@ class AdvancedMacroTest {
         let result = evalCode("(when-let* ((x 5)) x)", env)
 
         match (result) {
-            case Number(n) => @Assert(n > 4.0 && n < 6.0)  // 应该是 5
+            case LispValue.Int(i) => @Assert(i > 4 && i < 6)  // 应该是 5
+            case LispValue.Float(f) => @Assert(f > 4.0 && f < 6.0)
             case _ => @Fail("when-let* with true value should return bound value")
         }
     }
@@ -630,7 +657,8 @@ class AdvancedMacroTest {
         let result = evalCode("(when-let* ((a 1) (b (+ a 10))) b)", env)
 
         match (result) {
-            case Number(n) => @Assert(n > 10.0 && n < 12.0)  // 应该是 11
+            case LispValue.Int(i) => @Assert(i > 10 && i < 12)  // 应该是 11
+            case LispValue.Float(f) => @Assert(f > 10.0 && f < 12.0)
             case _ => @Fail("when-let* with multiple bindings should work")
         }
     }
@@ -644,7 +672,8 @@ class AdvancedMacroTest {
         let result = evalCode("(when-let* ((a 1) (b 2)) (+ a b))", env)
 
         match (result) {
-            case Number(n) => @Assert(n > 2.0 && n < 4.0)  // 应该是 3
+            case LispValue.Int(i) => @Assert(i > 2 && i < 4)  // 应该是 3
+            case LispValue.Float(f) => @Assert(f > 2.0 && f < 4.0)
             case _ => @Fail("when-let* should execute body with bindings")
         }
     }
@@ -675,14 +704,16 @@ class AdvancedMacroTest {
         let result = evalCode("(when-let* ((x 1) (y (+ x 10))) y)", env)
 
         match (result) {
-            case Number(n) => @Assert(n > 10.0 && n < 12.0)  // 应该是 11
+            case LispValue.Int(i) => @Assert(i > 10 && i < 12)  // 应该是 11
+            case LispValue.Float(f) => @Assert(f > 10.0 && f < 12.0)
             case _ => @Fail("when-let* should create lexical scope")
         }
 
         // 外层的 x 不应该被修改
         let outerX = evalCode("x", env)
         match (outerX) {
-            case Number(n) => @Assert(n > 99.0 && n < 101.0)  // 应该还是 100
+            case LispValue.Int(i) => @Assert(i > 99 && i < 101)  // 应该还是 100
+            case LispValue.Float(f) => @Assert(f > 99.0 && f < 101.0)
             case _ => @Fail("outer x should not be modified")
         }
     }
@@ -721,7 +752,8 @@ class AdvancedMacroTest {
         // 测试调用 pkg2.square
         let squareCall = interpreter.eval("(pkg2.square 7)")
         match (squareCall) {
-            case Number(n) => @Assert(n > 48.0 && n < 50.0)  // 7*7=49
+            case LispValue.Int(i) => @Assert(i > 48 && i < 50)  // 7*7=49
+            case LispValue.Float(f) => @Assert(f > 48.0 && f < 50.0)
             case _ => @Fail("pkg2.square should return 49")
         }
 
@@ -786,7 +818,8 @@ class AdvancedMacroTest {
 
         println("Dot symbol test result: ${result.toString()}")
         match (result) {
-            case Number(n) => @Assert(n > 63.0 && n < 65.0)  // 8*8=64
+            case LispValue.Int(i) => @Assert(i > 63 && i < 65)  // 8*8=64
+            case LispValue.Float(f) => @Assert(f > 63.0 && f < 65.0)
             case _ => @Fail("test.func should return 64")
         }
     }
@@ -809,7 +842,8 @@ class AdvancedMacroTest {
 
         println("Lambda with begin test result: ${result.toString()}")
         match (result) {
-            case Number(n) => @Assert(n > 14.0 && n < 16.0)  // 5*3=15
+            case LispValue.Int(i) => @Assert(i > 14 && i < 16)  // 5*3=15
+            case LispValue.Float(f) => @Assert(f > 14.0 && f < 16.0)
             case _ => @Fail("multi-expr should return 15")
         }
     }

@@ -27,14 +27,16 @@ class ReplTest {
         let expr1 = Parser.parseSingleFromString("(square 5)")
         let result1 = evaluator.eval(expr1)
         match (result1) {
-            case Number(n) => @Assert(n == 25.0)
+            case LispValue.Int(i) => @Assert(i == 25)
+            case LispValue.Float(f) => @Assert(f == 25.0)
             case _ => @Fail("Function should work across multiple evals")
         }
 
         let expr2 = Parser.parseSingleFromString("(square 10)")
         let result2 = evaluator.eval(expr2)
         match (result2) {
-            case Number(n) => @Assert(n == 100.0)
+            case LispValue.Int(i) => @Assert(i == 100)
+            case LispValue.Float(f) => @Assert(f == 100.0)
             case _ => @Fail("Function should persist across evals")
         }
     }
@@ -58,7 +60,8 @@ class ReplTest {
         let expr1 = Parser.parseSingleFromString("x")
         let result1 = evaluator1.eval(expr1)
         match (result1) {
-            case Number(n) => @Assert(n == 100.0)
+            case LispValue.Int(i) => @Assert(i == 100)
+            case LispValue.Float(f) => @Assert(f == 100.0)
             case _ => @Fail("env1 should have x defined")
         }
 
@@ -86,7 +89,8 @@ class ReplTest {
         let expr = Parser.parseSingleFromString("(+ a b c)")
         let result = evaluator.eval(expr)
         match (result) {
-            case Number(n) => @Assert(n == 6.0)
+            case LispValue.Int(i) => @Assert(i == 6)
+            case LispValue.Float(f) => @Assert(f == 6.0)
             case _ => @Fail("All variables should persist")
         }
     }
@@ -105,21 +109,23 @@ class ReplTest {
         let expr1 = Parser.parseSingleFromString("(length lst)")
         let result1 = evaluator.eval(expr1)
         match (result1) {
-            case Number(n) => @Assert(n == 5.0)
+            case LispValue.Int(i) => @Assert(i == 5)
+            case LispValue.Float(f) => @Assert(f == 5.0)
             case _ => @Fail("length should work")
         }
 
         let expr2 = Parser.parseSingleFromString("(first lst)")
         let result2 = evaluator.eval(expr2)
         match (result2) {
-            case Number(n) => @Assert(n == 1.0)
+            case LispValue.Int(i) => @Assert(i == 1)
+            case LispValue.Float(f) => @Assert(f == 1.0)
             case _ => @Fail("first should work")
         }
 
         let expr3 = Parser.parseSingleFromString("(rest lst)")
         let result3 = evaluator.eval(expr3)
         match (result3) {
-            case Cons(cell) => @Assert(cell.car.toString() == "2.000000")
+            case Cons(cell) => @Assert(cell.car.toString() == "2")
             case _ => @Fail("rest should work")
         }
     }
@@ -145,7 +151,8 @@ class ReplTest {
         let expr3 = Parser.parseSingleFromString("(reduce (lambda (a b) (+ a b)) 0 (quote (1 2 3 4 5)))")
         let result3 = evaluator.eval(expr3)
         match (result3) {
-            case Number(n) => @Assert(n == 15.0)
+            case LispValue.Int(i) => @Assert(i == 15)
+            case LispValue.Float(f) => @Assert(f == 15.0)
             case _ => @Fail("reduce should sum correctly")
         }
     }
@@ -204,7 +211,8 @@ class ReplTest {
         let expr = Parser.parseSingleFromString("(sumOfSquares 3 4)")
         let result = evaluator.eval(expr)
         match (result) {
-            case Number(n) => @Assert(n == 25.0)  // 9 + 16
+            case LispValue.Int(i) => @Assert(i == 25)  // 9 + 16
+            case LispValue.Float(f) => @Assert(f == 25.0)
             case _ => @Fail("Nested functions should work")
         }
     }

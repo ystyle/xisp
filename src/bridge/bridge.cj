@@ -146,12 +146,12 @@ public class Bridge {
         registerFuncWithNS(env, "cangjie", "exists?", { args =>
             if (args.size > 0 && let Str(path) <- args[0]) {
                 try {
-                    Boolean(exists(path))
+                    LispValue.Boolean(exists(path))
                 } catch (e: Exception) {
-                    Boolean(false)
+                    LispValue.Boolean(false)
                 }
             } else {
-                Boolean(false)
+                LispValue.Boolean(false)
             }
         })
 
@@ -182,12 +182,12 @@ public class Bridge {
             if (args.size > 0 && let Str(path) <- args[0]) {
                 try {
                     let fileInfo = FileInfo(path)
-                    Boolean(fileInfo.isDirectory())
+                    LispValue.Boolean(fileInfo.isDirectory())
                 } catch (e: Exception) {
-                    Boolean(false)
+                    LispValue.Boolean(false)
                 }
             } else {
-                Boolean(false)
+                LispValue.Boolean(false)
             }
         })
 
@@ -196,12 +196,12 @@ public class Bridge {
             if (args.size > 0 && let Str(path) <- args[0]) {
                 try {
                     let fileInfo = FileInfo(path)
-                    Boolean(fileInfo.isRegular())
+                    LispValue.Boolean(fileInfo.isRegular())
                 } catch (e: Exception) {
-                    Boolean(false)
+                    LispValue.Boolean(false)
                 }
             } else {
-                Boolean(false)
+                LispValue.Boolean(false)
             }
         })
     }

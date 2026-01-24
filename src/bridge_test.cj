@@ -47,7 +47,7 @@ class BridgeTest {
         let result = evaluator.eval(expr)
         println("String interpolation result: ${result.toString()}")
         match (result) {
-            case Str(s) => @Assert(s == "Value: 3.000000")
+            case Str(s) => @Assert(s == "Value: 3")
             case _ => @Fail("String interpolation should work")
         }
     }
@@ -68,7 +68,8 @@ class BridgeTest {
         let expr2 = Parser.parseSingleFromString("(length vec)")
         let result2 = evaluator.eval(expr2)
         match (result2) {
-            case Number(n) => @Assert(n == 5.0)
+            case LispValue.Int(i) => @Assert(i == 5)
+            case LispValue.Float(f) => @Assert(f == 5.0)
             case _ => @Fail("Vector length should be 5")
         }
 
@@ -76,7 +77,8 @@ class BridgeTest {
         let expr3 = Parser.parseSingleFromString("(first vec)")
         let result3 = evaluator.eval(expr3)
         match (result3) {
-            case Number(n) => @Assert(n == 1.0)
+            case LispValue.Int(i) => @Assert(i == 1)
+            case LispValue.Float(f) => @Assert(f == 1.0)
             case _ => @Fail("Vector first should be 1")
         }
     }
@@ -116,7 +118,8 @@ class BridgeTest {
         let expr2 = Parser.parseSingleFromString("(length set)")
         let result2 = evaluator.eval(expr2)
         match (result2) {
-            case Number(n) => @Assert(n == 5.0)
+            case LispValue.Int(i) => @Assert(i == 5)
+            case LispValue.Float(f) => @Assert(f == 5.0)
             case _ => @Fail("HashSet length should be 5")
         }
 
@@ -124,7 +127,8 @@ class BridgeTest {
         let expr3 = Parser.parseSingleFromString("(first set)")
         let result3 = evaluator.eval(expr3)
         match (result3) {
-            case Number(n) => @Assert(n == 1.0)
+            case LispValue.Int(i) => @Assert(i == 1)
+            case LispValue.Float(f) => @Assert(f == 1.0)
             case _ => @Fail("HashSet first should be 1")
         }
     }
