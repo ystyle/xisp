@@ -18,11 +18,11 @@ extend BuiltinFunctions {
         registerModulo(env)
         registerComparison(env)
         registerListOps(env)
-        registerModernAliases(env)
         registerHigherOrder(env)
         registerLogic(env)
         registerPredicates(env)
         registerPrint(env)
         BuiltinMacros.registerAll(env)
+        registerModernAliases(env)      // 最后注册别名，确保所有原函数已注册
     }
 }

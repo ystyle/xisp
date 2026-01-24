@@ -70,5 +70,63 @@ extend BuiltinFunctions {
             }
             LispValue.Boolean(args[0].isProcedure())
         }))
+
+        // (zero? x) - 是否为 0
+        env.define("zero?", NativeFunc({ args =>
+            if (args.size != 1) {
+                return LispValue.Boolean(false)
+            }
+            match (args[0]) {
+                case LispValue.Int(n) => LispValue.Boolean(n == 0)
+                case LispValue.Float(n) => LispValue.Boolean(n == 0.0)
+                case _ => LispValue.Boolean(false)
+            }
+        }))
+
+        // (positive? x) - 是否为正数（大于 0）
+        env.define("positive?", NativeFunc({ args =>
+            if (args.size != 1) {
+                return LispValue.Boolean(false)
+            }
+            match (args[0]) {
+                case LispValue.Int(n) => LispValue.Boolean(n > 0)
+                case LispValue.Float(n) => LispValue.Boolean(n > 0.0)
+                case _ => LispValue.Boolean(false)
+            }
+        }))
+
+        // (negative? x) - 是否为负数（小于 0）
+        env.define("negative?", NativeFunc({ args =>
+            if (args.size != 1) {
+                return LispValue.Boolean(false)
+            }
+            match (args[0]) {
+                case LispValue.Int(n) => LispValue.Boolean(n < 0)
+                case LispValue.Float(n) => LispValue.Boolean(n < 0.0)
+                case _ => LispValue.Boolean(false)
+            }
+        }))
+
+        // (even? x) - 是否为偶数
+        env.define("even?", NativeFunc({ args =>
+            if (args.size != 1) {
+                return LispValue.Boolean(false)
+            }
+            match (args[0]) {
+                case LispValue.Int(n) => LispValue.Boolean(n % 2 == 0)
+                case _ => LispValue.Boolean(false)
+            }
+        }))
+
+        // (odd? x) - 是否为奇数
+        env.define("odd?", NativeFunc({ args =>
+            if (args.size != 1) {
+                return LispValue.Boolean(false)
+            }
+            match (args[0]) {
+                case LispValue.Int(n) => LispValue.Boolean(n % 2 != 0)
+                case _ => LispValue.Boolean(false)
+            }
+        }))
     }
 }
