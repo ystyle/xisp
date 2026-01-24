@@ -1,5 +1,4 @@
-;; ystyle.utils.string 包元数据
-(package "utils.string"
+(module utils
   (version "0.1.0")
   (organization "ystyle")
   (description "String utilities for Xisp")

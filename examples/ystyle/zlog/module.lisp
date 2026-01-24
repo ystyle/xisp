@@ -1,5 +1,4 @@
-;; ystyle.zlog 包元数据
-(package "zlog"
+(module zlog
   (version "0.2.0")
   (organization "ystyle")
   (description "Logging library for Xisp")

@@ -293,10 +293,12 @@ extend Evaluator {
                 this.stackDepth = this.stackDepth + 1
                 let newEnv = procEnv.createChild()
 
-                for (i in 0..params.size) {
+                var i = 0
+                while (i < params.size) {
                     if (i < args.size) {
                         newEnv.define(params[i], args[i])
                     }
+                    i = i + 1
                 }
 
                 let oldEnv = this.env

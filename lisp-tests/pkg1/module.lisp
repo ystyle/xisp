@@ -1,6 +1,6 @@
-(package "pkg2"
+(module pkg1
   (version "0.1.0")
-  (description "Package 2 for testing relative imports")
+  (description "Package 1 for testing relative imports")
   (author "demo")
   (homepage "https://example.com")
   (license "MIT"))

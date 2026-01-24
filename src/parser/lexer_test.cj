@@ -47,10 +47,15 @@ var lexerTests = ArrayList<LexerTestItem>([
         "  (  foo  bar  )  ",
         [Token.LeftParen, Token.Symbol("foo"), Token.Symbol("bar"), Token.RightParen]
     ),
-    // 点对
+    // 点对（空格包围的 . 是独立 token）
     LexerTestItem(
         "(a . b)",
         [Token.LeftParen, Token.Symbol("a"), Token.Dot, Token.Symbol("b"), Token.RightParen]
+    ),
+    // 带点的符号（模块符号）
+    LexerTestItem(
+        "pkg1.greet pkg2.call-func test.module.symbol",
+        [Token.Symbol("pkg1.greet"), Token.Symbol("pkg2.call-func"), Token.Symbol("test.module.symbol")]
     ),
     // 引用
     LexerTestItem(

@@ -363,6 +363,112 @@ class ProcedureTest {
 
         @Assert(cloned.isProcedure())
     }
+
+    /**
+     * 测试简单函数调用
+     */
+    @TestCase
+    func testSimpleFunctionCall() {
+        let env = Environment()
+        BuiltinFunctions.registerAll(env)
+
+        // 定义一个函数：(lambda (x) (+ x 1))
+        let params = ArrayList<String>()
+        params.add("x")
+
+        // 函数体：(+ x 1)，body 应该是包含表达式的列表
+        let add1Cell = consValue(Symbol("x"), consValue(Number(1.0), Nil))
+        let expr = consValue(Symbol("+"), add1Cell)
+        let body = consValue(expr, Nil)  // body 是 ((+ x 1))
+
+        let proc = Procedure(params, body, env)
+        let args = ArrayList<LispValue>()
+        args.add(Number(5.0))
+
+        // 应用函数
+        let eval = Evaluator(env)
+        let result = eval.applyProcedure(proc, args)
+
+        match (result) {
+            case Number(n) =>
+                println("testSimpleFunctionCall: result = ${n}")
+                @Assert(n >= 5.9 && n <= 6.1)
+            case _ =>
+                println("testSimpleFunctionCall: result = ${result}, type = ${result.toString()}")
+                @Fail("Expected Number result")
+        }
+    }
+
+    /**
+     * 测试多参数函数调用
+     */
+    @TestCase
+    func testMultiArgumentFunctionCall() {
+        let env = Environment()
+        BuiltinFunctions.registerAll(env)
+
+        // 定义一个函数：(lambda (x y) (+ x y))
+        let params = ArrayList<String>()
+        params.add("x")
+        params.add("y")
+
+        // 函数体：(+ x y)，body 应该是包含表达式的列表
+        let argsList = consValue(Symbol("y"), Nil)
+        let expr = consValue(Symbol("+"), consValue(Symbol("x"), argsList))
+        let body = consValue(expr, Nil)  // body 是 ((+ x y))
+
+        let proc = Procedure(params, body, env)
+        let args = ArrayList<LispValue>()
+        args.add(Number(3.0))
+        args.add(Number(4.0))
+
+        let eval = Evaluator(env)
+        let result = eval.applyProcedure(proc, args)
+
+        match (result) {
+            case Number(n) =>
+                println("testMultiArgumentFunctionCall: result = ${n}")
+                @Assert(n >= 6.9 && n <= 7.1)
+            case _ =>
+                println("testMultiArgumentFunctionCall: result = ${result}, type = ${result.toString()}")
+                @Fail("Expected Number result")
+        }
+    }
+
+    /**
+     * 测试闭包（词法作用域）
+     */
+    @TestCase
+    func testClosure() {
+        let env = Environment()
+        BuiltinFunctions.registerAll(env)
+        env.define("multiplier", Number(2.0))
+
+        // 定义一个函数：(lambda (x) (* x multiplier))
+        let params = ArrayList<String>()
+        params.add("x")
+
+        // 函数体：(* x multiplier)，body 应该是包含表达式的列表
+        let multList = consValue(Symbol("multiplier"), Nil)
+        let expr = consValue(Symbol("*"), consValue(Symbol("x"), multList))
+        let body = consValue(expr, Nil)  // body 是 ((* x multiplier))
+
+        let proc = Procedure(params, body, env)
+        let args = ArrayList<LispValue>()
+        args.add(Number(5.0))
+
+        let eval = Evaluator(env)
+        let result = eval.applyProcedure(proc, args)
+
+        match (result) {
+            case Number(n) =>
+                println("testClosure: result = ${n}")
+                @Assert(n >= 9.9 && n <= 10.1)
+            case _ =>
+                println("testClosure: result = ${result}, type = ${result.toString()}")
+                @Fail("Expected Number result, closure failed")
+        }
+    }
 }
 
 /**
