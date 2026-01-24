@@ -733,29 +733,5 @@ extend Evaluator {
             case _ => Str("Error: export requires a list of symbols")
         }
     }
-
-    /**
-     * 特殊形式：module
-     * 定义模块元数据
-     *
-     * 语法：(module name
-     *          (version "0.1.0")
-     *          (description "..."))
-     */
-    func evalModule(expr: LispValue): LispValue {
-        match (expr) {
-            case Cons(cell) =>
-                let first = cell.car
-
-                match (first) {
-                    case Symbol(moduleName) =>
-                        // 模块名是当前目录名
-                        // TODO: 创建并注册模块信息
-                        // 需要解析后面的元数据字段
-                        Nil
-                    case _ => Str("Error: module requires a module name")
-                }
-            case _ => Str("Error: module requires a module name")
-        }
-    }
 }
+

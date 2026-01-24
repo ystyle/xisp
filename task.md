@@ -76,11 +76,13 @@
 - [ ] shebang 支持
 
 ### 4.2 模块系统增强
-- [ ] define-module 特殊形式
-- [ ] 模块搜索路径 (*module-path*)
-- [ ] 标准库路径 (std:xxx)
-- [ ] 用户库路径 (~/.local/lib/xisp)
+- [ ] 标准库路径 (std.xxx)
 - [ ] 版本范围语法 (^, ~, >=, <=)
+
+> 注：以下功能已实现或不需要
+> ✅ module.lisp 元数据（替代 define-module）
+> ✅ 搜索路径 XISP_PATH（替代 *module-path*）
+> ✅ 用户库路径 ~/.xisp/modules/
 
 ### 4.3 标准库
 - [ ] std.collection 模块
@@ -126,7 +128,6 @@
 - [ ] src/interpreter.cj:192 - std.collection 模块注册
 - [ ] src/interpreter.cj:607 - evalFile 文件读取
 - [ ] src/options.cj:141 - 集合函数实现
-- [ ] src/core/eval_module.cj:753 - module 特殊形式
 - [ ] src/core/dependency_resolver.cj:408 - 版本范围语法
 
 ---
