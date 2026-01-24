@@ -776,27 +776,44 @@ Xisp 支持管道操作符 `->`（thread-first macro），让代码更易读、�
 #### 1. 数据转换
 
 ```lisp
+; 定义辅助函数
+(define (get-name user) (hget user :name))
+(define (add-prefix name) (string-append "User: " name))
+
 (define (format-user-data user)
   (-> user
-      (get-name)
-      (string-append "User: ")
-      (string-upper)))
+      get-name
+      add-prefix))
+
+; 测试
+(format-user-data {:name "Alice" :age 30})
+; => "User: Alice"
 
 ; 等价于
-; (string-upper (string-append "User: " (get-name user)))
+; (add-prefix (get-name user))
 ```
 
 #### 2. 验证链
 
 ```lisp
+; 定义验证函数
+(define (check-not-empty s) (!= (length s) 0))
+(define (check-length s) (<= (length s) 100))
+(define (has-valid-chars s) #t)  ; 简化示例
+
 (define (validate-input input)
   (-> input
-      trim
-      validate-length
-      check-format
-      sanitize))
+      check-not-empty
+      (lambda (x) (if x input #f))  ; 如果通过返回原值，否则 #f
+      check-length
+      (lambda (x) (if x input #f))))
 
-; 每一步都接收上一步的结果
+; 测试
+(validate-input "hello")
+; => "hello"
+
+(validate-input "")
+; => #f
 ```
 
 #### 3. 计算管道
