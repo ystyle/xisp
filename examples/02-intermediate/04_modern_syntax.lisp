@@ -19,13 +19,44 @@
 
 ;; ==================== 2. 哈希映射字面量 {} ====================
 (println "\n=== 2. 哈希映射字面量 {} ===")
-(println "创建关联列表 {:name \"Alice\" :age 30 :city \"Beijing\"}:")
+(println "创建哈希映射 {:name \"Alice\" :age 30 :city \"Beijing\"}:")
 (define m1 {:name "Alice" :age 30 :city "Beijing"})
 (println m1)
 
 (println "\n嵌套哈希映射 {:user {:name \"Bob\" :id 123} :role :admin}:")
 (define m2 {:user {:name "Bob" :id 123} :role :admin})
 (println m2)
+
+;; ==================== 2.1 Redis 风格哈希操作 ====================
+(println "\n=== 2.1 Redis 风格哈希操作 ===")
+(println "创建配置:")
+(define config {:host "localhost" :port 8080 :debug #f})
+(println "Config: " config)
+
+(println "\nHGET - 获取值:")
+(println "  host: " (hget config :host))
+(println "  port: " (hget config :port))
+
+(println "\nHSET - 设置值:")
+(hset config :port 9090)
+(println "  After HSET port: " (hget config :port))
+
+(println "\nHEXISTS - 检查键:")
+(println "  debug exists? " (hexists config :debug))
+(println "  ssl exists? " (hexists config :ssl))
+
+(println "\nHLEN - 获取大小:")
+(println "  size: " (hlen config))
+
+(println "\nHKEYS - 获取所有键:")
+(println "  keys: " (hkeys config))
+
+(println "\nHVALS - 获取所有值:")
+(println "  values: " (hvals config))
+
+(println "\nHDEL - 删除键:")
+(hdel config :debug)
+(println "  After HDEL debug, exists? " (hexists config :debug))
 
 ;; ==================== 3. 哈希集合字面量 #{} ====================
 (println "\n=== 3. 哈希集合字面量 #{} ===")

@@ -2,6 +2,7 @@ package ystyle::xisp.types
 
 import std.collection.ArrayList
 import std.collection.HashMap
+import std.io.*
 import std.collection.HashSet
 
 
@@ -398,6 +399,13 @@ public enum LispValue <: ToString {
     | NativeFunc((ArrayList<LispValue>) -> LispValue)
 
     /**
+     * 哈希映射（字典）
+     *
+     * 键值对集合，键是字符串，值可以是任意 LispValue
+     */
+    | HashMap(HashMap<String, LispValue>)
+
+    /**
      * 判断是否为真值
      * 假值：nil、false、数字 0
      * 其他都是真
@@ -508,6 +516,38 @@ public enum LispValue <: ToString {
     }
 
     /**
+     * 判断是否为哈希映射
+     */
+    public func isHashMap(): Bool {
+        match (this) {
+            case HashMap(_) => true
+            case _ => false
+        }
+    }
+
+    /**
+     * 转换哈希映射为字符串表示
+     */
+    private func hashmapToString(map: HashMap<String, LispValue>): String {
+        if (map.size == 0) {
+            return "{}"
+        }
+
+        let sb = StringBuilder()
+        sb.append("{")
+        var first = true
+        for ((key, value) in map) {
+            if (!first) {
+                sb.append(" ")
+            }
+            sb.append("${key} ${value.toString()}")
+            first = false
+        }
+        sb.append("}")
+        sb.toString()
+    }
+
+    /**
      * 判断是否为宏
      */
     public func isMacro(): Bool {
@@ -532,6 +572,7 @@ public enum LispValue <: ToString {
             case Procedure(_, _, _) => "#<procedure>"
             case Macro(_, _, _) => "#<macro>"
             case NativeFunc(_) => "#<native-function>"
+            case HashMap(map) => hashmapToString(map)
         }
     }
 
@@ -550,6 +591,7 @@ public enum LispValue <: ToString {
             case Procedure(params, body, env) => Procedure(params, body, env.clone())
             case Macro(params, body, env) => Macro(params, body, env.clone())
             case NativeFunc(f) => NativeFunc(f)  // 原生函数不需要克隆
+            case HashMap(map) => HashMap(map)  // HashMap 是不可变的，直接复制引用
         }
     }
 }

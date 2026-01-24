@@ -95,11 +95,17 @@ class BridgeTest {
         let expr1 = Parser.parseSingleFromString("(define map {:a 1 :b 2 :c 3})")
         evaluator.eval(expr1)
 
-        // 测试访问
-        let expr2 = Parser.parseSingleFromString("(first map)")
+        // 测试使用 hashmap-get 访问
+        let expr2 = Parser.parseSingleFromString("(hashmap-get map ':a)")
         let result2 = evaluator.eval(expr2)
-        println("First pair: ${result2.toString()}")
+        println("Get key 'a': ${result2.toString()}")
         @Assert(!result2.isNil())
+
+        // 测试获取所有键
+        let expr3 = Parser.parseSingleFromString("(hashmap-keys map)")
+        let result3 = evaluator.eval(expr3)
+        println("Keys: ${result3.toString()}")
+        @Assert(result3.isList())
     }
 
     @TestCase

@@ -184,6 +184,11 @@ public class Lexer {
             return Token.Boolean(false)
         }
 
+        // 检查是否为关键字（以 : 开头）
+        if (symStr.size > 0 && symStr.startsWith(":")) {
+            return Token.Keyword(symStr[1..])  // 去掉冒号
+        }
+
         Token.Symbol(symStr)
     }
 

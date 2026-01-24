@@ -67,6 +67,11 @@ public enum Token <: Equatable<Token> {
     | Boolean(Bool)
 
     /**
+     * 关键字（自求值符号）:keyword
+     */
+    | Keyword(String)
+
+    /**
      * 向量开始 [
      */
     | VectorStart
@@ -118,6 +123,7 @@ public enum Token <: Equatable<Token> {
             case (Float(f1), Float(f2)) => f1 == f2
             case (String(s1), String(s2)) => s1 == s2
             case (Boolean(b1), Boolean(b2)) => b1 == b2
+            case (Keyword(k1), Keyword(k2)) => k1 == k2
             case (VectorStart, VectorStart) => true
             case (VectorEnd, VectorEnd) => true
             case (HashSetStart, HashSetStart) => true
@@ -146,6 +152,7 @@ public enum Token <: Equatable<Token> {
             case Float(f) => "<float: ${f}>"
             case String(s) => "<string: \"${s}\">"
             case Boolean(b) => if (b) { "#t" } else { "#f" }
+            case Keyword(k) => "<keyword: :${k}>"
             case VectorStart => "["
             case VectorEnd => "]"
             case HashSetStart => "#{"
@@ -157,7 +164,7 @@ public enum Token <: Equatable<Token> {
     }
 
     /**
-     * 判断是否为字面量（数字、字符串、布尔值）
+     * 判断是否为字面量（数字、字符串、布尔值、关键字）
      */
     public func isLiteral(): Bool {
         match (this) {
@@ -165,6 +172,7 @@ public enum Token <: Equatable<Token> {
             case Float(_) => true
             case String(_) => true
             case Boolean(_) => true
+            case Keyword(_) => true
             case _ => false
         }
     }

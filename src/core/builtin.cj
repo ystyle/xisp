@@ -22,7 +22,9 @@ extend BuiltinFunctions {
         registerLogic(env)
         registerPredicates(env)
         registerPrint(env)
+        registerHashMap(env)
         BuiltinMacros.registerAll(env)
+        registerRedisAliases(env)     // Redis 风格别名
         registerModernAliases(env)      // 最后注册别名，确保所有原函数已注册
     }
 }

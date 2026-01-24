@@ -88,6 +88,7 @@ public class Parser {
             case Token.Float(f) => LispValue.Float(f)
             case Token.String(s) => this.parseStringOrInterpolation(s)
             case Token.Boolean(b) => Boolean(b)
+            case Token.Keyword(k) => Symbol(":${k}")  // 关键字是自求值符号
             case Token.Symbol(s) => Symbol(s)
             case _ => Nil  // 错误情况
         }
@@ -309,8 +310,8 @@ public class Parser {
             this.advance()  // 消费 HashMapEnd }
         }
 
-        // 创建 (cangjie::hashmap (quote key1) val1 (quote key2) val2 ...)
-        let result = consValue(Symbol("cangjie::hashmap"), Nil)
+        // 创建 (hashmap (quote key1) val1 (quote key2) val2 ...)
+        let result = consValue(Symbol("hashmap"), Nil)
         var current = result
         for (pair in pairs) {
             let newCell = Cons(ConsCell(pair, Nil))
