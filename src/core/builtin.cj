@@ -16,6 +16,7 @@ extend BuiltinFunctions {
     public static func registerAll(env: Environment) {
         registerArithmetic(env)
         registerModulo(env)
+        registerMath(env)
         registerComparison(env)
         registerListOps(env)
         registerHigherOrder(env)

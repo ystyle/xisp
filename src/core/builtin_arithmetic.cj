@@ -2,6 +2,8 @@ package ystyle::xisp.core
 
 import ystyle::xisp.types.*
 import std.math.fmod
+import std.math.round
+import std.math.*
 
 /**
  * 算术运算扩展
@@ -233,5 +235,65 @@ extend BuiltinFunctions {
                 case _ => Nil
             }
         }))
+    }
+
+    /**
+     * 注册数学函数
+     */
+    static func registerMath(env: Environment) {
+        // (round n [digits]) - 四舍五入
+        // digits: 保留的小数位数，默认为0
+        env.define("round", NativeFunc({ args =>
+            if (args.size < 1 || args.size > 2) {
+                return Str("Error: round requires 1 or 2 arguments")
+            }
+
+            // 检查 digits 参数并提取值
+            var digitsVal: Int64 = 0
+            if (args.size == 2) {
+                match (args[1]) {
+                    case LispValue.Int(d) => digitsVal = d
+                    case _ => return Str("Error: round digits must be an integer")
+                }
+            }
+
+            match (args[0]) {
+                case LispValue.Int(i) =>
+                    if (digitsVal == 0) {
+                        LispValue.Int(i)
+                    } else {
+                        let f = Float64(i)
+                        let multiplier = BuiltinFunctions.pow10Static(Float64(digitsVal))
+                        LispValue.Float(round(f * multiplier) / multiplier)
+                    }
+                case LispValue.Float(f) =>
+                    let multiplier = BuiltinFunctions.pow10Static(Float64(digitsVal))
+                    LispValue.Float(round(f * multiplier) / multiplier)
+                case _ => Nil
+            }
+        }))
+    }
+
+    /**
+     * 10的幂次方静态辅助函数
+     */
+    public static func pow10Static(n: Float64): Float64 {
+        if (n == 0.0) {
+            return 1.0
+        } else if (n == 1.0) {
+            return 10.0
+        } else if (n == 2.0) {
+            return 100.0
+        } else if (n == 3.0) {
+            return 1000.0
+        } else {
+            var result = 1.0
+            var i = 0
+            while (i < Int64(n)) {
+                result = result * 10.0
+                i = i + 1
+            }
+            result
+        }
     }
 }
