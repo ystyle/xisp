@@ -4,32 +4,37 @@ Xisp 提供了简洁优雅的模块系统，支持代码组织、命名空间隔
 
 ## 快速开始
 
-### 基本概念
+### 基本概念（对齐仓颉术语）
 
-```
-~/.xisp/modules/
-ystyle/                   ; 组织目录
-└── log/                 ; git 仓库：github.com/ystyle/log
-    ├── package.lisp     ; 包元数据（定义整个包，类似 package.json）
-    ├── core.lisp        ; 根目录也可以有代码文件
-    └── zlog/           ; 子目录
-        ├── core.lisp
-        └── file.lisp
-```
+| 术语 | 定义 | 标志 | 示例 |
+|------|------|------|------|
+| **模块** | 有 `package.lisp` 的项目/子项目 | 存在 `package.lisp` | `ystyle/log/` |
+| **包** | 模块内的目录组织 | 模块内的子目录 | `log/zlog/` |
+| **文件** | 单个 `.lisp` 源文件 | `.lisp` 文件 | `utils.lisp` |
 
 **核心理念**：
-- **`.` 和 `::` 都表示目录层级**
-- `package.lisp` 在包根目录（类似 Node.js 的 package.json）
-- 自动加载包根目录及其子目录的 `.lisp` 文件（忽略 `.` 开头的文件）
+- **`.` 和 `::` 在文件系统都表示目录层级**
+- **`package.lisp`** 定义模块（类似仓颉的 `cjpm.toml`）
+- **自动加载**模块/包目录下所有 `.lisp` 文件（忽略 `.` 开头的文件）
+- **绝对导入**：只导入模块（必须有 `package.lisp`）
+- **相对导入**：导入文件或目录包（不需要 `package.lisp`）
 
 ### 导入示例
 
 ```lisp
-;; 第三方包
-(import ystyle::log.zlog)   ; → ystyle/log/package.lisp
+;; 绝对导入 - 导入外部模块
+(import ystyle::log.zlog)      ; → ystyle/log/zlog/package.lisp
+(import pkg1)                  ; → 搜索路径/pkg1/package.lisp
 
-;; 使用时包名是最后一级（zlog）
-(zlog.init "myapp")
+;; 相对导入 - 导入本地文件/目录包
+(import "./math.add")          ; → math/add/ 目录（包）
+(import "./utils.lisp")        ; → utils.lisp 文件
+(import "./helpers/core.lisp") ; → helpers/core.lisp 文件
+
+;; 使用,最后一级是符号前缀
+(zlog.init "myapp")            ; 模块导入：有前缀
+(add.calculate 1 2)            ; 目录包导入：有前缀
+(processData "test")           ; 文件导入：无前缀
 ```
 
 ---
@@ -40,13 +45,21 @@ ystyle/                   ; 组织目录
 
 | 分隔符 | 用途 | 示例 |
 |--------|------|------|
-| `.` | 包名使用 `.` 分隔层级 | `log.zlog` |
-| `::` | `::` 分隔组织和包名 | `ystyle::log.zlog` |
+| `.` | 模块名/相对路径使用 `.` 分隔层级 | `log.zlog` |
+| `::` | 绝对导入时 `::` 分隔组织和模块名 | `ystyle::log.zlog` |
 
-**导入示例**：
+**绝对导入示例**：
 ```lisp
-(import ystyle::log.zlog)    ; → ystyle/log/package.lisp
-(import myorg::utils.string) ; → myorg/utils/package.lisp
+(import ystyle::log.zlog)      ; → ystyle/log/zlog/package.lisp
+(import myorg::utils.string)   ; → myorg/utils/string/package.lisp
+(import pkg1)                  ; → 搜索路径/pkg1/package.lisp
+```
+
+**相对导入示例**：
+```lisp
+(import "./math.add")          ; → math/add/ 目录包
+(import "./utils.lisp")        ; → utils.lisp 文件
+(import "../helpers/core")     ; → ../helpers/core.lisp 文件
 ```
 
 **目录结构对应**：
@@ -54,8 +67,10 @@ ystyle/                   ; 组织目录
 ~/.xisp/modules/
 └── ystyle/
     └── log/
-        ├── package.lisp
-        └── zlog/      → (import ystyle::log.zlog)
+        ├── package.lisp       ; 模块声明
+        └── zlog/              ; 子模块
+            ├── package.lisp   ; 子模块声明
+            └── core.lisp
 ```
 
 ### 符号命名规则
@@ -71,15 +86,92 @@ ystyle/                   ; 组织目录
 (define log::file "app")   ; ❌ 不能用 ::
 ```
 
-**符号中允许 `.`**，但导入语句中的 `.` 只用于分隔包层级。
+**符号中允许 `.`**，但导入语句中的 `.` 只用于分隔层级。
 
 ---
 
-## package.lisp - 包元数据
+## 导入语法详解
+
+### 绝对导入 vs 相对导入
+
+| 导入类型 | 语法 | 加载目标 | 是否需要 package.lisp | 符号前缀 |
+|---------|------|---------|---------------------|---------|
+| **绝对导入-模块** | `(import pkg1)` | 模块目录 | ✅ 必需 | ✅ 有（模块名） |
+| **绝对导入-子模块** | `(import org::pkg.sub)` | 子模块目录 | ✅ 必需 | ✅ 有（子模块名） |
+| **相对导入-目录包** | `(import "./math.add")` | 目录 | ❌ 不需要 | ✅ 有（目录名） |
+| **相对导入-文件** | `(import "./utils.lisp")` | 单文件 | ❌ 不需要 | ❌ 无前缀 |
+
+### 判断规则
+
+**绝对导入**（Symbol 类型）：
+- 只能导入模块（必须有 `package.lisp`）
+- 通过搜索路径查找
+- 有命名空间隔离（模块名.符号名）
+
+**相对导入**（String 类型）：
+- 导入文件或目录包（不需要 `package.lisp`）
+- 基于当前文件路径解析
+- **以 `.lisp` 结尾** → 单文件导入（无前缀）
+- **不以 `.lisp` 结尾** → 目录包导入（有前缀）
+
+### 绝对导入示例
+
+```lisp
+;; 导入第三方模块
+(import ystyle::log.zlog)
+(zlog.init "myapp")          ; ✅ zlog. 前缀
+
+;; 导入本地模块（通过搜索路径）
+(import pkg1)
+(pkg1.greet "test")          ; ✅ pkg1. 前缀
+
+;; 导入子模块
+(import std.io.file)
+(file.read "/tmp/test.txt")  ; ✅ file. 前缀
+```
+
+### 相对导入示例
+
+```lisp
+;; 导入目录包 → 有前缀
+(import "./math.add")
+(add.calculate 1 2)          ; ✅ add. 前缀
+
+(import "./string.format")
+(format.format "hello")      ; ✅ format. 前缀
+
+;; 导入单文件 → 无前缀
+(import "./utils.lisp")
+(processData "test")         ; ✅ 无前缀，直接导入符号
+
+(import "./helpers/consts.lisp")
+(getMaxSize())               ; ✅ 无前缀
+
+(import "./math/core.lisp")
+(calculate 1 2)              ; ✅ 无前缀
+```
+
+### 高级导入语法
+
+**别名导入**：
+```lisp
+(import ystyle::log.zlog :as zlog)
+(zlog.init "myapp")
+```
+
+**限定导入**：
+```lisp
+(import (only pkg1 greet hello))
+(pkg1.greet "test")          ; ✅ 只导入指定符号
+```
+
+---
+
+## package.lisp - 模块元数据
 
 ### 基本格式
 
-每个第三方包目录下必须有 `package.lisp` 文件：
+每个模块目录下必须有 `package.lisp` 文件：
 
 ```lisp
 (package log.zlog
@@ -92,17 +184,17 @@ ystyle/                   ; 组织目录
 ```
 
 **要点**：
-- **包名不含组织前缀**：`log.zlog` 而不是 `ystyle.log.zlog`
-- **organization 字段**：指定组织名（第三方包必需）
+- **模块名不含组织前缀**：`log.zlog` 而不是 `ystyle.log.zlog`
+- **organization 字段**：指定组织名（第三方模块必需）
 - **导入时组合**：`(import ystyle::log.zlog)`
 
 ### 字段说明
 
 | 字段 | 说明 | 必需 |
 |------|------|------|
-| `name` | 包名（不含组织前缀） | ✅ |
+| `name` | 模块名（不含组织前缀） | ✅ |
 | `version` | 版本号 | ✅ |
-| `organization` | 组织名（第三方包） | ✅ |
+| `organization` | 组织名（第三方模块） | ✅ |
 | `description` | 描述 | ⚠️ |
 | `author` | 作者 | ⚠️ |
 | `homepage` | 主页 | ⚠️ |
@@ -121,73 +213,47 @@ ystyle/                   ; 组织目录
     (ystyle::log.zlog "0.2.0")))
 ```
 
-**依赖格式**：`(组织::包名 "version")` - 使用 `::` 分隔组织和包名
+**依赖格式**：`(组织::模块名 "version")` - 使用 `::` 分隔组织和模块名
 
 ---
 
-## 导入语法
+## 符号前缀规则
 
-| 语法 | 说明 |
-|------|------|
-| `(import std.io.file)` | 导入标准库包 |
-| `(import org::pkg.subpkg)` | 导入第三方包 |
-| `(import org::pkg :as alias)` | 别名导入 |
-| `(import (only pkg sym1 sym2))` | 限定导入 |
-| `(import "./local")` | 相对路径导入 |
+### 前缀规则总结
 
-### 别名导入
+**统一规则**：符号前缀 = **路径的最后一级**
 
-```lisp
-(import ystyle::log.zlog :as zlog)
-(zlog.init "myapp")
-```
-
-### 限定导入
-
-```lisp
-(import (only std.io.file read write))
-(file.read "/tmp/test.txt")
-(file.write "/tmp/out.txt" "hello")
-```
-
-### 相对路径导入
-
-```lisp
-(import "./lib/utils")
-(import "../lib/parser")
-```
-
----
-
-## 包名与符号使用
-
-### 包名规则
-
-**包名 = 导入路径的最后一个组件**：
-
-```lisp
-(import std.io)           → 包名是 `io`
-(import std.io.file)      → 包名是 `file`
-(import ystyle::log.zlog) → 包名是 `zlog`
-```
+| 导入语句 | 加载路径 | 符号前缀 |
+|---------|---------|---------|
+| `(import pkg1)` | `pkg1/package.lisp` | `pkg1` |
+| `(import org::math.calc)` | `org/math/calc/package.lisp` | `calc` |
+| `(import "./math.add")` | `math/add/` | `add` |
+| `(import "./utils.lisp")` | `utils.lisp` | **无前缀** |
 
 ### 使用示例
 
 ```lisp
-;; 导入
-(import std.io.file)
+;; 导入外部模块 - 有前缀
 (import ystyle::log.zlog)
-
-;; 使用（包名.函数名）
-(file.read "/tmp/test.txt")
-(file.write "/tmp/out" "data")
-(zlog.init "myapp")
+(zlog.init "myapp")          ; ✅ zlog. 前缀
 (zlog.write "Hello")
+
+;; 导入本地模块 - 有前缀
+(import pkg1)
+(pkg1.greet "test")          ; ✅ pkg1. 前缀
+
+;; 导入目录包（相对）- 有前缀
+(import "./math.add")
+(add.calculate 1 2)          ; ✅ add. 前缀
+
+;; 导入单文件（相对）- 无前缀
+(import "./utils.lisp")
+(processData "test")         ; ✅ 无前缀，直接导入符号
 ```
 
-### 层级访问
+### 层级访问规则
 
-**只能访问当前层级包的符号**：
+**只能访问当前层级模块/包的符号**：
 
 ```lisp
 (import std.io.file)
@@ -208,6 +274,7 @@ ystyle/                   ; 组织目录
 ### 示例
 
 ```lisp
+;; pkg1/utils.lisp
 (export read write exists?)
 
 (define (read path) "读取文件")
@@ -216,9 +283,10 @@ ystyle/                   ; 组织目录
 ```
 
 **要点**：
-- `export` 声明的符号可以被包外访问
-- 未 `export` 的符号是包私有的
+- `export` 声明的符号可以被模块/包外访问
+- 未 `export` 的符号是私有的
 - 每个 `.lisp` 文件可以有自己的 `export` 声明
+- **文件导入**（相对导入）的符号直接导入到当前作用域
 
 ---
 
@@ -229,43 +297,51 @@ ystyle/                   ; 组织目录
 ```
 ~/.xisp/modules/
 ├── ystyle/                   ; 组织：ystyle
-│   └── log/                 ; git 仓库：github.com/ystyle/log
+│   └── log/                 ; 模块（有 package.lisp）
 │       ├── package.lisp
 │       ├── core.lisp
-│       └── zlog/
+│       └── zlog/            ; 子模块（有 package.lisp）
+│           ├── package.lisp
 │           ├── core.lisp
 │           └── file.lisp
 │
 └── myorg/                    ; 组织：myorg
-    └── utils/
-        └── string.lisp
+    └── utils/               ; 模块
+        └── package.lisp
+        └── string/          ; 子模块
 ```
 
 ### 项目目录
 
 ```
-myapp/
-├── package.lisp              ; 项目声明（可选）
+myapp/                         ; 模块（有 package.lisp）
+├── package.lisp              ; 模块声明
 ├── main.lisp
-└── lib/
-    └── helpers/
-        ├── package.lisp
-        └── core.lisp
+├── helpers/                  ; 包（目录组织，不需要 package.lisp）
+│   ├── consts.lisp          ; 文件
+│   └── validate.lisp        ; 文件
+└── math/
+    ├── core.lisp            ; 文件
+    └── stats/               ; 目录包（相对导入）
+        └── average.lisp     ; 文件
 ```
 
 ---
 
 ## 文件加载规则
 
+### 模块/包的加载规则
+
 **规则**：
 - ✅ 自动加载目录下所有 `.lisp` 文件
-- ✅ 按文件名排序加载
+- ✅ 按文件名排序加载（字母顺序）
 - ❌ 忽略 `.` 开头的文件
+- ❌ `package.lisp` 不作为代码文件执行
 
 **示例**：
 ```
 log/
-├── package.lisp    ; ✅ 加载
+├── package.lisp    ; ✅ 元数据文件，不执行
 ├── core.lisp      ; ✅ 加载
 ├── zlog/
 │   ├── core.lisp  ; ✅ 加载
@@ -312,10 +388,10 @@ log/
     (ystyle::log "0.2.0")))  ; 固定版本
 ```
 
-**3. 相对路径导入**：
+**3. 相对路径导入**（不适用版本管理）：
 ```lisp
-(import "./lib.helpers")
-(import ../lib.parser")
+(import "./math.add")      ; 本地目录包
+(import "./utils.lisp")    ; 本地文件
 ```
 
 ---
@@ -329,19 +405,19 @@ myapp@1.0.0
 ```
 
 **实现**：
-- 每个包的 `package.lisp` 声明自己的依赖
-- 加载包时递归加载其依赖
+- 每个模块的 `package.lisp` 声明自己的依赖
+- 加载模块时递归加载其依赖
 - 版本冲突使用项目声明或默认版本
 
 ---
 
 ## 错误处理
 
-### 包不存在
+### 模块不存在
 
 ```lisp
 (import nonexist.package)
-; ❌ 错误：找不到 nonexist.package 目录
+; ❌ 错误：找不到 nonexist.package 模块（缺少 package.lisp）
 ```
 
 ### 缺少 package.lisp
@@ -349,18 +425,28 @@ myapp@1.0.0
 ```lisp
 (import mypackage)
 ; ❌ 错误：Missing package.lisp in mypackage/
+; 提示：如果要导入文件，请使用相对导入 (import "./mypackage.lisp")
+```
+
+### 相对导入遇到模块
+
+```lisp
+;; 假设 subdir/ 有 package.lisp
+(import "./subdir")
+; ❌ 错误：Cannot import module 'subdir' using relative import.
+;        Use (import subdir) or (import org::subdir) instead.
 ```
 
 ### 符号未导出
 
 ```lisp
-;; package.lisp
+;; utils.lisp
 (define (internalHelper) ...)  ; 未 export
 
 ;; main.lisp
-(import mypackage)
-(mpackage.internalHelper)
-; ❌ 错误：internalHelper 未导出（包私有）
+(import "./utils.lisp")
+(internalHelper)
+; ❌ 错误：internalHelper 未导出（文件私有）
 ```
 
 ### 组织名不匹配
@@ -371,19 +457,19 @@ myapp@1.0.0
   (organization "ystyle"))
 
 ;; 错误导入
-(import wrongorg::log.zlog)
-; ❌ 错误：Package 'log.zlog' belongs to organization 'ystyle', not 'wrongorg'
+(import wrongorg::log)
+; ❌ 错误：Module 'log' belongs to organization 'ystyle', not 'wrongorg'
 ```
 
 ---
 
 ## 最佳实践
 
-### 1. 包命名
+### 1. 模块命名
 
 ```lisp
 (import utils.string)         ; ✅ 简短有意义
-(import ystyle::log.zlog)     ; ✅ 组织::包名清晰
+(import ystyle::log.zlog)     ; ✅ 组织::模块名清晰
 (import company.project.app.utils)  ; ❌ 层级太深
 ```
 
@@ -393,28 +479,52 @@ myapp@1.0.0
 ;; 只导出公共 API
 (export publicFunction helperFunction)
 (define (publicFunction) ...)   ; 导出
-(define (internalHelper) ...)   ; 不导出，包私有
+(define (internalHelper) ...)   ; 不导出，私有
 ```
 
-### 3. 导入方式
+### 3. 导入方式选择
 
+**绝对导入**：导入外部模块/公共库
 ```lisp
-;; 明确导入需要的符号
-(import (only std.io.file read write))
+(import ystyle::log.zlog)
+(import pkg1)
+```
 
-;; 使用别名避免冲突
-(import std.io.file :as file)
-(import myorg::io.file :as org-file)
+**相对导入**：导入项目内辅助文件
+```lisp
+(import "./utils.lisp")       ; 工具函数
+(import "./helpers.consts")   ; 常量定义
+(import "./math.core")        ; 数学函数
+```
+
+**避免符号冲突**：
+```lisp
+;; 使用限定导入
+(import (only "./math/stats.lisp" average median))
 ```
 
 ### 4. 文件组织
 
+**模块（有 package.lisp）**：
 ```
-package/
-├── package.lisp     ; 包元数据
+log/
+├── package.lisp     ; 模块元数据
 ├── api.lisp         ; 公共接口，导出符号
 ├── internal.lisp    ; 内部实现，不导出
 └── .backup.lisp     ; 备份，忽略
+```
+
+**项目目录（相对导入）**：
+```
+myapp/
+├── main.lisp
+├── utils.lisp       ; 工具函数（无前缀导入）
+├── helpers/
+│   ├── consts.lisp  ; 常量（无前缀导入）
+│   └── validate.lisp ; 验证函数（无前缀导入）
+└── math/
+    └── stats/       ; 目录包（有 stats. 前缀）
+        └── average.lisp
 ```
 
 ---
@@ -427,21 +537,22 @@ package/
 ~/.xisp/modules/
 └── ystyle/
     └── log/               ; git 仓库：github.com/ystyle/log
-        ├── package.lisp
+        ├── package.lisp   ; 模块声明
         ├── core.lisp
-        └── zlog/
+        └── zlog/          ; 子模块
             ├── core.lisp
             └── file.lisp
 
 myapp/
-├── package.lisp
+├── package.lisp           ; 项目模块声明
 ├── main.lisp
-└── lib/
-    └── utils/
-        └── string.lisp
+├── utils.lisp            ; 工具文件
+└── math/
+    └── stats/            ; 目录包（相对导入）
+        └── average.lisp
 ```
 
-### 包文件
+### 模块文件
 
 **ystyle/log/package.lisp**：
 ```lisp
@@ -450,11 +561,11 @@ myapp/
   (organization "ystyle"))
 ```
 
-**ystyle/log/core.lisp**（代码文件示例）：
+**ystyle/log/zlog/core.lisp**：
 ```lisp
 (export init shutdown write)
 
-(define (init) "初始化")
+(define (init name) "初始化")
 (define (write msg) "写入日志")
 ```
 
@@ -468,34 +579,45 @@ myapp/
 
 **myapp/main.lisp**：
 ```lisp
-;; 导入第三方包
+;; 导入外部模块（绝对导入）- 有前缀
 (import ystyle::log.zlog)
 (zlog.init "myapp")
 (zlog.write "Hello World")
 
-;; 导入本地包
-(import ./lib.utils)
-(utils.process data)
+;; 导入目录包（相对导入）- 有前缀
+(import "./math.stats")
+(stats.average [1 2 3])
+
+;; 导入单文件（相对导入）- 无前缀
+(import "./utils.lisp")
+(processData "test")
 ```
 
 ---
 
 ## 与其他语言对比
 
-| 特性 | Xisp | Node.js | Rust | Go |
-|------|------|---------|------|-----|
-| 元数据文件 | `package.lisp` | `package.json` | `Cargo.toml` | `go.mod` |
-| 导入语法 | `(import ...)` | `require(...)` | `use ...` | `import ...` |
+| 特性 | Xisp | Go | Rust | Node.js |
+|------|------|-----|------|---------|
+| 元数据文件 | `package.lisp` | `go.mod` | `Cargo.toml` | `package.json` |
+| 绝对导入 | `(import pkg)` | `import "pkg"` | `use pkg;` | `require("pkg")` |
+| 相对导入 | `(import "./file.lisp")` | `import "./file"` | N/A | `require("./file")` |
 | 分隔符 | `.` 和 `::` | `/` | `::` | `/` |
-| 导出关键字 | `export` | `exports` | `pub` | 无（首字母大写） |
+| 导出关键字 | `export` | 首字母大写 | `pub` | `exports` |
+| 符号前缀 | 包名.符号名 | 包名.符号名 | 包名::符号名 | - |
+
+**设计理念**：
+- 类似 **Go**：导入后使用 `包名.符号名` 访问
+- 相对导入：类似 C 的 `#include`，直接导入符号到当前作用域
 
 ---
 
 ## 相关资源
 
-- **示例程序**：`examples/modules_demo.lisp` - 完整演示
+- **示例程序**：`examples/modules_demo/` - 完整演示
 - **实现代码**：
   - `src/core/module.cj` - 模块系统核心
   - `src/core/eval_module.cj` - import/export 特殊形式
-  - `src/core/evaluator.cj` - 集成模块系统
-- **配置文件**：`package.lisp` - 项目/包元数据
+  - `src/core/module_loader.cj` - 文件加载器
+  - `src/core/package_parser.cj` - package.lisp 解析器
+- **配置文件**：`package.lisp` - 模块元数据
