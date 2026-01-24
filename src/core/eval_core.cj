@@ -16,7 +16,13 @@ extend Evaluator {
             case Str(_) => expr
             case Boolean(_) => expr
             case Nil => expr
-            case Symbol(s) => this.env.lookup(s)
+            case Symbol(s) =>
+                // 关键字符号（以 : 开头）是自求值的
+                if (s.size > 0 && s.startsWith(":")) {
+                    Symbol(s)  // 直接返回符号本身
+                } else {
+                    this.env.lookup(s)
+                }
             case Cons(cell) => this.evalCons(expr, cell)
             case _ => expr
         }
