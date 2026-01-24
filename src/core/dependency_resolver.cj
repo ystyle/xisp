@@ -393,8 +393,10 @@ public class VersionUtils {
      * 检查版本是否满足要求
      * 支持的格式：
      * - "0.2.0" - 精确版本
-     * - "latest" - 最新版本
-     * - "^1.0.0" - 兼容版本（未实现）
+     * - "latest" - 最新版本（默认版本）
+     *
+     * 说明：采用精确版本管理，不支持版本范围语法（^, ~, >=, <=）
+     * 多版本通过 @版本号 目录管理，如 org/module@0.1.0/
      */
     public static func satisfiesVersion(version: String, requirement: String): Bool {
         if (requirement == "latest") {
@@ -404,8 +406,6 @@ public class VersionUtils {
         if (requirement == version) {
             return true
         }
-
-        // TODO: 支持 ^、~、>=、<= 等版本范围语法
 
         false
     }
