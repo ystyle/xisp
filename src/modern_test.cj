@@ -22,6 +22,13 @@ var modernTests = ArrayList<ModernTestItem>([
     ModernTestItem("(third '(a b c))", "c"),
     ModernTestItem("(prepend 1 '(2 3))", "1"),  // 检查包含 1
 
+    // 传统组合函数测试
+    ModernTestItem("(cadr '(1 2 3))", "2"),     // cadr = second
+    ModernTestItem("(caddr '(1 2 3))", "3"),    // caddr = third
+    ModernTestItem("(cddr '(1 2 3 4 5))", "(3"), // cddr = (rest (rest lst))
+    ModernTestItem("(caar '((a b) (c d)))", "a"), // caar = (car (car lst))
+    ModernTestItem("(cdar '((a b) (c d)))", "(b"), // cdar = (cdr (car lst))
+
     // 高阶函数测试（使用原生函数）
     ModernTestItem("(sum '(1 2 3 4 5))", "15"),
     ModernTestItem("(product '(2 3 4))", "24"),

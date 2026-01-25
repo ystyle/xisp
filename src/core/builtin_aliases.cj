@@ -66,6 +66,62 @@ extend BuiltinFunctions {
         // (more lst) - rest 的另一个别名
         env.define("more", cdrFunc)  // 复用上面的 cdrFunc
 
+        // ========== 传统 Lisp 组合函数 ==========
+
+        // (cadr lst) - (car (cdr lst)) - 第二个元素
+        env.define("cadr", env.lookup("second"))
+
+        // (caddr lst) - (car (cdr (cdr lst))) - 第三个元素
+        env.define("caddr", env.lookup("third"))
+
+        // (cddr lst) - (cdr (cdr lst)) - 除前两个外的剩余部分
+        env.define("cddr", NativeFunc({ args =>
+            if (args.size != 1) {
+                return Nil
+            }
+            if (let Cons(cell1) <- args[0]) {
+                if (let Cons(cell2) <- cell1.cdr) {
+                    cell2.cdr
+                } else {
+                    Nil
+                }
+            } else {
+                Nil
+            }
+        }))
+
+        // (cdar lst) - (cdr (car lst))
+        env.define("cdar", NativeFunc({ args =>
+            if (args.size != 1) {
+                return Nil
+            }
+            if (let Cons(cell1) <- args[0]) {
+                if (let Cons(carCell) <- cell1.car) {
+                    carCell.cdr
+                } else {
+                    Nil
+                }
+            } else {
+                Nil
+            }
+        }))
+
+        // (caar lst) - (car (car lst))
+        env.define("caar", NativeFunc({ args =>
+            if (args.size != 1) {
+                return Nil
+            }
+            if (let Cons(cell1) <- args[0]) {
+                if (let Cons(carCell) <- cell1.car) {
+                    carCell.car
+                } else {
+                    Nil
+                }
+            } else {
+                Nil
+            }
+        }))
+
         // (string-append x1 x2 ...) - str 的 Common Lisp 风格别名
         let strFunc = env.lookup("str")
         env.define("string-append", strFunc)
