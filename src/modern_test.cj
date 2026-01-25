@@ -109,4 +109,66 @@ class ModernTest {
         @Assert(resultStr.contains("4"))
         @Assert(resultStr.contains("3"))
     }
+
+    @TestCase
+    func testTypeOf() {
+        // 测试 type-of 函数
+        let env = Environment()
+        BuiltinFunctions.registerAll(env)
+        let evaluator = Evaluator(env)
+
+        // 测试整数
+        let intExpr = Parser.parseSingleFromString("(type-of 42)")
+        let intResult = evaluator.eval(intExpr)
+        println("type-of 42: ${intResult.toString()}")
+        @Assert(intResult.toString() == "\"integer\"")
+
+        // 测试浮点数
+        let floatExpr = Parser.parseSingleFromString("(type-of 3.14)")
+        let floatResult = evaluator.eval(floatExpr)
+        println("type-of 3.14: ${floatResult.toString()}")
+        @Assert(floatResult.toString() == "\"float\"")
+
+        // 测试字符串
+        let strExpr = Parser.parseSingleFromString("(type-of \"hello\")")
+        let strResult = evaluator.eval(strExpr)
+        println("type-of \"hello\": ${strResult.toString()}")
+        @Assert(strResult.toString() == "\"string\"")
+
+        // 测试符号
+        let symExpr = Parser.parseSingleFromString("(type-of 'foo)")
+        let symResult = evaluator.eval(symExpr)
+        println("type-of 'foo: ${symResult.toString()}")
+        @Assert(symResult.toString() == "\"symbol\"")
+
+        // 测试列表
+        let listExpr = Parser.parseSingleFromString("(type-of '(1 2 3))")
+        let listResult = evaluator.eval(listExpr)
+        println("type-of '(1 2 3): ${listResult.toString()}")
+        @Assert(listResult.toString() == "\"list\"")
+
+        // 测试空列表（在 Lisp 中，空列表和 nil 是同一个东西）
+        let emptyListExpr = Parser.parseSingleFromString("(type-of '())")
+        let emptyListResult = evaluator.eval(emptyListExpr)
+        println("type-of '(): ${emptyListResult.toString()}")
+        @Assert(emptyListResult.toString() == "\"nil\"")
+
+        // 测试 nil
+        let nilExpr = Parser.parseSingleFromString("(type-of nil)")
+        let nilResult = evaluator.eval(nilExpr)
+        println("type-of nil: ${nilResult.toString()}")
+        @Assert(nilResult.toString() == "\"nil\"")
+
+        // 测试布尔值
+        let boolExpr = Parser.parseSingleFromString("(type-of #t)")
+        let boolResult = evaluator.eval(boolExpr)
+        println("type-of #t: ${boolResult.toString()}")
+        @Assert(boolResult.toString() == "\"boolean\"")
+
+        // 测试过程
+        let procExpr = Parser.parseSingleFromString("(type-of +)")
+        let procResult = evaluator.eval(procExpr)
+        println("type-of +: ${procResult.toString()}")
+        @Assert(procResult.toString() == "\"procedure\"")
+    }
 }

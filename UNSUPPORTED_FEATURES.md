@@ -5,9 +5,63 @@
 
 ---
 
-## ❌ 确认不支持的功能（6个）
+## ❌ 确认不支持的功能（7个）
 
-### 1. 符号/关键字比较
+### 1. 宏/函数的可变参数
+
+**优先级**: 🟡 中
+
+**问题**:
+- `(defmacro foo (. args) ...)` - 可变参数语法不支持
+- `(define (foo . args) ...)` - 函数的可变参数不支持
+- `(defmacro foo (x &rest) ...)` - &rest 语法不支持
+
+**影响范围**:
+- 需要接受任意数量参数的宏定义
+- 文档中的 `print-all`, `create-function`, `unless` 示例
+- 无法实现标准的 while、dotimes 等控制结构宏
+
+**具体表现**:
+```lisp
+; ❌ 尝试使用 . rest 参数
+(defmacro test (. args)
+  `(begin ,@args))
+(test 1 2 3)
+; 展开：args 只是一个参数，不是列表
+; 导致无法使用可变参数
+
+; ❌ 尝试使用 ,@ 拼接
+(defmacro test (args)
+  `(begin ,@args))
+; bug: ,@ 只保留第一个元素，其他元素丢失
+```
+
+**建议实现**:
+- 在解析器中添加可变参数支持
+- 参考 Common Lisp 的 `. args` 或 Scheme 的语法
+- 修复 `,@` (comma-at) 的展开逻辑
+
+**临时解决方案**:
+```lisp
+; 固定参数的宏
+(defmacro print-2 (a b)
+  `(begin
+     (println ,a)
+     (println ,b)))
+
+; 使用内置的迭代功能
+(dotimes i 5 (println i))
+
+; 对于需要多个表达式的情况，使用 begin 组合
+(dotimes i 5
+  (begin
+    (println i)
+    (set! i (+ i 1))))
+```
+
+---
+
+### 2. 符号/关键字比较
 
 **优先级**: 🔴 高
 
@@ -36,12 +90,19 @@ env.define("eq?", NativeFunc({ args =>
 
 ---
 
-### 2. 字符串比较函数
+### 3. 字符串比较函数
+
+**状态**: ✅ 已实现 `string=?`
 
 **优先级**: 🔴 高
 
+**已实现**:
+- `string=?` - 字符串相等比较（已实现在 builtin_print.cj）
+- `string<` - 待实现
+- `string>` - 待实现
+
 **问题**:
-- `string=` 函数不存在
+- ~~`string=` 函数不存在~~ ✅ 已修复为 `string=?`
 - 无法用 `=` 比较字符串 (`(= "a" "a")` → `false`)
 - 之前文档示例用了 `string=` 但功能未实现
 
@@ -51,19 +112,6 @@ env.define("eq?", NativeFunc({ args =>
 
 **建议实现**:
 ```cangjie
-env.define("string=", NativeFunc({ args =>
-    if (args.size != 2) {
-        return Nil
-    }
-    match ((args[0], args[1])) {
-        case (Str(s1), Str(s2)) => Boolean(s1 == s2)
-        case _ => {
-            println("Error: string= requires two strings")
-            Nil
-        }
-    }
-}))
-
 env.define("string<", NativeFunc({ args =>
     if (args.size != 2) {
         return Nil
@@ -87,7 +135,7 @@ env.define("string>", NativeFunc({ args =>
 
 ---
 
-### 3. 哈希映射解构
+### 4. 哈希映射解构
 
 **优先级**: 🟡 中
 
@@ -115,7 +163,7 @@ env.define("string>", NativeFunc({ args =>
 
 ---
 
-### 4. match 哈希映射模式
+### 5. match 哈希映射模式
 
 **优先级**: 🟡 中
 
@@ -135,7 +183,7 @@ env.define("string>", NativeFunc({ args =>
 
 ---
 
-### 5. 字符串插值中的函数调用
+### 6. 字符串插值中的函数调用
 
 **优先级**: 🟢 低
 
@@ -155,7 +203,7 @@ env.define("string>", NativeFunc({ args =>
 
 ---
 
-### 6. match 守卫条件多行格式
+### 7. match 守卫条件多行格式
 
 **优先级**: 🟡 中
 
@@ -227,24 +275,27 @@ env.define("string>", NativeFunc({ args =>
 
 ### 🟡 中优先级（增强语法特性）
 
-3. **match 哈希映射匹配**
+3. **宏/函数的可变参数**
+   - 原因：影响宏的灵活性，是元编程的基础
+   - 实现难度：中
+   - 文件：`src/parser/parser.cj`
+
+4. **match 哈希映射匹配**
    - 原因：提升 match 的实用性
    - 实现难度：中
    - 文件：`src/core/eval_match.cj`
 
-4. **哈希映射解构**
+5. **哈希映射解构**
    - 原因：让代码更简洁
    - 实现难度：中
    - 文件：`src/core/eval_let.cj`
 
-### 🟢 低优先级（优化体验）
-
-5. **match 守卫条件多行格式**
+6. **match 守卫条件多行格式**
    - 原因：有单行替代方案，可以使用嵌套 if
    - 实现难度：中
    - 文件：`src/parser/parser.cj` 或 `src/core/eval_match.cj`
 
-6. **字符串插值函数调用**
+7. **字符串插值函数调用**
    - 原因：已有 println 多参数替代方案
    - 实现难度：高
    - 文件：`src/parser/parser.cj`
@@ -266,8 +317,9 @@ cjpm test --show-all-output
 ## 下一步行动
 
 1. ✅ 文档已修正为使用支持的语法
-2. ⏳ 待实现：高优先级功能（符号比较、字符串比较）
-3. 📝 考虑：中低优先级功能的实现计划
+2. ✅ 添加可变参数不支持说明
+3. ⏳ 待实现：高优先级功能（符号比较、字符串比较）
+4. 📝 考虑：中低优先级功能的实现计划
 
 **最后更新**: 2026-01-25
 **相关提交**: 305a29f, a5eb701, e0935d3, 4ee0c9b

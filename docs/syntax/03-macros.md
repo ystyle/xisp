@@ -99,11 +99,11 @@
 #### 带多个参数
 
 ```lisp
-; 定义一个宏，交换两个值
+; 定义一个宏，交换两个变量的值
 (defmacro swap (x y)
   `(let ((temp ,x))
      (set! ,x ,y)
-     (set! y temp)))
+     (set! ,y temp)))    ; 注意：,y 逗号不能少！
 
 ; 使用
 (define a 1)
@@ -111,6 +111,8 @@
 (swap a b)
 ; a => 2, b => 1
 ```
+
+**重要提示**：`set!` 的参数前必须加逗号 `,`，否则宏展开时无法正确替换变量名。
 
 ---
 
@@ -169,40 +171,38 @@
 ; 使用 ,@ - 拼接列表
 `(a ,@lst d)    ; => (a b c d)
 
-; 实际应用
-(defmacro print-all (. args)
-  `(begin
-     ,@(map (lambda (arg) `(println ,arg)) args)))
-
-(print-all "Hello" "World" 42)
-; 展开为：
-; (begin
-;   (println "Hello")
-;   (println "World")
-;   (println 42))
+; 实际应用（注意：可变参数暂不支持）
+; (defmacro print-all (. args)
+;   `(begin
+;      ,@(map (lambda (arg) `(println ,arg)) args)))
+;
+; (print-all "Hello" "World" 42)
 ```
 
 ### 综合示例
 
 ```lisp
-; 构造函数调用
-(defmacro create-function (name params . body)
-  `(define (,name ,@params)
-     ,@body))
+; 构造函数调用（注意：可变参数暂不支持）
+; (defmacro create-function (name params . body)
+;   `(define (,name ,@params)
+;      ,@body))
+;
+; (create-function square (x) (* x x))
+; ; 展开为：
+; ; (define (square x) (* x x))
 
-(create-function square (x) (* x x))
-; 展开为：
-; (define (square x) (* x x))
+; 条件构建（注意：可变参数暂不支持）
+; (defmacro unless (condition . body)
+;   `(if (not ,condition)
+;       (begin ,@body)
+;       nil))
+;
+; (unless (< x 5)
+;   (println "x is not small")
+;   (println "x is >= 5"))
 
-; 条件构建
-(defmacro unless (condition . body)
-  `(if (not ,condition)
-      (begin ,@body)
-      nil))
-
-(unless (< x 5)
-  (println "x is not small")
-  (println "x is >= 5"))
+; 当前的替代方案：使用内置的 unless 宏
+(unless (< x 5) (println "x is not small"))
 ```
 
 ---
@@ -216,17 +216,28 @@
 (defmacro when (test then)
   `(if ,test ,then nil))
 
-; 查看单层展开
-(macroexpand '(when (> x 10) (println "large")))
+; 方法1: 先定义表达式，再展开
+(define expr '(when (> x 10) (println "large")))
+(macroexpand expr)
 ; => (if (> x 10) (println "large") nil)
+
+; 方法2: 直接展开（在脚本模式中）
+(macroexpand '(when (> x 10) x))
+; => (if (> x 10) x nil)
 
 ; 另一个示例
 (defmacro inc (var)
   `(set! ,var (+ ,var 1)))
 
-(macroexpand '(inc counter))
+(define expr2 '(inc counter))
+(macroexpand expr2)
 ; => (set! counter (+ counter 1))
 ```
+
+**注意**：
+- `macroexpand` 需要接收一个未求值的表达式
+- 如果直接使用 quote 语法，在某些情况下可能需要先定义变量
+- 展开结果依赖于宏的定义和当前环境
 
 ### macroexpand-all - 完全展开
 
@@ -235,25 +246,34 @@
 (defmacro outer (x)
   `(when (> ,x 0) (println "positive")))
 
-(macroexpand '(outer 5))
+(define expr3 '(outer 5))
+(macroexpand expr3)
 ; => (when (> 5 0) (println "positive"))
 
-(macroexpand-all '(outer 5))
+(macroexpand-all expr3)
 ; => (if (> 5 0) (begin (println "positive")) nil)
 ```
+
+**说明**：
+- `macroexpand` 展开最外层的宏一次
+- `macroexpand-all` 递归展开所有嵌套的宏，直到没有宏为止
 
 ### 展开过程
 
 ```lisp
+; 先定义变量
+(define x 15)
+
 ; 代码
 (when (> x 10) (println "large"))
+; => large
 
 ; 步骤1：识别为宏
 ; 步骤2：展开宏
 ; (if (> x 10) (println "large") nil)
 
 ; 步骤3：对展开后的代码求值
-; [执行 if 表达式]
+; [执行 if 表达式，打印 "large"]
 ```
 
 ---
@@ -268,9 +288,13 @@ Xisp 提供了多个常用内置宏，它们在启动时自动注册到环境中
 ; 语法
 (when 条件 表达式)
 
+; 示例：先定义变量
+(define x 15)
+
 ; 条件为真时执行表达式并返回其值；否则返回 nil
 (when (> x 10)
   (println "x is large"))
+; => x is large
 
 ; 执行多个表达式
 (when (> x 10)
@@ -285,9 +309,13 @@ Xisp 提供了多个常用内置宏，它们在启动时自动注册到环境中
 ; 语法
 (unless 条件 表达式)
 
+; 示例：假设 x = 15
+(define x 15)
+
 ; 条件为假时执行表达式
 (unless (< x 5)
   (println "x is not small"))
+; => x is not small
 
 ; 执行多个表达式
 (unless (< x 5)
@@ -457,53 +485,69 @@ Xisp 提供了多个常用内置宏，它们在启动时自动注册到环境中
 
 ### 自定义控制结构
 
+**重要限制**：Xisp 目前不支持 rest parameters（`. rest` 语法）。
+
+**当前解决方案**：对于需要多个表达式的情况，使用显式的 `begin`：
+
 ```lisp
-; 实现 while 循环
-(defmacro while (condition . body)
-  `(let ((loop (lambda ()
-                 (if ,condition
-                     (begin
-                       ,@body
-                       (loop))
-                     nil))))
-     (loop)))
+; 简单版 while 循环（单次执行）
+(defmacro while (condition body)
+  `(if ,condition
+       (begin ,body nil)
+       nil))
 
 ; 使用
 (define i 0)
 (while (< i 5)
-  (println i)
-  (set! i (+ i 1)))
-; 打印 0 1 2 3 4
+  (begin
+    (println i)
+    (set! i (+ i 1))))
+; 注意：这个版本只执行一次，不是真正的循环
+
+; 真正的循环需要使用 dotimes 或递归函数
+; 或者使用 Xisp 内置的迭代功能
 ```
+
+**说明**：由于 Xisp 不支持 rest parameters 和复杂的宏嵌套，实现真正的 while 循环比较困难。建议使用 `dotimes` 或其他内置迭代功能。
 
 ### 实现 dotimes
 
+由于不支持 rest parameters，这里提供一个简化版本，body 参数必须是单个表达式：
+
 ```lisp
-; 重复执行 n 次
-(defmacro dotimes ((var n) . body)
+; 重复执行 n 次（简化版）
+(defmacro dotimes (var n body)
   `(let ((counter 0)
          (limit ,n))
      (define (loop)
        (if (< counter limit)
            (begin
              (let ((,var counter))
-               ,@body)
+               ,body)
              (set! counter (+ counter 1))
              (loop))
            nil))
      (loop)))
 
 ; 使用
-(dotimes (i 5)
-  (println #"Iteration: #{i}"))
-; 打印 0 1 2 3 4
+(dotimes i 5
+  (println i))
+; 打印: 0 1 2 3 4
+```
+
+**注意**：
+- `dotimes` 使用 `(var n body)` 而不是 `((var n) . body)`
+- 如果需要执行多个表达式，请使用 `begin` 组合它们
 ```
 
 ### 实现 cond
 
+**注意**：这是一个教学示例，展示了如何实现简单的条件宏。实际使用时，建议使用 Xisp 内置的 `match` 或 `if-let` 宏。
+
 ```lisp
-; 多分支条件（简化版）
-(defmacro my-cond clauses
+; 简化版 cond（仅用于演示，实际使用 match 更好）
+; 这个版本接收一个包含所有条件的列表
+(defmacro my-cond (clauses)
   `(if (null? ,clauses)
        nil
        (let ((first (first ,clauses))
@@ -514,10 +558,10 @@ Xisp 提供了多个常用内置宏，它们在启动时自动注册到环境中
                 (begin ,(second first))
                 (my-cond ,rest))))))
 
-; 使用
-(my-cond [(> x 10) "large"]
-         [(< x 5) "small"]
-         [else "medium"])
+; 使用（注意：需要将所有条件放在一个列表中）
+(define x 15)
+; 由于这个宏的局限性，实际使用建议使用 Xisp 的 match
+; 例如：(match x ((> 10) "large") ((< 5) "small") (else "medium"))
 ```
 
 ### 断言宏
@@ -530,7 +574,9 @@ Xisp 提供了多个常用内置宏，它们在启动时自动注册到环境中
       #t))
 
 ; 使用
+(define x 5)
 (assert (> x 0) "x must be positive")
+; => #t (断言通过)
 ```
 
 ### 属性访问宏
@@ -661,12 +707,13 @@ Reader（词法分析器）将特殊语法转换为 S-表达式：
 
 ```lisp
 ; 完整流程
+(define x 15)
 (when (> x 10) (println "large"))
   ↓ 识别为宏
   ↓ 展开宏
 (if (> x 10) (println "large") nil)
   ↓ 求值
-[执行 if 表达式]
+large
 ```
 
 ### 宏展开时机
