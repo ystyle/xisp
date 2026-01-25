@@ -55,11 +55,12 @@
 (defmacro when (test then)
   `(if ,test ,then nil))
 
-(when (> x 10) (println "large"))
+(define x 15)
+(when (> x 10) x)
 ; 调用时：
 ; 1. 不求值参数，保留为符号
-; 2. 展开宏：(if (> x 10) (println "large") nil)
-; 3. 对展开后的代码求值
+; 2. 展开宏：(if (> x 10) x nil)
+; 3. 对展开后的代码求值 => 15
 ```
 
 ### defmacro - 定义宏
@@ -78,13 +79,22 @@
 (defmacro when (test then)
   `(if ,test ,then nil))
 
-; 使用
+; 使用示例 1：条件为真
+(define x 15)
 (when (> x 10)
   (println "x is large"))
+; 输出: "x is large"
+; 返回: nil（println 返回 nil）
+
+; 使用示例 2：返回值
+(define result (when (> x 10) x))
+; result => 15
 
 ; 展开为：
 ; (if (> x 10) (println "x is large") nil)
 ```
+
+**说明**：`println` 返回 `nil`，所以 `when` 也返回 `nil`。如果需要返回值，可以使用其他表达式。
 
 #### 带多个参数
 
