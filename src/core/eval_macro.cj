@@ -9,6 +9,25 @@ import std.collection.ArrayList
  */
 extend Evaluator {
     /**
+     * 辅助函数：获取 LispValue 的类型名称（用于调试）
+     */
+    func typeOfLispValue(value: LispValue): String {
+        match (value) {
+            case Nil => "Nil"
+            case Boolean(_) => "Boolean"
+            case LispValue.Int(_) => "Int"
+            case LispValue.Float(_) => "Float"
+            case Str(_) => "Str"
+            case Symbol(_) => "Symbol"
+            case Cons(_) => "Cons"
+            case Procedure(_, _, _) => "Procedure"
+            case Macro(_, _, _) => "Macro"
+            case NativeFunc(_) => "NativeFunc"
+            case HashMap(_) => "HashMap"
+            case _ => "Unknown"
+        }
+    }
+    /**
      * 设置最大宏展开深度
      */
     public func setMaxMacroExpandDepth(depth: Int64) {
@@ -49,6 +68,27 @@ extend Evaluator {
                 let expanded = this.expandMacro(value, cell.cdr)
                 this.macroExpandDepth = this.macroExpandDepth - 1
                 expanded
+            } else if (resolvedSym == "quote" || resolvedSym == "quasiquote") {
+                // 检查 quoted 表达式是否包含宏调用
+                if (let Cons(quoted) <- cell.cdr) {
+                    // quoted.car 包含整个 quoted 表达式，例如 (id 42)
+                    // 我们需要展开 quoted.car（这是一个 LispValue）
+                    let quotedExpr = quoted.car
+
+                    // 对 quotedExpr 调用 macroExpand
+                    let expanded = this.macroExpand(quotedExpr)
+
+                    // 检查是否展开了（expanded 是否与 quotedExpr 不同）
+                    if (this.equal(quotedExpr, expanded)) {
+                        // 没有展开，保留 quote
+                        Cons(cell)
+                    } else {
+                        // 展开了，返回展开后的结果（去掉 quote）
+                        expanded
+                    }
+                } else {
+                    Cons(cell)
+                }
             } else {
                 // 不是宏，返回原表达式
                 Cons(cell)
@@ -219,12 +259,10 @@ extend Evaluator {
      * macroexpand 函数
      */
     func evalMacroexpand(expr: LispValue): LispValue {
-        if (let Cons(cell) <- expr && cell.length() == 2) {
-            if (let Cons(cdrCell) <- cell.cdr) {
-                this.macroExpand(cdrCell.car)
-            } else {
-                this.macroExpand(Nil)
-            }
+        if (let Cons(cell) <- expr && cell.length() == 1) {
+            // 先求值参数（因为 macroexpand 接收的是一个表达式）
+            let arg = this.eval(cell.car)
+            this.macroExpand(arg)
         } else {
             Str("Error: macroexpand requires exactly 1 argument")
         }
@@ -234,12 +272,10 @@ extend Evaluator {
      * macroexpand-all 函数
      */
     func evalMacroexpandAll(expr: LispValue): LispValue {
-        if (let Cons(cell) <- expr && cell.length() == 2) {
-            if (let Cons(cdrCell) <- cell.cdr) {
-                this.macroExpandAll(cdrCell.car)
-            } else {
-                this.macroExpandAll(Nil)
-            }
+        if (let Cons(cell) <- expr && cell.length() == 1) {
+            // 先求值参数
+            let arg = this.eval(cell.car)
+            this.macroExpandAll(arg)
         } else {
             Str("Error: macroexpand-all requires exactly 1 argument")
         }

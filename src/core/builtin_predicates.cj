@@ -128,5 +128,26 @@ extend BuiltinFunctions {
                 case _ => LispValue.Boolean(false)
             }
         }))
+
+        // (type-of x) - 返回值的类型名称
+        env.define("type-of", NativeFunc({ args =>
+            if (args.size != 1) {
+                return Str("error")
+            }
+            match (args[0]) {
+                case Nil => Str("nil")
+                case Boolean(_) => Str("boolean")
+                case LispValue.Int(_) => Str("integer")
+                case LispValue.Float(_) => Str("float")
+                case Str(_) => Str("string")
+                case Symbol(_) => Str("symbol")
+                case Cons(_) => Str("list")
+                case HashMap(_) => Str("hashmap")
+                case NativeFunc(_) => Str("procedure")
+                case Procedure(_, _, _) => Str("procedure")
+                case Macro(_, _, _) => Str("macro")
+                case _ => Str("unknown")
+            }
+        }))
     }
 }
