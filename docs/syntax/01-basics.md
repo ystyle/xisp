@@ -634,13 +634,17 @@ Xisp 提供部分传统 Lisp 语法的支持，但**不保证完全兼容**所�
 (first lst)            ; => 首元素
 (rest lst)             ; => 剩余部分
 (second lst)           ; => 第二个元素
-(prepend 1 lst)        ; => 前缀添加
+(third lst)            ; => 第三个元素
 
 ; 传统语法（等价）
 (car lst)              ; => 首元素
 (cdr lst)              ; => 剩余部分
 (cadr lst)             ; => 第二个元素
 (cons 1 lst)           ; => 前缀添加
+(caddr lst)            ; => 第三个元素
+(cddr lst)             ; => 除前两个外的剩余部分 (cdr (cdr lst))
+(cdar lst)             ; => 第一个元素的cdr (cdr (car lst))
+(caar lst)             ; => 第一个元素的car (car (car lst))
 ```
 
 ### 两者对比
@@ -653,6 +657,9 @@ Xisp 提供部分传统 Lisp 语法的支持，但**不保证完全兼容**所�
 | `third` | `caddr` | 第3个元素 |
 | `prepend` | `cons` | 前缀添加 |
 | `begin` | `progn` | 顺序执行 |
+| `cddr` | 无直接对应 | 除前两个外的剩余部分 |
+| `cdar` | 无直接对应 | 第一个元素的cdr |
+| `caar` | 无直接对应 | 第一个元素的car |
 
 **注意**：Xisp 使用 `match` 进行模式匹配，不支持传统 `cond`。多分支条件请使用嵌套 `if` 或 `match`（详见现代语法文档）。
 
