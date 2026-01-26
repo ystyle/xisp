@@ -9,6 +9,21 @@ import std.collection.ArrayList
  */
 extend Evaluator {
     /**
+     * 特殊形式：eval
+     * 对表达式进行求值
+     */
+    func evalEval(expr: LispValue): LispValue {
+        if (let Cons(cell) <- expr && cell.length() == 1) {
+            // 先求值参数，得到表达式
+            let exprValue = this.eval(cell.car)
+            // 对表达式求值
+            this.eval(exprValue)
+        } else {
+            Nil
+        }
+    }
+
+    /**
      * 特殊形式：apply
      */
     func evalApply(expr: LispValue): LispValue {
@@ -294,11 +309,42 @@ extend Evaluator {
                 let newEnv = procEnv.createChild()
 
                 var i = 0
+                var argIndex = 0
+
                 while (i < params.size) {
-                    if (i < args.size) {
-                        newEnv.define(params[i], args[i])
+                    let param = params[i]
+
+                    // 检查是否为可变参数（带 &rest- 前缀）
+                    if (param.startsWith("&rest-")) {
+                        let restName = param[6..]  // 去掉 "&rest-" 前缀
+
+                        // 将剩余参数转换为列表
+                        let restArgs = ArrayList<LispValue>()
+                        while (argIndex < args.size) {
+                            restArgs.add(args[argIndex])
+                            argIndex = argIndex + 1
+                        }
+
+                        // 将 ArrayList 转换为 Lisp 列表
+                        var restList: LispValue = Nil
+                        var j = restArgs.size - 1
+                        while (j >= 0) {
+                            restList = Cons(ConsCell(restArgs[j], restList))
+                            j = j - 1
+                        }
+
+                        newEnv.define(restName, restList)
+                        break
+                    } else {
+                        // 普通参数
+                        if (argIndex < args.size) {
+                            newEnv.define(param, args[argIndex])
+                            argIndex = argIndex + 1
+                        } else {
+                            newEnv.define(param, Nil)
+                        }
+                        i = i + 1
                     }
-                    i = i + 1
                 }
 
                 let oldEnv = this.env

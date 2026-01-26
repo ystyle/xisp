@@ -286,4 +286,209 @@ class ModernTest {
         println("(string=? \"abc\" \"def\") = ${strEq2Result.toString()}")
         @Assert(strEq2Result.toString() == "false")
     }
+
+    @TestCase
+    func testRestParameters() {
+        let env = Environment()
+        BuiltinFunctions.registerAll(env)
+        let evaluator = Evaluator(env)
+
+        println("\n=== 测试可变参数 ===")
+
+        // 测试 lambda 可变参数 (x y . rest)
+        let lambdaCode = Parser.parseSingleFromString("(define f (lambda (x y . rest) (list x y rest)))")
+        evaluator.eval(lambdaCode)
+
+        let call1 = Parser.parseSingleFromString("(f 1 2 3 4)")
+        let result1 = evaluator.eval(call1)
+        println("(f 1 2 3 4) = ${result1.toString()}")
+        @Assert(result1.toString() == "(1 2 (3 4))")
+
+        let call2 = Parser.parseSingleFromString("(f 1 2)")
+        let result2 = evaluator.eval(call2)
+        println("(f 1 2) = ${result2.toString()}")
+        @Assert(result2.toString() == "(1 2 nil)")
+    }
+
+    @TestCase
+    func testOnlyRestParameter() {
+        let env = Environment()
+        BuiltinFunctions.registerAll(env)
+        let evaluator = Evaluator(env)
+
+        println("\n=== 测试纯可变参数 ===")
+
+        // 测试纯可变参数 (. all)
+        let lambdaCode = Parser.parseSingleFromString("(define g (lambda (. all) all))")
+        evaluator.eval(lambdaCode)
+
+        let call1 = Parser.parseSingleFromString("(g 'a 'b 'c)")
+        let result1 = evaluator.eval(call1)
+        println("(g 'a 'b 'c) = ${result1.toString()}")
+        @Assert(result1.toString() == "(a b c)")
+
+        let call2 = Parser.parseSingleFromString("(g)")
+        let result2 = evaluator.eval(call2)
+        println("(g) = ${result2.toString()}")
+        @Assert(result2.toString() == "nil")
+    }
+
+    @TestCase
+    func testCommaAtSplice() {
+        let env = Environment()
+        BuiltinFunctions.registerAll(env)
+        let evaluator = Evaluator(env)
+
+        println("\n=== 测试 ,@ 拼接 ===")
+
+        // 测试 backquote 中的 ,@
+        let defineList = Parser.parseSingleFromString("(define lst '(a b c))")
+        evaluator.eval(defineList)
+
+        let spliceCode = Parser.parseSingleFromString("`(x y z ,@lst)")
+        let result = evaluator.eval(spliceCode)
+        println("`(x y z ,@lst) = ${result.toString()}")
+        @Assert(result.toString() == "(x y z a b c)")
+
+        // 测试中间拼接
+        let spliceCode2 = Parser.parseSingleFromString("`(1 2 ,@lst 4 5)")
+        let result2 = evaluator.eval(spliceCode2)
+        println("`(1 2 ,@lst 4 5) = ${result2.toString()}")
+        @Assert(result2.toString() == "(1 2 a b c 4 5)")
+
+        // 测试开头拼接
+        let spliceCode3 = Parser.parseSingleFromString("`(,@lst)")
+        let result3 = evaluator.eval(spliceCode3)
+        println("`(,@lst) = ${result3.toString()}")
+        @Assert(result3.toString() == "(a b c)")
+    }
+
+    @TestCase
+    func testMacroExpandMyLet() {
+        let env = Environment()
+        BuiltinFunctions.registerAll(env)
+        let evaluator = Evaluator(env)
+
+        println("\n=== 测试 my-let 宏展开 ===")
+
+        // 定义 my-let 宏
+        let defmacro = Parser.parseSingleFromString("(defmacro my-let (bindings . body) `((lambda ,(map car bindings) ,@body) ,@(map cadr bindings)))")
+        evaluator.eval(defmacro)
+
+        // 测试 macroexpand
+        let expanded = evaluator.eval(Parser.parseSingleFromString("(macroexpand '(my-let ((x 10) (y 20)) (+ x y)))"))
+        println("expanded = ${expanded.toString()}")
+
+        // 验证展开后的结果包含关键元素
+        let expandedStr = expanded.toString()
+        @Assert(expandedStr.contains("lambda"))
+        @Assert(expandedStr.contains("x"))
+        @Assert(expandedStr.contains("y"))
+        @Assert(expandedStr.contains("(+ x y)"))
+
+        // 测试执行展开后的表达式
+        let manualExpanded = Parser.parseSingleFromString("((lambda (x y) (+ x y)) 10 20)")
+        let result = evaluator.eval(manualExpanded)
+        println("result = ${result.toString()}")
+        @Assert(result.toString() == "30")
+    }
+
+    @TestCase
+    func testDefineRestParameters() {
+        let env = Environment()
+        BuiltinFunctions.registerAll(env)
+        let evaluator = Evaluator(env)
+
+        println("\n=== 测试普通 define 函数的可变参数 ===")
+
+        // 测试 1: 普通 define 函数的可变参数
+        let defineFunc1 = Parser.parseSingleFromString("(define (test-func x y . rest) (list \"x=\" x \"y=\" y \"rest=\" rest))")
+        evaluator.eval(defineFunc1)
+
+        let call1 = Parser.parseSingleFromString("(test-func 1 2 3 4 5)")
+        let result1 = evaluator.eval(call1)
+        println("(test-func 1 2 3 4 5) = ${result1.toString()}")
+        @Assert(result1.toString() == "(\"x=\" 1 \"y=\" 2 \"rest=\" (3 4 5))")
+
+        let call2 = Parser.parseSingleFromString("(test-func 10 20)")
+        let result2 = evaluator.eval(call2)
+        println("(test-func 10 20) = ${result2.toString()}")
+        @Assert(result2.toString() == "(\"x=\" 10 \"y=\" 20 \"rest=\" nil)")
+
+        // 测试 2: 纯可变参数
+        let defineFunc2 = Parser.parseSingleFromString("(define (test-all . args) args)")
+        evaluator.eval(defineFunc2)
+
+        let call3 = Parser.parseSingleFromString("(test-all 'a 'b 'c)")
+        let result3 = evaluator.eval(call3)
+        println("(test-all 'a 'b 'c) = ${result3.toString()}")
+        @Assert(result3.toString() == "(a b c)")
+
+        let call4 = Parser.parseSingleFromString("(test-all)")
+        let result4 = evaluator.eval(call4)
+        println("(test-all) = ${result4.toString()}")
+        @Assert(result4.toString() == "nil")
+
+        // 测试 3: 对比 lambda 和 define
+        let defineLambda = Parser.parseSingleFromString("(define test-lambda (lambda (x y . rest) (list \"L-x=\" x \"L-y=\" y \"L-rest=\" rest)))")
+        evaluator.eval(defineLambda)
+
+        let call5 = Parser.parseSingleFromString("(test-lambda 1 2 3 4)")
+        let result5 = evaluator.eval(call5)
+        println("(test-lambda 1 2 3 4) = ${result5.toString()}")
+        @Assert(result5.toString() == "(\"L-x=\" 1 \"L-y=\" 2 \"L-rest=\" (3 4))")
+    }
+
+    @TestCase
+    func testEval() {
+        let env = Environment()
+        BuiltinFunctions.registerAll(env)
+        let evaluator = Evaluator(env)
+
+        println("\n=== 测试 eval 函数 ===")
+
+        // 测试 eval 整数
+        let evalInt = Parser.parseSingleFromString("(eval 42)")
+        let intResult = evaluator.eval(evalInt)
+        println("(eval 42) = ${intResult.toString()}")
+        @Assert(intResult.toString() == "42")
+
+        // 测试 eval 符号
+        evaluator.eval(Parser.parseSingleFromString("(define x 100)"))
+        let evalSymbol = Parser.parseSingleFromString("(eval (quote x))")
+        let symbolResult = evaluator.eval(evalSymbol)
+        println("(eval (quote x)) = ${symbolResult.toString()}")
+        @Assert(symbolResult.toString() == "100")
+
+        // 测试 eval quoted list
+        let evalList = Parser.parseSingleFromString("(eval (quote ((lambda (x y) (+ x y)) 10 20)))")
+        let listResult = evaluator.eval(evalList)
+        println("(eval (quote ((lambda (x y) (+ x y)) 10 20))) = ${listResult.toString()}")
+        @Assert(listResult.toString() == "30")
+
+        // 测试 eval 动态构造的表达式
+        evaluator.eval(Parser.parseSingleFromString("(define code (quote (+ 1 2 3)))"))
+        let evalDynamic = Parser.parseSingleFromString("(eval code)")
+        let dynamicResult = evaluator.eval(evalDynamic)
+        println("(eval code) where code = (+ 1 2 3) = ${dynamicResult.toString()}")
+        @Assert(dynamicResult.toString() == "6")
+
+        // 测试 eval 嵌套调用
+        let evalNested = Parser.parseSingleFromString("(eval (list (quote +) 5 10))")
+        let nestedResult = evaluator.eval(evalNested)
+        println("(eval (list (quote +) 5 10)) = ${nestedResult.toString()}")
+        @Assert(nestedResult.toString() == "15")
+
+        // 测试 eval 字符串
+        let evalStr = Parser.parseSingleFromString("(eval (quote \"hello\"))")
+        let strResult = evaluator.eval(evalStr)
+        println("(eval (quote \"hello\")) = ${strResult.toString()}")
+        @Assert(strResult.toString() == "\"hello\"")
+
+        // 测试 eval nil
+        let evalNil = Parser.parseSingleFromString("(eval (quote nil))")
+        let nilResult = evaluator.eval(evalNil)
+        println("(eval (quote nil)) = ${nilResult.toString()}")
+        @Assert(nilResult.toString() == "nil")
+    }
 }

@@ -43,7 +43,7 @@ extend Evaluator {
      * 展开 backquote 表达式
      * 递归处理列表，查找 comma 和 comma-at
      */
-    private func expandBackquote(expr: LispValue): LispValue {
+    public func expandBackquote(expr: LispValue): LispValue {
         match (expr) {
             case Nil => Nil
             case Symbol(s) => Symbol(s)
@@ -63,7 +63,8 @@ extend Evaluator {
         // 检查是否是 comma 或 comma-at 表达式
         match (cell.car) {
             case Symbol("comma") => this.evalCommaExpr(cell.cdr)
-            case Symbol("comma-at") => this.evalCommaAtExpr(cell.cdr)
+            // comma-at 不在这里求值，而是保留原样，让 processBackquoteCdr 处理
+            case Symbol("comma-at") => Cons(cell)  // 返回整个 cons cell，保留 (comma-at expr) 形式
             case _ => this.backquoteList(cell)
         }
     }
@@ -107,10 +108,80 @@ extend Evaluator {
      * 处理 backquote 列表的 cdr 部分
      */
     private func processBackquoteCdr(carResult: LispValue, cdr: LispValue): LispValue {
+        // 检查 carResult 是否是 (comma-at ...)，如果是则特殊处理
+        if (let Cons(cell) <- carResult) {
+            if (let Symbol("comma-at") <- cell.car) {
+                // carResult 是 (comma-at expr)，需要求值并拼接
+                this.processCommaAtInCar(cell.cdr, cdr)
+            } else {
+                // 正常处理
+                match (cdr) {
+                    case Nil => consValue(carResult, Nil)
+                    case Cons(cdrCell) => this.checkCommaAtInCdr(carResult, cdrCell)
+                    case _ => consValue(carResult, Nil)
+                }
+            }
+        } else {
+            // carResult 不是 Cons，正常处理
+            match (cdr) {
+                case Nil => consValue(carResult, Nil)
+                case Cons(cdrCell) => this.checkCommaAtInCdr(carResult, cdrCell)
+                case _ => consValue(carResult, Nil)
+            }
+        }
+    }
+
+    /**
+     * 处理 car 是 comma-at 的情况
+     */
+    private func processCommaAtInCar(commaCdr: LispValue, cdr: LispValue): LispValue {
+        match (commaCdr) {
+            case Nil => this.processCdrForCommaAt(Nil, cdr)
+            case Cons(restCell) =>
+                let spliceValue = this.eval(restCell.car)
+                match (cdr) {
+                    case Nil => match (spliceValue) {
+                        case Cons(_) => spliceValue
+                        case _ => Nil
+                    }
+                    case Cons(cdrCell) => match (spliceValue) {
+                        case Nil => this.backquoteList(cdrCell)
+                        case Cons(_) => this.spliceFirstValue(spliceValue, cdrCell)
+                        case _ => this.backquoteList(cdrCell)
+                    }
+                    case _ => match (spliceValue) {
+                        case Cons(_) => spliceValue
+                        case _ => Nil
+                    }
+                }
+            case _ => this.processCdrForCommaAt(Nil, cdr)
+        }
+    }
+
+    /**
+     * 拼接第一个值（当列表以 ,@ 开头时）
+     */
+    private func spliceFirstValue(spliceValue: LispValue, cdrCell: ConsCell): LispValue {
+        let cdrResult = this.backquoteList(cdrCell)
+        // 先展开 spliceValue，再拼接 cdrResult
+        // 使用 appendSpliceAndRest 来正确拼接（保持顺序）
+        match (spliceValue) {
+            case Nil => cdrResult
+            case Cons(_) =>
+                let result = this.appendSpliceAndRest(spliceValue, cdrResult)
+                result
+            case _ => cdrResult
+        }
+    }
+
+    /**
+     * 为 comma-at 处理 cdr
+     */
+    private func processCdrForCommaAt(carValue: LispValue, cdr: LispValue): LispValue {
         match (cdr) {
-            case Nil => consValue(carResult, Nil)
-            case Cons(cdrCell) => this.checkCommaAtInCdr(carResult, cdrCell)
-            case _ => consValue(carResult, Nil)
+            case Nil => consValue(carValue, Nil)
+            case Cons(cdrCell) => consValue(carValue, this.backquoteList(cdrCell))
+            case _ => consValue(carValue, Nil)
         }
     }
 
@@ -129,7 +200,8 @@ extend Evaluator {
      */
     private func handleCommaAtInCdr(carResult: LispValue, cdrCell: ConsCell, innerCell: ConsCell): LispValue {
         match (innerCell.car) {
-            case Symbol("comma-at") => this.spliceCommaAt(carResult, innerCell, cdrCell)
+            case Symbol("comma-at") =>
+                this.spliceCommaAt(carResult, innerCell, cdrCell)
             case _ => this.buildNormalCons(carResult, cdrCell)
         }
     }
@@ -148,20 +220,82 @@ extend Evaluator {
     private func spliceCommaAt(carResult: LispValue, innerCell: ConsCell, cdrCell: ConsCell): LispValue {
         match (innerCell.cdr) {
             case Nil => consValue(carResult, this.backquoteList(cdrCell))
-            case Cons(restCell) => this.evalAndSplice(carResult, restCell.car, cdrCell)
+            case Cons(restCell) =>
+                // 当 innerCell.cdr 不为 Nil 时，说明有需要求值的表达式
+                // 我们求值这个表达式，然后继续处理 cdrCell（后面的元素）
+                let spliceValue = this.eval(restCell.car)
+
+                // 检查 cdrCell.car 是否也是 (comma-at ...)，如果是则跳过
+                let shouldSkip = if (let Cons(inner) <- cdrCell.car) {
+                    if (let Symbol("comma-at") <- inner.car) {
+                        true
+                    } else {
+                        false
+                    }
+                } else {
+                    false
+                }
+
+                let cdrResult = if (shouldSkip) {
+                    // 跳过 cdrCell.car，直接处理 cdrCell.cdr
+                    match (cdrCell.cdr) {
+                        case Nil => Nil
+                        case Cons(nextCell) => this.backquoteList(nextCell)
+                        case _ => Nil
+                    }
+                } else {
+                    // 正常处理 cdrCell
+                    this.backquoteList(cdrCell)
+                }
+
+                match (spliceValue) {
+                    case Nil => consValue(carResult, cdrResult)
+                    case Cons(_) => this.appendLists(carResult, spliceValue, cdrResult)
+                    case _ => consValue(carResult, cdrResult)
+                }
             case _ => consValue(carResult, this.backquoteList(cdrCell))
         }
     }
 
     /**
      * 求值并拼接
+     * 正确实现：将 spliceValue 列表中的每个元素都拼接到结果中
      */
     private func evalAndSplice(carResult: LispValue, expr: LispValue, cdrCell: ConsCell): LispValue {
         let spliceValue = this.eval(expr)
         match (spliceValue) {
-            case Nil => consValue(carResult, Nil)
-            case Cons(_) => consValue(carResult, spliceValue)
-            case _ => consValue(carResult, Nil)
+            case Nil => consValue(carResult, this.backquoteList(cdrCell))
+            case Cons(spliceCell) =>
+                // 正确的拼接：先拼接 spliceValue 的所有元素，然后拼接处理后的 cdrCell
+                // (a ,@'(b c) d) => (a b c d)
+                let cdrResult = this.backquoteList(cdrCell)
+                this.appendLists(carResult, spliceValue, cdrResult)
+            case _ => consValue(carResult, this.backquoteList(cdrCell))
+        }
+    }
+
+    /**
+     * 辅助函数：将三个部分连接成一个列表（创建新列表，不修改原列表）
+     * (car . spliceList . restList) => (car spliceList[0] spliceList[1] ... restList[0] restList[1] ...)
+     */
+    private func appendLists(car: LispValue, spliceList: LispValue, restList: LispValue): LispValue {
+        // 特殊情况：如果 car 是 Nil，说明列表以 ,@ 开头，直接拼接 spliceList 和 restList
+        match (car) {
+            case Nil => this.appendSpliceAndRest(spliceList, restList)
+            case _ => consValue(car, this.appendSpliceAndRest(spliceList, restList))
+        }
+    }
+
+    /**
+     * 辅助函数：将 spliceList 的所有元素追加到 restList 前面（创建新列表）
+     */
+    private func appendSpliceAndRest(spliceList: LispValue, restList: LispValue): LispValue {
+        match (spliceList) {
+            case Nil => restList
+            case Cons(spliceCell) =>
+                let result = consValue(spliceCell.car, this.appendSpliceAndRest(spliceCell.cdr, restList))
+                result
+            case _ => restList
         }
     }
 

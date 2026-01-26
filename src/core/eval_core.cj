@@ -114,6 +114,8 @@ extend Evaluator {
                     return this.evalCondb(rest)
                 } else if (actualSym == "apply") {
                     return this.evalApply(rest)
+                } else if (actualSym == "eval") {
+                    return this.evalEval(rest)
                 } else if (actualSym == "->") {
                     return this.evalThreadFirst(rest)
                 } else if (actualSym == "map") {
