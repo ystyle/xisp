@@ -171,4 +171,119 @@ class ModernTest {
         println("type-of +: ${procResult.toString()}")
         @Assert(procResult.toString() == "\"procedure\"")
     }
+
+    @TestCase
+    func testEqualityFunctions() {
+        let env = Environment()
+        BuiltinFunctions.registerAll(env)
+        let evaluator = Evaluator(env)
+
+        // 测试 eq? 函数 - 符号比较
+        println("\n=== 测试 eq? 符号比较 ===")
+        let eqSymbol1 = Parser.parseSingleFromString("(eq? :ok :ok)")
+        let eqSymbol1Result = evaluator.eval(eqSymbol1)
+        println("(eq? :ok :ok) = ${eqSymbol1Result.toString()}")
+        @Assert(eqSymbol1Result.toString() == "true")
+
+        let eqSymbol2 = Parser.parseSingleFromString("(eq? :ok :error)")
+        let eqSymbol2Result = evaluator.eval(eqSymbol2)
+        println("(eq? :ok :error) = ${eqSymbol2Result.toString()}")
+        @Assert(eqSymbol2Result.toString() == "false")
+
+        // 测试 eq? 函数 - 字符串比较
+        println("\n=== 测试 eq? 字符串比较 ===")
+        let eqStr1 = Parser.parseSingleFromString("(eq? \"a\" \"a\")")
+        let eqStr1Result = evaluator.eval(eqStr1)
+        println("(eq? \"a\" \"a\") = ${eqStr1Result.toString()}")
+        @Assert(eqStr1Result.toString() == "true")
+
+        let eqStr2 = Parser.parseSingleFromString("(eq? \"a\" \"b\")")
+        let eqStr2Result = evaluator.eval(eqStr2)
+        println("(eq? \"a\" \"b\") = ${eqStr2Result.toString()}")
+        @Assert(eqStr2Result.toString() == "false")
+
+        // 测试 eq? 函数 - 整数比较
+        println("\n=== 测试 eq? 整数比较 ===")
+        let eqInt1 = Parser.parseSingleFromString("(eq? 42 42)")
+        let eqInt1Result = evaluator.eval(eqInt1)
+        println("(eq? 42 42) = ${eqInt1Result.toString()}")
+        @Assert(eqInt1Result.toString() == "true")
+
+        let eqInt2 = Parser.parseSingleFromString("(eq? 42 43)")
+        let eqInt2Result = evaluator.eval(eqInt2)
+        println("(eq? 42 43) = ${eqInt2Result.toString()}")
+        @Assert(eqInt2Result.toString() == "false")
+
+        // 测试 eq? 函数 - nil 比较
+        println("\n=== 测试 eq? nil 比较 ===")
+        let eqNil = Parser.parseSingleFromString("(eq? nil nil)")
+        let eqNilResult = evaluator.eval(eqNil)
+        println("(eq? nil nil) = ${eqNilResult.toString()}")
+        @Assert(eqNilResult.toString() == "true")
+
+        // 测试 eq? 函数 - 布尔值比较
+        println("\n=== 测试 eq? 布尔值比较 ===")
+        let eqBool1 = Parser.parseSingleFromString("(eq? #t #t)")
+        let eqBool1Result = evaluator.eval(eqBool1)
+        println("(eq? #t #t) = ${eqBool1Result.toString()}")
+        @Assert(eqBool1Result.toString() == "true")
+
+        let eqBool2 = Parser.parseSingleFromString("(eq? #t #f)")
+        let eqBool2Result = evaluator.eval(eqBool2)
+        println("(eq? #t #f) = ${eqBool2Result.toString()}")
+        @Assert(eqBool2Result.toString() == "false")
+
+        // 测试 eq? 函数 - 不同类型比较
+        println("\n=== 测试 eq? 不同类型比较 ===")
+        let eqDiff = Parser.parseSingleFromString("(eq? :ok \"ok\")")
+        let eqDiffResult = evaluator.eval(eqDiff)
+        println("(eq? :ok \"ok\") = ${eqDiffResult.toString()}")
+        @Assert(eqDiffResult.toString() == "false")
+
+        // 测试 string< 函数
+        println("\n=== 测试 string< ===")
+        let strLess1 = Parser.parseSingleFromString("(string< \"a\" \"b\")")
+        let strLess1Result = evaluator.eval(strLess1)
+        println("(string< \"a\" \"b\") = ${strLess1Result.toString()}")
+        @Assert(strLess1Result.toString() == "true")
+
+        let strLess2 = Parser.parseSingleFromString("(string< \"b\" \"a\")")
+        let strLess2Result = evaluator.eval(strLess2)
+        println("(string< \"b\" \"a\") = ${strLess2Result.toString()}")
+        @Assert(strLess2Result.toString() == "false")
+
+        let strLess3 = Parser.parseSingleFromString("(string< \"abc\" \"abc\")")
+        let strLess3Result = evaluator.eval(strLess3)
+        println("(string< \"abc\" \"abc\") = ${strLess3Result.toString()}")
+        @Assert(strLess3Result.toString() == "false")
+
+        // 测试 string> 函数
+        println("\n=== 测试 string> ===")
+        let strGreater1 = Parser.parseSingleFromString("(string> \"b\" \"a\")")
+        let strGreater1Result = evaluator.eval(strGreater1)
+        println("(string> \"b\" \"a\") = ${strGreater1Result.toString()}")
+        @Assert(strGreater1Result.toString() == "true")
+
+        let strGreater2 = Parser.parseSingleFromString("(string> \"a\" \"b\")")
+        let strGreater2Result = evaluator.eval(strGreater2)
+        println("(string> \"a\" \"b\") = ${strGreater2Result.toString()}")
+        @Assert(strGreater2Result.toString() == "false")
+
+        let strGreater3 = Parser.parseSingleFromString("(string> \"abc\" \"abc\")")
+        let strGreater3Result = evaluator.eval(strGreater3)
+        println("(string> \"abc\" \"abc\") = ${strGreater3Result.toString()}")
+        @Assert(strGreater3Result.toString() == "false")
+
+        // 测试 string=? 函数
+        println("\n=== 测试 string=? ===")
+        let strEq1 = Parser.parseSingleFromString("(string=? \"abc\" \"abc\")")
+        let strEq1Result = evaluator.eval(strEq1)
+        println("(string=? \"abc\" \"abc\") = ${strEq1Result.toString()}")
+        @Assert(strEq1Result.toString() == "true")
+
+        let strEq2 = Parser.parseSingleFromString("(string=? \"abc\" \"def\")")
+        let strEq2Result = evaluator.eval(strEq2)
+        println("(string=? \"abc\" \"def\") = ${strEq2Result.toString()}")
+        @Assert(strEq2Result.toString() == "false")
+    }
 }
