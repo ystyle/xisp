@@ -15,6 +15,7 @@ public class Evaluator {
     var moduleLoadChecker: ?(() -> Bool) = None  // 模块加载权限检查回调
     var macroExpandDepth: Int64 = 0  // 宏展开深度
     var maxMacroExpandDepth: Int64 = 100  // 最大宏展开深度
+    var inMacroExpandCall: Bool = false  // 是否在 macroexpand/macroexpand-all 调用中（不执行展开后的结果）
 
     // 当前执行的文件路径（用于相对路径导入）
     public var currentFilePath: Option<String> = None

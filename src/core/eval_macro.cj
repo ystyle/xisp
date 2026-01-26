@@ -4,6 +4,20 @@ import ystyle::xisp.types.*
 import std.collection.ArrayList
 
 /**
+ * 参数信息
+ * 用于表示函数/宏的参数，包括是否为可变参数
+ */
+public class ParamInfo {
+    public let name: String
+    public let isRest: Bool
+
+    public init(name: String, isRest: Bool) {
+        this.name = name
+        this.isRest = isRest
+    }
+}
+
+/**
  * 宏系统扩展
  * 包含宏展开机制、defmacro、macroexpand
  */
@@ -156,8 +170,16 @@ extend Evaluator {
             // 检查是否是单个表达式 (cdr 是 nil)
             let result = if (let Cons(bodyCell) <- body) {
                 if (bodyCell.cdr.isNil()) {
-                    // 单个表达式，直接求值 car
-                    this.eval(bodyCell.car)
+                    // 单个表达式
+                    let expr = bodyCell.car
+                    if (this.inMacroExpandCall && this.isBackquoteExpr(expr)) {
+                        // 在 macroexpand 调用中，且是 backquote 表达式
+                        // 展开 backquote 但不执行结果
+                        this.expandBackquoteInMacro(expr)
+                    } else {
+                        // 正常求值
+                        this.eval(expr)
+                    }
                 } else {
                     // 多个表达式，按顺序求值（类似 begin）
                     this.evalBegin(body)
@@ -175,12 +197,70 @@ extend Evaluator {
     }
 
     /**
+     * 检查表达式是否是 backquote 表达式
+     */
+    private func isBackquoteExpr(expr: LispValue): Bool {
+        match (expr) {
+            case Cons(cell) =>
+                match (cell.car) {
+                    case Symbol("backquote") => true
+                    case _ => false
+                }
+            case _ => false
+        }
+    }
+
+    /**
+     * 在宏展开模式下展开 backquote 表达式
+     * 展开 backquote 结构但保留 lambda 等形式不执行
+     */
+    private func expandBackquoteInMacro(expr: LispValue): LispValue {
+        match (expr) {
+            case Cons(cell) =>
+                match (cell.car) {
+                    case Symbol("backquote") =>
+                        // 展开内部但保留 lambda 等形式
+                        if (let Cons(backquoted) <- cell.cdr) {
+                            this.expandBackquoteWithoutEval(backquoted.car)
+                        } else {
+                            Nil
+                        }
+                    case _ => expr
+                }
+            case _ => expr
+        }
+    }
+
+    /**
+     * 展开 backquote 但不对 lambda 调用求值
+     */
+    private func expandBackquoteWithoutEval(expr: LispValue): LispValue {
+        // 使用 expandBackquote 展开，它会处理 comma 和 comma-at
+        // 但不会执行最终的 lambda 调用
+        this.expandBackquote(expr)
+    }
+
+    /**
      * 绑定宏参数到环境
      */
     func bindMacroParams(params: ArrayList<String>, args: LispValue, env: Environment) {
         var currentArg: LispValue = args
-        for (param in params) {
-            currentArg = this.bindOneMacroParam(param, currentArg, env)
+        var i = 0
+
+        while (i < params.size) {
+            let param = params[i]
+
+            // 检查是否为可变参数（带 &rest- 前缀）
+            if (param.startsWith("&rest-")) {
+                let restName = param[6..]  // 去掉 "&rest-" 前缀
+                // 可变参数：将剩余所有参数绑定为一个列表
+                env.define(restName, currentArg)
+                break
+            } else {
+                // 普通参数：绑定单个参数
+                currentArg = this.bindOneMacroParam(param, currentArg, env)
+                i = i + 1
+            }
         }
     }
 
@@ -232,27 +312,80 @@ extend Evaluator {
     }
 
     /**
-     * 从参数表达式中提取参数名列表
+     * 从参数表达式中提取参数名列表（旧版本，不包含可变参数信息）
      */
     func extractParams(paramsExpr: LispValue): ArrayList<String> {
+        let paramInfos = this.extractParamsWithRest(paramsExpr)
         let params = ArrayList<String>()
+        for (paramInfo in paramInfos) {
+            // 为可变参数添加特殊前缀
+            if (paramInfo.isRest) {
+                params.add("&rest-" + paramInfo.name)
+            } else {
+                params.add(paramInfo.name)
+            }
+        }
+        params
+    }
+
+    /**
+     * 从参数表达式中提取参数信息列表（支持可变参数）
+     * 支持语法：
+     * - Common Lisp 风格：(x y . rest)
+     * - Scheme 风格：(x y &rest rest)
+     */
+    func extractParamsWithRest(paramsExpr: LispValue): ArrayList<ParamInfo> {
+        let paramInfos = ArrayList<ParamInfo>()
         var current: LispValue = paramsExpr
         var iteration = 0
         let maxIterations = 100
+        var restSeen = false
 
         while (!current.isNil() && iteration < maxIterations) {
             iteration = iteration + 1
             if (let Cons(currCell) <- current) {
-                if (let Symbol(paramName) <- currCell.car) {
-                    params.add(paramName)
+                let car = currCell.car
+
+                // 检查是否为 . 或 &rest 标记
+                if (let Symbol(marker) <- car) {
+                    if (marker == "." || marker == "&rest") {
+                        restSeen = true
+                        // 跳到下一个参数，它应该是可变参数名
+                        current = currCell.cdr
+                        if (let Cons(nextCell) <- current) {
+                            if (let Symbol(restName) <- nextCell.car) {
+                                paramInfos.add(ParamInfo(restName, true))
+                            }
+                            current = nextCell.cdr
+                        } else if (let Symbol(restName) <- current) {
+                            // (. rest) 的情况，rest 直接作为符号
+                            paramInfos.add(ParamInfo(restName, true))
+                            current = Nil
+                        }
+                        break
+                    } else {
+                        // 普通参数
+                        paramInfos.add(ParamInfo(marker, false))
+
+                        // 检查 cdr 是否为可变参数（点对情况）
+                        if (let Symbol(restName) <- currCell.cdr) {
+                            // 如果 cdr 是符号，说明这是最后一个参数的 rest 参数
+                            paramInfos.add(ParamInfo(restName, true))
+                            break
+                        }
+
+                        current = currCell.cdr
+                    }
+                } else {
+                    // 非符号，跳过
+                    current = currCell.cdr
                 }
-                current = currCell.cdr
             } else {
                 break
             }
         }
 
-        params
+        paramInfos
     }
 
     /**
@@ -260,9 +393,13 @@ extend Evaluator {
      */
     func evalMacroexpand(expr: LispValue): LispValue {
         if (let Cons(cell) <- expr && cell.length() == 1) {
-            // 先求值参数（因为 macroexpand 接收的是一个表达式）
-            let arg = this.eval(cell.car)
-            this.macroExpand(arg)
+            // 不求值参数，直接对表达式进行宏展开
+            // (macroexpand '(my-let ...)) 应该返回展开后的语法树，不执行
+            let oldFlag = this.inMacroExpandCall
+            this.inMacroExpandCall = true
+            let result = this.macroExpand(cell.car)
+            this.inMacroExpandCall = oldFlag
+            result
         } else {
             Str("Error: macroexpand requires exactly 1 argument")
         }
@@ -273,9 +410,12 @@ extend Evaluator {
      */
     func evalMacroexpandAll(expr: LispValue): LispValue {
         if (let Cons(cell) <- expr && cell.length() == 1) {
-            // 先求值参数
-            let arg = this.eval(cell.car)
-            this.macroExpandAll(arg)
+            // 不求值参数，直接对表达式进行完全宏展开
+            let oldFlag = this.inMacroExpandCall
+            this.inMacroExpandCall = true
+            let result = this.macroExpandAll(cell.car)
+            this.inMacroExpandCall = oldFlag
+            result
         } else {
             Str("Error: macroexpand-all requires exactly 1 argument")
         }

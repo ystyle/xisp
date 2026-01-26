@@ -43,18 +43,77 @@ extend Evaluator {
         result
     }
     /**
-     * 从 ConsCell 中提取符号列表
+     * 从 ConsCell 中提取符号列表（支持可变参数）
+     * 支持语法：
+     * - Common Lisp 风格：(x y . rest)
+     * - Scheme 风格：(x y &rest rest)
      */
     public func extractSymbols(expr: LispValue): ArrayList<String> {
         let result = ArrayList<String>()
         var current: LispValue = expr
 
+        // 特殊情况：如果 expr 本身就是一个符号，说明是纯可变参数
+        // 例如：(define (func . args) ...) 中的 args
+        if (let Symbol(restName) <- expr) {
+            result.add("&rest-" + restName)
+            return result
+        }
+
+        // 特殊情况：处理纯可变参数 (. all) 或 (&rest all)
+        // 这些会被 Parser 解析为 (nil . (all)) 或 (nil all)
+        if (let Cons(cell) <- expr) {
+            if (let Nil <- cell.car) {
+                // 第一个元素是 nil，检查是否为纯可变参数
+                if (let Cons(cdrCell) <- cell.cdr) {
+                    if (let Symbol(restName) <- cdrCell.car && cdrCell.cdr.isNil()) {
+                        // (nil all) 或 (nil . (all)) 的情况，all 是可变参数
+                        result.add("&rest-" + restName)
+                        return result
+                    }
+                } else if (let Symbol(restName) <- cell.cdr) {
+                    // (nil . all) 的情况，all 是可变参数
+                    result.add("&rest-" + restName)
+                    return result
+                }
+            }
+        }
+
         while (!current.isNil()) {
             if (let Cons(cell) <- current) {
                 if (let Symbol(s) <- cell.car) {
-                    result.add(s)
+                    // 检查是否为 . 或 &rest 标记
+                    if (s == "." || s == "&rest") {
+                        // 跳到下一个参数，它应该是可变参数名
+                        current = cell.cdr
+                        if (let Cons(nextCell) <- current) {
+                            if (let Symbol(restName) <- nextCell.car) {
+                                // 为可变参数添加特殊前缀
+                                result.add("&rest-" + restName)
+                            }
+                            current = nextCell.cdr
+                        } else if (let Symbol(restName) <- current) {
+                            // (. rest) 的情况，rest 直接作为符号
+                            result.add("&rest-" + restName)
+                            current = Nil
+                        }
+                        break
+                    } else {
+                        // 普通参数
+                        result.add(s)
+
+                        // 检查 cdr 是否为可变参数（点对情况）
+                        if (let Symbol(restName) <- cell.cdr) {
+                            // 如果 cdr 是符号，说明这是最后一个参数的 rest 参数
+                            result.add("&rest-" + restName)
+                            break
+                        }
+
+                        current = cell.cdr
+                    }
+                } else {
+                    // 非符号，跳过
+                    current = cell.cdr
                 }
-                current = cell.cdr
             } else {
                 break
             }
