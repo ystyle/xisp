@@ -1,11 +1,11 @@
 # Xisp 文档示例中不支持的功能清单
 
-**生成时间**: 2026-01-25
+**生成时间**: 2026-01-27
 **测试状态**: 已验证
 
 ---
 
-## ❌ 确认不支持的功能（7个）
+## ❌ 确认不支持的功能（5个）
 
 ### 1. 宏/函数的可变参数
 
@@ -63,75 +63,32 @@
 
 ### 2. 符号/关键字比较
 
+**状态**: ✅ 已实现
+
 **优先级**: 🔴 高
 
-**问题**:
-- `(= :ok :ok)` → `false` (应该是 `true`)
-- `(eq? :ok :ok)` → `nil` (应该是 `true`)
-- `(eq? "a" "a")` → `nil` (字符串也不支持)
+**已实现**: `eq?` - 相等性比较（支持符号、字符串、整数、布尔值、nil）
 
-**影响范围**: 文档中多处使用符号作为状态码/类型标记的示例
+**实现位置**: `src/core/builtin_logic.cj`
 
-**建议实现**:
-```cangjie
-// 在 builtin_logic.cj 中添加
-env.define("eq?", NativeFunc({ args =>
-    if (args.size != 2) {
-        return Nil
-    }
-    match ((args[0], args[1])) {
-        case (Symbol(s1), Symbol(s2)) => Boolean(s1 == s2)
-        case (Str(s1), Str(s2)) => Boolean(s1 == s2)
-        case (LispValue.Int(i1), LispValue.Int(i2)) => Boolean(i1 == i2)
-        case _ => Boolean(false)
-    }
-}))
-```
+**测试文件**: `lisp-tests/equality_test.lisp`
 
 ---
 
 ### 3. 字符串比较函数
 
-**状态**: ✅ 已实现 `string=?`
+**状态**: ✅ 已实现
 
 **优先级**: 🔴 高
 
 **已实现**:
 - `string=?` - 字符串相等比较（已实现在 builtin_print.cj）
-- `string<` - 待实现
-- `string>` - 待实现
+- `string<` - 字符串小于比较（已实现在 builtin_print.cj）
+- `string>` - 字符串大于比较（已实现在 builtin_print.cj）
 
-**问题**:
-- ~~`string=` 函数不存在~~ ✅ 已修复为 `string=?`
-- 无法用 `=` 比较字符串 (`(= "a" "a")` → `false`)
-- 之前文档示例用了 `string=` 但功能未实现
+**实现位置**: `src/core/builtin_print.cj`
 
-**影响范围**:
-- 数据过滤示例（filter by city）
-- 任何需要字符串比较的场景
-
-**建议实现**:
-```cangjie
-env.define("string<", NativeFunc({ args =>
-    if (args.size != 2) {
-        return Nil
-    }
-    match ((args[0], args[1])) {
-        case (Str(s1), Str(s2)) => Boolean(s1 < s2)
-        case _ => Nil
-    }
-}))
-
-env.define("string>", NativeFunc({ args =>
-    if (args.size != 2) {
-        return Nil
-    }
-    match ((args[0], args[1])) {
-        case (Str(s1), Str(s2)) => Boolean(s1 > s2)
-        case _ => Nil
-    }
-}))
-```
+**测试文件**: `lisp-tests/equality_test.lisp`
 
 ---
 
@@ -261,21 +218,14 @@ env.define("string>", NativeFunc({ args =>
 
 ## 实现优先级建议
 
-### 🔴 高优先级（影响核心功能）
+### ✅ 已完成高优先级功能
 
-1. **符号/关键字比较** (`eq?`)
-   - 原因：影响 match、条件判断等核心功能
-   - 实现难度：低
-   - 文件：`src/core/builtin_logic.cj`
-
-2. **字符串比较函数** (`string=`, `string<`, `string>`)
-   - 原因：常见的数据处理需求
-   - 实现难度：低
-   - 文件：`src/core/builtin_string.cj` (新建)
+1. ✅ **符号/关键字比较** (`eq?`) - 2026-01-27 完成
+2. ✅ **字符串比较函数** (`string=?`, `string<`, `string>`) - 2026-01-27 完成
 
 ### 🟡 中优先级（增强语法特性）
 
-3. **宏/函数的可变参数**
+3. **宏/函数的可变参数** (建议下一个实现)
    - 原因：影响宏的灵活性，是元编程的基础
    - 实现难度：中
    - 文件：`src/parser/parser.cj`
@@ -294,6 +244,8 @@ env.define("string>", NativeFunc({ args =>
    - 原因：有单行替代方案，可以使用嵌套 if
    - 实现难度：中
    - 文件：`src/parser/parser.cj` 或 `src/core/eval_match.cj`
+
+### 🟢 低优先级
 
 7. **字符串插值函数调用**
    - 原因：已有 println 多参数替代方案
@@ -318,8 +270,8 @@ cjpm test --show-all-output
 
 1. ✅ 文档已修正为使用支持的语法
 2. ✅ 添加可变参数不支持说明
-3. ⏳ 待实现：高优先级功能（符号比较、字符串比较）
+3. ✅ 已实现：高优先级功能（eq? 符号比较、string<、string> 字符串比较）
 4. 📝 考虑：中低优先级功能的实现计划
 
-**最后更新**: 2026-01-25
-**相关提交**: 305a29f, a5eb701, e0935d3, 4ee0c9b
+**最后更新**: 2026-01-27
+**相关提交**: [待提交]
