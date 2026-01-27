@@ -28,9 +28,9 @@ class SandboxTest {
         let result2 = interp.eval("(println \"blocked\")")
 
         match (result2) {
-            case Str(s) =>
+            case Error(err) =>
                 // 应该返回错误信息
-                @Assert(s.contains("not allowed"))
+                @Assert(err.message.contains("not allowed"))
             case _ => @Fail("Blocked function should return error")
         }
     }
@@ -55,7 +55,7 @@ class SandboxTest {
         // 不在白名单中的函数应该被禁止
         let result2 = interp.eval("(* 2 3)")
         match (result2) {
-            case Str(s) => @Assert(s.contains("not allowed"))
+            case Error(err) => @Assert(err.message.contains("not allowed"))
             case _ => @Fail("Non-whitelisted function should be blocked")
         }
     }
@@ -83,7 +83,7 @@ class SandboxTest {
         let result = interp.eval("(recursive 100)")
 
         match (result) {
-            case Str(s) => @Assert(s.contains("stack depth"))
+            case Error(err) => @Assert(err.message.contains("stack depth"))
             case LispValue.Int(i) => @Fail("Should hit stack depth limit, got int: ${i}")
             case LispValue.Float(f) => @Fail("Should hit stack depth limit, got float: ${f}")
             case _ => @Fail("Should hit stack depth limit")
@@ -104,7 +104,7 @@ class SandboxTest {
         for (funcName in funcs) {
             let result = interp.eval("(${funcName} \"test\")")
             match (result) {
-                case Str(s) => @Assert(s.contains("not allowed"))
+                case Error(err) => @Assert(err.message.contains("not allowed"))
                 case _ => @Fail("Function ${funcName} should be blocked")
             }
         }
@@ -172,7 +172,7 @@ class SandboxTest {
         // 不允许的函数应该被阻止
         let result = interp.eval("(println \"test\")")
         match (result) {
-            case Str(s) => @Assert(s.contains("not allowed"))
+            case Error(err) => @Assert(err.message.contains("not allowed"))
             case _ => @Fail("println should be blocked")
         }
     }
@@ -192,7 +192,7 @@ class SandboxTest {
         // 被黑名单阻止的函数
         let result1 = interp.eval("(/ 6 2)")
         match (result1) {
-            case Str(s) => @Assert(s.contains("not allowed"))
+            case Error(err) => @Assert(err.message.contains("not allowed"))
             case _ => @Fail("Blocked function should not work")
         }
 
@@ -220,9 +220,9 @@ class SandboxTest {
         let result = interp.eval("(import std::io)")
 
         match (result) {
-            case Str(s) =>
+            case Error(err) =>
                 // 应该返回错误信息
-                @Assert(s.contains("not allowed"))
+                @Assert(err.message.contains("not allowed"))
             case _ => @Fail("Module import should be blocked")
         }
 
@@ -265,8 +265,8 @@ class SandboxTest {
         let result = interp.eval("(import test::module)")
 
         match (result) {
-            case Str(s) =>
-                @Assert(s.contains("not allowed"))
+            case Error(err) =>
+                @Assert(err.message.contains("not allowed"))
             case _ => @Fail("Module import should be blocked")
         }
     }
@@ -287,8 +287,8 @@ class SandboxTest {
         let result = interp.eval("(import std::io)")
 
         match (result) {
-            case Str(s) =>
-                @Assert(s.contains("not allowed"))
+            case Error(err) =>
+                @Assert(err.message.contains("not allowed"))
             case _ => @Fail("Module import should be blocked in sandbox")
         }
     }

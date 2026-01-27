@@ -271,7 +271,7 @@ extend Evaluator {
                                     // 从 HashMap 中获取值并绑定
                                     match (mapValue.get(key)) {
                                         case Some(v) => env.define(varName, v)
-                                        case None => ()  // 键不存在
+                                        case None => env.define(varName, Nil)  // 键不存在时绑定 nil
                                     }
                                 case _ => ()
                             }

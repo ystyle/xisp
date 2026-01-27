@@ -63,7 +63,7 @@ extend Evaluator {
         match (this.moduleLoadChecker) {
             case Some(checker) =>
                 if (!checker()) {
-                    return Str("Error: Module loading is not allowed in this sandbox")
+                    return LispValue.Error(XispError(ErrorType.ModuleError, "Module loading is not allowed in this sandbox"))
                 }
             case None => ()  // 没有沙箱检查，允许
         }
@@ -71,7 +71,7 @@ extend Evaluator {
         match (expr) {
             case Cons(cell) =>
                 if (cell.length() == 0) {
-                    return Str("Error: import requires at least one argument")
+                    return LispValue.Error(XispError(ErrorType.ArityMismatch, "import requires at least one argument"))
                 }
 
                 let importSpec = cell.car
@@ -91,10 +91,10 @@ extend Evaluator {
                         this.importRelativeModule(relativePath)
 
                     case _ =>
-                        Str("Error: invalid import syntax")
+                        LispValue.Error(XispError(ErrorType.SyntaxError, "invalid import syntax"))
                 }
 
-            case _ => Str("Error: import requires a list")
+            case _ => LispValue.Error(XispError(ErrorType.SyntaxError, "import requires a list"))
         }
     }
 
@@ -126,7 +126,7 @@ extend Evaluator {
                 // 检查是否有 :as 或其他修饰符
                 this.parseSimpleImport(specCell)
 
-            case _ => Str("Error: invalid import specification")
+            case _ => LispValue.Error(XispError(ErrorType.SyntaxError, "invalid import specification"))
         }
     }
 
@@ -147,13 +147,13 @@ extend Evaluator {
                 this.importModuleByName(moduleName, Some(alias), ArrayList<String>())
             } else if (let Cons(restCell) <- rest && let Symbol(":as") <- restCell.car) {
                 // (module::name :as ?) - 缺少别名
-                Str("Error: :as requires a symbol alias")
+                LispValue.Error(XispError(ErrorType.SyntaxError, ":as requires a symbol alias"))
             } else {
                 // 只有模块名，普通导入
                 this.importModuleByName(moduleName, None, ArrayList<String>())
             }
         } else {
-            Str("Error: module name must be a symbol")
+            LispValue.Error(XispError(ErrorType.SyntaxError, "module name must be a symbol"))
         }
     }
 
@@ -162,7 +162,7 @@ extend Evaluator {
      */
     private func parseAliasImport(specCell: ConsCell): LispValue {
         // 这个方法实际上不会独立调用，因为在 parseSimpleImport 中已经处理
-        Str("Error: :as must follow module name")
+        LispValue.Error(XispError(ErrorType.SyntaxError, ":as must follow module name"))
     }
 
     /**
@@ -193,9 +193,9 @@ extend Evaluator {
                 match (moduleName) {
                     case Symbol(name) =>
                         this.importModuleByName(name, None, symbols)
-                    case _ => Str("Error: only requires a module name")
+                    case _ => LispValue.Error(XispError(ErrorType.SyntaxError, "only requires a module name"))
                 }
-            case _ => Str("Error: only requires module name and symbols")
+            case _ => LispValue.Error(XispError(ErrorType.SyntaxError, "only requires module name and symbols"))
         }
     }
 
@@ -258,7 +258,7 @@ extend Evaluator {
 
         // 检查文件是否存在
         if (!exists(fullPath)) {
-            return Str("Error: file not found at '${relativePath}'")
+            return LispValue.Error(XispError(ErrorType.IOError, "file not found at '${relativePath}'"))
         }
 
         // 检查文件是否是模块（不能导入模块）
@@ -266,7 +266,7 @@ extend Evaluator {
         let moduleFile = Path(parentDir).join("module.lisp").toString()
 
         if (exists(moduleFile)) {
-            return Str("Error: Cannot import module '${relativePath}' using relative import. Use (import moduleName) or (import org::moduleName) instead.")
+            return LispValue.Error(XispError(ErrorType.ModuleError, "Cannot import module '${relativePath}' using relative import. Use (import moduleName) or (import org::moduleName) instead."))
         }
 
         // 使用 ModuleLoader 加载单个文件
@@ -276,7 +276,7 @@ extend Evaluator {
         if (loader.loadFile(fullPath, this.env)) {
             Nil
         } else {
-            Str("Error: failed to load file '${relativePath}'")
+            LispValue.Error(XispError(ErrorType.IOError, "failed to load file '${relativePath}'"))
         }
     }
 
@@ -302,13 +302,13 @@ extend Evaluator {
 
         // 检查目录是否存在
         if (!exists(fullPath)) {
-            return Str("Error: directory not found at '${relativePath}'")
+            return LispValue.Error(XispError(ErrorType.IOError, "directory not found at '${relativePath}'"))
         }
 
         // 检查是否是模块（不能相对导入模块）
         let moduleFile = Path(fullPath).join("module.lisp").toString()
         if (exists(moduleFile)) {
-            return Str("Error: Cannot import module '${relativePath}' using relative import. Use (import moduleName) or (import org::moduleName) instead.")
+            return LispValue.Error(XispError(ErrorType.ModuleError, "Cannot import module '${relativePath}' using relative import. Use (import moduleName) or (import org::moduleName) instead."))
         }
 
         // 提取前缀（路径的最后一级）
@@ -325,7 +325,7 @@ extend Evaluator {
             this.bindPackageSymbols(packageEnv, prefix)
             Nil
         } else {
-            Str("Error: failed to load package '${relativePath}'")
+            LispValue.Error(XispError(ErrorType.IOError, "failed to load package '${relativePath}'"))
         }
     }
 
@@ -544,7 +544,7 @@ extend Evaluator {
     private func importModuleByName(moduleName: String, alias: Option<String>, symbols: ArrayList<String>): LispValue {
         // 验证模块名格式
         if (!ModuleNamespace.isValidModuleName(moduleName)) {
-            return Str("Error: invalid module name '${moduleName}'")
+            return LispValue.Error(XispError(ErrorType.ModuleError, "invalid module name '${moduleName}'"))
         }
 
         // 检查模块是否已加载
@@ -558,7 +558,7 @@ extend Evaluator {
                     case Some(module) =>
                         this.bindModuleSymbols(module, alias, symbols)
                     case None =>
-                        Str("Error: module '${moduleName}' not found")
+                        LispValue.Error(XispError(ErrorType.ModuleError, "module '${moduleName}' not found"))
                 }
         }
     }
@@ -702,7 +702,7 @@ extend Evaluator {
                 }
 
                 if (exportedSymbols.isEmpty()) {
-                    Str("Error: export requires at least one symbol")
+                    LispValue.Error(XispError(ErrorType.ArityMismatch, "export requires at least one symbol"))
                 } else {
                     // 将符号添加到当前模块的导出列表
                     match (this.currentModule) {
@@ -717,7 +717,7 @@ extend Evaluator {
                     }
                 }
 
-            case _ => Str("Error: export requires a list of symbols")
+            case _ => LispValue.Error(XispError(ErrorType.SyntaxError, "export requires a list of symbols"))
         }
     }
 }

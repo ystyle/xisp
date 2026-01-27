@@ -64,6 +64,7 @@ public open class Environment {
 
     /**
      * 查找变量（在当前环境和所有父环境中查找）
+     * 如果变量未定义，返回错误
      */
     public func lookup(name: String): LispValue {
         if (this.bindings.contains(name)) {
@@ -75,7 +76,22 @@ public open class Environment {
         } else {
             match (this.parent) {
                 case Some(env) => env.lookup(name)
-                case None => Nil
+                case None => LispValue.Error(XispError(ErrorType.UnboundVariable, "Undefined variable: '${name}'"))
+            }
+        }
+    }
+
+    /**
+     * 检查变量是否存在（不包括错误）
+     * 与 contains() 不同，这个方法不会误判 Error 类型的值
+     */
+    public func has(name: String): Bool {
+        if (this.bindings.contains(name)) {
+            true
+        } else {
+            match (this.parent) {
+                case Some(env) => env.has(name)
+                case None => false
             }
         }
     }
@@ -361,6 +377,103 @@ public class ParamInfo {
 }
 
 /**
+ * 错误类型分类
+ */
+public enum ErrorType {
+    | UnboundVariable      // 未定义变量
+    | UndefinedFunction    // 未定义函数
+    | TypeError           // 类型错误
+    | ArityMismatch       // 参数数量不匹配
+    | SyntaxError         // 语法错误
+    | RuntimeError        // 运行时错误
+    | IOError             // IO 错误
+    | ModuleError         // 模块错误
+
+    // 实现相等比较
+    public operator func ==(right: ErrorType): Bool {
+        match (this) {
+            case UnboundVariable => match (right) {
+                case UnboundVariable => true
+                case _ => false
+            }
+            case UndefinedFunction => match (right) {
+                case UndefinedFunction => true
+                case _ => false
+            }
+            case TypeError => match (right) {
+                case TypeError => true
+                case _ => false
+            }
+            case ArityMismatch => match (right) {
+                case ArityMismatch => true
+                case _ => false
+            }
+            case SyntaxError => match (right) {
+                case SyntaxError => true
+                case _ => false
+            }
+            case RuntimeError => match (right) {
+                case RuntimeError => true
+                case _ => false
+            }
+            case IOError => match (right) {
+                case IOError => true
+                case _ => false
+            }
+            case ModuleError => match (right) {
+                case ModuleError => true
+                case _ => false
+            }
+        }
+    }
+}
+
+/**
+ * Xisp 错误类型
+ */
+public class XispError <: ToString {
+    public let kind: ErrorType
+    public let message: String
+    public var stack: ArrayList<String>  // 调用栈
+
+    public init(kind: ErrorType, message: String) {
+        this.kind = kind
+        this.message = message
+        this.stack = ArrayList<String>()
+    }
+
+    public init(kind: ErrorType, message: String, stack: ArrayList<String>) {
+        this.kind = kind
+        this.message = message
+        this.stack = stack
+    }
+
+    /**
+     * 添加堆栈帧
+     */
+    public func pushFrame(frame: String) {
+        this.stack.add(frame)
+    }
+
+    /**
+     * 转换为字符串表示
+     */
+    public func toString(): String {
+        let kindStr = match (this.kind) {
+            case UnboundVariable => "UnboundVariable"
+            case UndefinedFunction => "UndefinedFunction"
+            case TypeError => "TypeError"
+            case ArityMismatch => "ArityMismatch"
+            case SyntaxError => "SyntaxError"
+            case RuntimeError => "RuntimeError"
+            case IOError => "IOError"
+            case ModuleError => "ModuleError"
+        }
+        "[${kindStr}] ${this.message}"
+    }
+}
+
+/**
  * Lisp 值类型枚举
  *
  * 支持递归定义，可以包含 ConsCell（它又包含 LispValue）
@@ -443,6 +556,13 @@ public enum LispValue <: ToString {
      * 键值对集合，键是字符串，值可以是任意 LispValue
      */
     | HashMap(HashMap<String, LispValue>)
+
+    /**
+     * 错误类型
+     *
+     * 用于表示运行时错误
+     */
+    | Error(XispError)
 
     /**
      * 判断是否为真值
@@ -617,6 +737,7 @@ public enum LispValue <: ToString {
             case MacroFromParams(_, _, _) => "#<macro>"
             case NativeFunc(_) => "#<native-function>"
             case HashMap(map) => hashmapToString(map)
+            case Error(err) => err.toString()
         }
     }
 
@@ -638,6 +759,7 @@ public enum LispValue <: ToString {
             case MacroFromParams(params, body, env) => MacroFromParams(params, body, env.clone())
             case NativeFunc(f) => NativeFunc(f)  // 原生函数不需要克隆
             case HashMap(map) => HashMap(map)  // HashMap 是不可变的，直接复制引用
+            case Error(err) => Error(err)  // 错误是不可变的，直接复制引用
         }
     }
 }
@@ -679,6 +801,13 @@ public func isList(value: LispValue): Bool {
 
 public func isProcedure(value: LispValue): Bool {
     value.isProcedure()
+}
+
+public func isError(value: LispValue): Bool {
+    match (value) {
+        case Error(_) => true
+        case _ => false
+    }
 }
 
 /**
@@ -726,6 +855,17 @@ public func macroValue(params: ArrayList<String>, body: LispValue, env: Environm
 
 public func macroFromParamsValue(params: ArrayList<ParamInfo>, body: LispValue, env: Environment): LispValue {
     MacroFromParams(params, body, env)
+}
+
+/**
+ * 错误构造辅助函数
+ */
+public func errorValue(errorType: ErrorType, message: String): LispValue {
+    LispValue.Error(XispError(errorType, message))
+}
+
+public func errorWithStack(errorType: ErrorType, message: String, stack: ArrayList<String>): LispValue {
+    LispValue.Error(XispError(errorType, message, stack))
 }
 
 /**

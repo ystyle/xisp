@@ -96,7 +96,12 @@ class EnvironmentTest {
         let env = Environment()
 
         let result = env.lookup("undefined")
-        @Assert(result.isNil())
+        // 未定义变量现在应该返回错误
+        match (result) {
+            case Error(err) =>
+                @Assert(err.kind == ErrorType.UnboundVariable)
+            case _ => @Fail("Undefined variable should return Error")
+        }
     }
 
     /**

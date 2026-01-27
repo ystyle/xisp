@@ -310,10 +310,9 @@ extend Evaluator {
             }
 
             // 没有匹配的分支
-            let result = Str("Error: No matching pattern for value: ${value.toString()}")
-            result
+            LispValue.Error(XispError(ErrorType.RuntimeError, "No matching pattern for value: ${value.toString()}"))
         } else {
-            Str("Error: Invalid match syntax")
+            LispValue.Error(XispError(ErrorType.SyntaxError, "Invalid match syntax"))
         }
     }
 
