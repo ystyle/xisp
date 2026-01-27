@@ -141,6 +141,28 @@ var lexerTests = ArrayList<LexerTestItem>([
             Token.RightParen
         ]
     ),
+    // ===== shebang 测试用例 =====
+
+    // shebang 后面跟代码
+    LexerTestItem(
+        "#!/usr/bin/env xisp-cli\n(println \"test\")",
+        [Token.LeftParen, Token.Symbol("println"), Token.String("test"), Token.RightParen]
+    ),
+    // shebang 后面直接换行，然后定义
+    LexerTestItem(
+        "#!/usr/bin/env xisp-cli\n\n(define x 42)",
+        [Token.LeftParen, Token.Symbol("define"), Token.Symbol("x"), Token.Int(42), Token.RightParen]
+    ),
+    // shebang 后面跟注释，然后代码
+    LexerTestItem(
+        "#!/usr/bin/env xisp-cli\n;; this is a comment\n(println \"test\")",
+        [Token.LeftParen, Token.Symbol("println"), Token.String("test"), Token.RightParen]
+    ),
+    // 不是 shebang（只有 #，后面不是 !）
+    LexerTestItem(
+        "#not a shebang\n(define x 42)",
+        [Token.Symbol("#not"), Token.Symbol("a"), Token.Symbol("shebang"), Token.LeftParen, Token.Symbol("define"), Token.Symbol("x"), Token.Int(42), Token.RightParen]
+    ),
 ])
 
 /**
