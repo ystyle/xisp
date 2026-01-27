@@ -134,10 +134,10 @@
 ## 📝 待修复问题
 
 ### 高优先级
-- [ ] 修复宏的纯可变参数 bug（bindMacroParams）
+- [x] ~~修复宏的纯可变参数 bug（bindMacroParams）~~ ✅ 已修复 (2026-01-27)
   - 问题：`(. args)` 只绑定第一个参数
-  - 位置：`src/core/eval_macro.cj`
-  - 影响：无法实现优雅的可变参数宏
+  - 修复位置：`src/parser/parser.cj`, `src/core/eval_core.cj`
+  - 影响：现在可以正常使用宏的纯可变参数
 
 ### 中优先级
 - [ ] 实现命名参数和默认值
@@ -157,6 +157,17 @@
 ---
 
 ## 📅 更新记录
+
+- 2026-01-27: **宏的纯可变参数 Bug 修复** ✅
+  - 修复解析器：`src/parser/parser.cj:93` - 正确解析点号
+  - 修复求值器：`src/core/eval_core.cj:169-172` - 正确处理宏调用
+  - 添加单元测试：`src/modern_test.cj:testMacroRestParameters` (5个测试用例)
+  - 优化测试：将不严谨的 `.contains()` 断言改为精确匹配
+  - 测试覆盖：208 个单元测试全部通过
+  - 更新 UNSUPPORTED_FEATURES.md：
+    - 宏的纯可变参数从不支持列表移到已实现列表
+    - 添加修复历史记录
+    - 不支持功能从 4 个减少到 3 个
 
 - 2026-01-27: **可变参数和宏系统** ✅
   - 实现 lambda 可变参数（. rest 和 &rest rest）

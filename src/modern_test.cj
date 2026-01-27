@@ -103,11 +103,9 @@ class ModernTest {
         println("Chained result: ${result.toString()}")
         @Assert(result.isList())
 
-        // 验证结果包含 5, 4, 3
+        // 验证结果
         let resultStr = result.toString()
-        @Assert(resultStr.contains("5"))
-        @Assert(resultStr.contains("4"))
-        @Assert(resultStr.contains("3"))
+        @Assert(resultStr == "(5 4 3 2 1)")
     }
 
     @TestCase
@@ -379,12 +377,8 @@ class ModernTest {
         let expanded = evaluator.eval(Parser.parseSingleFromString("(macroexpand '(my-let ((x 10) (y 20)) (+ x y)))"))
         println("expanded = ${expanded.toString()}")
 
-        // 验证展开后的结果包含关键元素
-        let expandedStr = expanded.toString()
-        @Assert(expandedStr.contains("lambda"))
-        @Assert(expandedStr.contains("x"))
-        @Assert(expandedStr.contains("y"))
-        @Assert(expandedStr.contains("(+ x y)"))
+        // 验证展开后的结果
+        @Assert(expanded.toString() == "((lambda (x y) (+ x y)) 10 20)")
 
         // 测试执行展开后的表达式
         let manualExpanded = Parser.parseSingleFromString("((lambda (x y) (+ x y)) 10 20)")
@@ -490,5 +484,44 @@ class ModernTest {
         let nilResult = evaluator.eval(evalNil)
         println("(eval (quote nil)) = ${nilResult.toString()}")
         @Assert(nilResult.toString() == "nil")
+    }
+
+    @TestCase
+    func testMacroRestParameters() {
+        let env = Environment()
+        BuiltinFunctions.registerAll(env)
+        let evaluator = Evaluator(env)
+
+        println("\n=== 测试宏的纯可变参数 ===")
+
+        // 测试1: 纯可变参数宏 - 返回 list
+        evaluator.eval(Parser.parseSingleFromString("(defmacro list-all (. args) `(list ,@args))"))
+        let result1 = evaluator.eval(Parser.parseSingleFromString("(list-all 1 2 3)"))
+        println("(list-all 1 2 3) = ${result1.toString()}")
+        @Assert(result1.toString() == "(1 2 3)")
+
+        // 测试2: 纯可变参数宏 - 返回 quoted 列表
+        evaluator.eval(Parser.parseSingleFromString("(defmacro quote-all (. args) `(quote ,args))"))
+        let result2 = evaluator.eval(Parser.parseSingleFromString("(quote-all a b c)"))
+        println("(quote-all a b c) = ${result2.toString()}")
+        @Assert(result2.toString() == "(a b c)")
+
+        // 测试3: 纯可变参数宏 - 使用 map 和 ,@
+        evaluator.eval(Parser.parseSingleFromString("(defmacro print-all (. args) `(begin ,@(map (lambda (x) `(println ,x)) args)))"))
+        let result3 = evaluator.eval(Parser.parseSingleFromString("(print-all \"Hello\" \"World\")"))
+        println("(print-all \"Hello\" \"World\") = ${result3.toString()}")
+        @Assert(result3.toString() == "nil")  // begin 返回 nil
+
+        // 测试4: 混合参数宏 (固定参数 + 可变参数)
+        evaluator.eval(Parser.parseSingleFromString("(defmacro mixed-macro (x y . rest) `(list 'x= ,x 'y= ,y 'rest= (quote ,rest)))"))
+        let result4 = evaluator.eval(Parser.parseSingleFromString("(mixed-macro 1 2 3 4)"))
+        println("(mixed-macro 1 2 3 4) = ${result4.toString()}")
+        @Assert(result4.toString() == "(x= 1 y= 2 rest= (3 4))")
+
+        // 测试5: 空可变参数
+        evaluator.eval(Parser.parseSingleFromString("(defmacro only-rest (. rest) `(quote ,rest))"))
+        let result5 = evaluator.eval(Parser.parseSingleFromString("(only-rest)"))
+        println("(only-rest) = ${result5.toString()}")
+        @Assert(result5.toString() == "nil")
     }
 }

@@ -90,6 +90,7 @@ public class Parser {
             case Token.Boolean(b) => Boolean(b)
             case Token.Keyword(k) => Symbol(":${k}")  // 关键字是自求值符号
             case Token.Symbol(s) => Symbol(s)
+            case Token.Dot => Symbol(".")  // 点号应该被解析为符号 "."
             case _ => Nil  // 错误情况
         }
     }
