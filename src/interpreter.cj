@@ -10,6 +10,7 @@ import std.sync.*
 import std.time.*
 import std.runtime.*
 import std.collection.HashSet
+import std.fs.*
 
 /**
  * Lisp 解释器
@@ -609,12 +610,20 @@ public class LispInterpreter {
      */
     public func evalFile(filePath: String): LispValue {
         try {
-            // TODO: 实现文件读取
-            println("Error: evalFile not yet implemented")
-            Nil
+            // 读取文件内容
+            let bytes = File.readFrom(filePath)
+            let content = String.fromUtf8(bytes)
+
+            // 执行多个表达式
+            this.evalMultiple(content)
+        } catch (e: FSException) {
+            let errMsg = "无法读取文件: ${e.message}"
+            eprintln(errMsg)
+            LispValue.Error(XispError(ErrorType.IOError, errMsg))
         } catch (e: Exception) {
-            println("Error: ${e.message}")
-            Nil
+            let errMsg = "执行文件时出错: ${e.message}"
+            eprintln(errMsg)
+            LispValue.Error(XispError(ErrorType.IOError, errMsg))
         }
     }
 

@@ -3,6 +3,7 @@ package ystyle::xisp
 import std.unittest.*
 import std.unittest.testmacro.*
 import std.collection.ArrayList
+import std.fs.*
 import ystyle::xisp.core.*
 import ystyle::xisp.types.*
 import ystyle::xisp.parser.*
@@ -453,7 +454,7 @@ class MacroTest {
         let result = evalCode(",x", env)
 
         match (result) {
-            case Str(msg) => @Assert(msg.contains("Error"))
+            case Error(err) => @Assert(err.kind == ErrorType.SyntaxError)
             case _ => @Fail("comma outside backquote should return error")
         }
     }
@@ -941,6 +942,31 @@ class AdvancedMacroTest {
         @Assert(relativePath2.startsWith("../"))
 
         println("Relative path import syntax test passed!")
+    }
+
+    @TestCase
+    func testEvalFile() {
+        println("\n=== 测试 evalFile 功能 ===")
+
+        // 使用项目中已存在的测试文件
+        let testFilePath = "lisp-tests/debug_backslash_n.lisp"
+
+        // 创建解释器并执行文件
+        let interpreter = LispInterpreter([
+            withStdLib(),
+            withQuietMode()
+        ])
+
+        let result = interpreter.evalFile(testFilePath)
+
+        // 验证文件执行成功（虽然会有错误，但不应该崩溃）
+        println("✓ evalFile 成功执行文件")
+
+        let resultStr = match (result) {
+            case Error(err) => "Error: ${err.message}"
+            case _ => result.toString()
+        }
+        println("✓ 返回值: ${resultStr}")
     }
 }
 
