@@ -70,12 +70,20 @@
 
 ## M4: 高级特性和完善 🚧
 
-### 4.1 文件和脚本支持
+### 4.1 可变参数和宏系统 ✅
+- [x] lambda 可变参数 (. rest 和 &rest rest)
+- [x] define 函数可变参数
+- [x] ,@ (comma-at) 拼接功能
+- [x] eval 特殊形式
+- [x] macroexpand 返回语法树
+- [ ] 宏的纯可变参数 bug（bindMacroParams 修复）
+
+### 4.2 文件和脚本支持
 - [x] evalFile 实现（通过 runScript + evalMultiple）
 - [x] CLI 脚本运行参数（-c 执行代码、直接运行 .lisp 文件）
 - [ ] shebang 支持（Lexer 忽略 #!、简化命令名）
 
-### 4.2 模块系统（已完成）
+### 4.4 模块系统（已完成）
 
 > 当前模块系统设计已完善：
 > ✅ 绝对导入 `(import org::module)`
@@ -93,7 +101,7 @@
 > - 使用 latest 标记获取默认版本
 > - 不支持版本范围语法（^, ~, >=, <=），保持简单
 
-### 4.3 异步支持
+### 4.5 异步支持
 - [ ] spawn 宏实现（创建线程）
 - [ ] Future<T> 操作（get, get(timeout), tryGet, cancel）
 - [ ] 线程工具（Thread.currentThread, id, hasPendingCancellation）
@@ -104,18 +112,18 @@
 > - Future<T> 提供结果获取和取消机制
 > - 参考 std.sync 和 std.core.Future<T> API
 
-### 4.4 宏系统增强
+### 4.6 宏系统增强
 - [ ] 宏展开调试工具
 - [ ] 宏卫生性检查
 - [ ] compile-time 计算
 
-### 4.5 错误处理和调试
+### 4.7 错误处理和调试
 - [ ] 错误类型系统
 - [ ] 调用栈追踪
 - [ ] 调试器 (debugger)
 - [ ] 性能分析
 
-### 4.6 文档和工具
+### 4.8 文档和工具
 - [ ] API 文档生成
 - [ ] 包管理器 (cjlpm)
 - [ ] 测试覆盖率报告
@@ -126,10 +134,16 @@
 ## 📝 待修复问题
 
 ### 高优先级
-- [ ] 无
+- [ ] 修复宏的纯可变参数 bug（bindMacroParams）
+  - 问题：`(. args)` 只绑定第一个参数
+  - 位置：`src/core/eval_macro.cj`
+  - 影响：无法实现优雅的可变参数宏
 
 ### 中优先级
-- [ ] 无
+- [ ] 实现命名参数和默认值
+  - 功能：`&key` 参数和 `(x default)` 语法
+  - 复杂度：低-中
+  - 参考：已记录到项目记忆
 
 ### 低优先级
 - [ ] 仓颉反向调用 Lisp 函数
@@ -143,6 +157,17 @@
 ---
 
 ## 📅 更新记录
+
+- 2026-01-27: **可变参数和宏系统** ✅
+  - 实现 lambda 可变参数（. rest 和 &rest rest）
+  - 实现 define 函数可变参数
+  - 实现 ,@ (comma-at) 拼接功能
+  - 实现 eval 特殊形式
+  - 修复 macroexpand 返回语法树
+  - 测试覆盖：207 个单元测试全部通过
+  - 发现宏的纯可变参数 bug（待修复）
+  - 更新 UNSUPPORTED_FEATURES.md（4 个不支持功能 + 1 个设计限制）
+  - 记录命名参数和默认参数特性到项目记忆
 
 - 2026-01-24: 更新异步支持为 spawn + Future<T> 模型
 - 2026-01-24: 删除 std.collection 模块（Lisp Cons 已够用）

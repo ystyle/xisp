@@ -171,37 +171,48 @@
 ; 使用 ,@ - 拼接列表
 `(a ,@lst d)    ; => (a b c d)
 
-; 实际应用（注意：可变参数暂不支持）
-; (defmacro print-all (. args)
-;   `(begin
-;      ,@(map (lambda (arg) `(println ,arg)) args)))
-;
-; (print-all "Hello" "World" 42)
+; 实际应用：在宏中使用预定义的列表
+(defmacro print-first-two (x y)
+  `(begin
+     (println ,x)
+     (println ,y)))
+
+(print-first-two "Hello" "World")
+; 输出:
+; Hello
+; World
 ```
+
+**注意**：在宏展开时，只有基本的求值功能可用。复杂的高阶函数如 `map` 可能在宏展开时不可用。如果需要处理可变数量的表达式，建议使用递归或模板模式。
 
 ### 综合示例
 
 ```lisp
-; 构造函数调用（注意：可变参数暂不支持）
-; (defmacro create-function (name params . body)
-;   `(define (,name ,@params)
-;      ,@body))
-;
-; (create-function square (x) (* x x))
-; ; 展开为：
-; ; (define (square x) (* x x))
+; 构造函数定义
+(defmacro create-function (name params . body)
+  `(define (,name ,@params)
+     ,@body))
 
-; 条件构建（注意：可变参数暂不支持）
-; (defmacro unless (condition . body)
-;   `(if (not ,condition)
-;       (begin ,@body)
-;       nil))
-;
-; (unless (< x 5)
-;   (println "x is not small")
-;   (println "x is >= 5"))
+(create-function square (x) (* x x))
+; 展开为：
+; (define (square x) (* x x))
 
-; 当前的替代方案：使用内置的 unless 宏
+; 测试
+(square 5)
+; => 25
+
+; 条件构建：多表达式 unless
+(defmacro my-unless (condition . body)
+  `(if (not ,condition)
+      (begin ,@body)
+      nil))
+
+(my-unless (< x 5)
+  (println "x is not small")
+  (println "x is >= 5"))
+; 当 x >= 5 时输出两行
+
+; 注意：Xisp 也提供了内置的 unless 宏
 (unless (< x 5) (println "x is not small"))
 ```
 
@@ -485,45 +496,49 @@ Xisp 提供了多个常用内置宏，它们在启动时自动注册到环境中
 
 ### 自定义控制结构
 
-**重要限制**：Xisp 目前不支持 rest parameters（`. rest` 语法）。
-
-**当前解决方案**：对于需要多个表达式的情况，使用显式的 `begin`：
+Xisp 现在完全支持 rest parameters（`. rest` 和 `&rest rest` 语法），可以编写更灵活的宏。
 
 ```lisp
-; 简单版 while 循环（单次执行）
-(defmacro while (condition body)
+; 多表达式 while 循环
+(defmacro while (condition . body)
   `(if ,condition
-       (begin ,body nil)
+       (begin ,@body (while ,condition ,@body))
        nil))
 
 ; 使用
 (define i 0)
 (while (< i 5)
-  (begin
-    (println i)
-    (set! i (+ i 1))))
-; 注意：这个版本只执行一次，不是真正的循环
+  (println i)
+  (set! i (+ i 1)))
+; 输出: 0 1 2 3 4
 
-; 真正的循环需要使用 dotimes 或递归函数
-; 或者使用 Xisp 内置的迭代功能
+; 另一个版本：使用 loop
+(defmacro while2 (condition . body)
+  `(let ((loop (lambda ()
+                 (if ,condition
+                     (begin ,@body (loop))
+                     nil))))
+     (loop)))
+
+(while2 (< i 10)
+  (println i)
+  (set! i (+ i 1)))
 ```
-
-**说明**：由于 Xisp 不支持 rest parameters 和复杂的宏嵌套，实现真正的 while 循环比较困难。建议使用 `dotimes` 或其他内置迭代功能。
 
 ### 实现 dotimes
 
-由于不支持 rest parameters，这里提供一个简化版本，body 参数必须是单个表达式：
+使用可变参数支持多个表达式：
 
 ```lisp
-; 重复执行 n 次（简化版）
-(defmacro dotimes (var n body)
+; 重复执行 n 次（支持多表达式）
+(defmacro dotimes (var n . body)
   `(let ((counter 0)
          (limit ,n))
      (define (loop)
        (if (< counter limit)
            (begin
              (let ((,var counter))
-               ,body)
+               ,@body)
              (set! counter (+ counter 1))
              (loop))
            nil))
@@ -531,13 +546,19 @@ Xisp 提供了多个常用内置宏，它们在启动时自动注册到环境中
 
 ; 使用
 (dotimes i 5
-  (println i))
-; 打印: 0 1 2 3 4
-```
+  (println i)
+  (println "Current:" i))
+; 打印:
+; 0 Current: 0
+; 1 Current: 1
+; 2 Current: 2
+; 3 Current: 3
+; 4 Current: 4
 
-**注意**：
-- `dotimes` 使用 `(var n body)` 而不是 `((var n) . body)`
-- 如果需要执行多个表达式，请使用 `begin` 组合它们
+; 单个表达式
+(dotimes i 3
+  (println i))
+; 打印: 0 1 2
 ```
 
 ### 实现 cond
@@ -581,20 +602,25 @@ Xisp 提供了多个常用内置宏，它们在启动时自动注册到环境中
 
 ### 属性访问宏
 
-```lisp
-; 实现 JavaScript 风格的属性访问
-(defmacro ->> (obj . slots)
-  `(let ((o ,obj))
-     ,@(map (lambda (slot)
-              `(get-slot o ',slot))
-            slots)))
+**注意**：在宏展开时使用 `map` 等高阶函数不可用。如果需要实现类似功能，可以使用递归或限制参数数量：
 
-; 使用
-(->> user name age)
-; 展开为：
-; (let ((o user))
-;   (get-slot o 'name)
-;   (get-slot o 'age))
+```lisp
+; 简化版：只支持两个属性
+(defmacro ->> (obj slot1 slot2)
+  `(let ((o ,obj))
+     (get-slot o ',slot1)
+     (get-slot o ',slot2)))
+
+; 使用（需要先实现 get-slot 函数）
+; (->> user name age)
+```
+
+或者使用链式调用：
+```lisp
+; 使用内置的 -> (thread-first) 宏
+(-> user
+    (get-slot 'name)
+    (get-slot 'age))
 ```
 
 ---
@@ -734,7 +760,44 @@ Parser（语法分析）
 
 ## 限制和注意事项
 
-### 1. 单独使用逗号
+### 1. 宏展开时的环境限制
+
+在宏展开时，只有基本的求值功能可用。以下限制需要注意：
+
+**不可用的功能**：
+- ❌ 高阶函数（`map`, `filter`, `reduce`）- 这些是特殊形式，在宏展开环境中不可用
+- ❌ 用户定义的函数 - 宏展开时还未定义
+- ❌ 复杂的嵌套求值
+
+**可用的功能**：
+- ✅ 基本运算符（`+`, `-`, `*`, `/`）
+- ✅ 比较运算符（`=`, `<`, `>`, `eq?`）
+- ✅ `lambda` 创建匿名函数
+- ✅ `list`, `cons`, `append` 等列表操作
+- ✅ `if`, `begin`, `let` 等特殊形式
+
+**示例对比**：
+
+```lisp
+; ❌ 错误：在宏中使用 map
+(defmacro bad (. args)
+  `(begin
+     ,@(map (lambda (arg) `(println ,arg)) args)))
+; map 在宏展开时不可用，导致展开失败
+
+; ✅ 正确：使用递归或直接展开
+(defmacro good (x y)
+  `(begin
+     (println ,x)
+     (println ,y)))
+```
+
+**解决方案**：
+- 使用递归宏而不是高阶函数
+- 限制参数数量，直接展开
+- 在运行时使用 `map`，而不是在宏展开时
+
+### 2. 单独使用逗号
 
 在反引号外使用逗号会返回错误：
 
@@ -833,6 +896,6 @@ Parser（语法分析）
 
 ---
 
-**文档版本**: 1.0.0
-**最后更新**: 2026-01-24
+**文档版本**: 1.1.0
+**最后更新**: 2026-01-27
 **维护者**: Xisp Team

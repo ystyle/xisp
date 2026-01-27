@@ -180,9 +180,62 @@
 
 ---
 
-## ❌ 确认不支持的功能（3个）
+## ❌ 确认不支持的功能（4个）
 
-### 1. 哈希映射解构
+### 1. 宏的纯可变参数
+
+**优先级**: 🟡 中
+
+**问题**:
+```lisp
+;; ❌ 不工作 - 纯可变参数只绑定第一个值
+(defmacro print-all (. args)
+  `(begin
+     ,@(map (lambda (arg) `(println ,arg)) args)))
+
+(print-all "Hello" "World" 42)
+;; 期望：打印 Hello World 42
+;; 实际：什么都不打印（args 只绑定了 "Hello"）
+```
+
+**根本原因**:
+- `src/core/eval_macro.cj` 的 `bindMacroParams` 函数在处理纯可变参数时有 bug
+- 当宏定义中没有固定参数（只有 `(. args)`）时，参数绑定逻辑错误
+- `args` 被绑定为第一个参数而不是完整列表
+
+**影响范围**:
+- 需要使用纯可变参数的宏（如 `print-all`）
+- 需要处理任意数量表达式的高级宏
+
+**当前解决方案**:
+```lisp
+;; ✅ 使用混合参数（固定参数 + 可变参数）
+(defmacro while (condition . body)
+  `(if ,condition
+       (begin ,@body (while ,condition ,@body))
+       nil))
+
+;; ✅ 限制参数数量
+(defmacro print-first-three (x y z)
+  `(begin
+     (println ,x)
+     (println ,y)
+     (println ,z)))
+
+;; ✅ 在运行时使用 map（不在宏展开时）
+(define (my-print-all lst)
+  (map (lambda (arg) (println arg)) lst))
+```
+
+**临时限制**:
+- ✅ 混合参数可用：`(defmacro name (x y . rest) ...)`
+- ❌ 纯可变参数不可用：`(defmacro name (. args) ...)`
+
+**建议**: 修复 `src/core/eval_macro.cj` 中的 `bindMacroParams` 函数，正确处理纯可变参数情况
+
+---
+
+### 2. 哈希映射解构
 
 **优先级**: 🟡 中
 
@@ -371,24 +424,30 @@
 
 ### 🟡 中优先级（增强语法特性）
 
-6. **match 哈希映射匹配** (建议下一个实现)
+6. **宏的纯可变参数** (建议优先修复)
+   - 原因：影响宏的灵活性，无法编写优雅的可变参数宏
+   - 实现难度：中
+   - 文件：`src/core/eval_macro.cj`
+   - 问题：`bindMacroParams` 函数在处理纯可变参数 `(. args)` 时有 bug
+
+7. **match 哈希映射匹配**
    - 原因：提升 match 的实用性
    - 实现难度：中
    - 文件：`src/core/eval_match.cj`
 
-7. **哈希映射解构**
+8. **哈希映射解构**
    - 原因：让代码更简洁
    - 实现难度：中
    - 文件：`src/core/eval_let.cj`
 
-8. **match 守卫条件多行格式**
+9. **match 守卫条件多行格式**
    - 原因：有单行替代方案，可以使用嵌套 if
    - 实现难度：中
    - 文件：`src/parser/parser.cj` 或 `src/core/eval_match.cj`
 
 ### ⚫ 设计限制（不实现）
 
-9. **字符串插值中的函数调用**
+10. **字符串插值中的函数调用**
    - 原因：**安全考虑**，防止代码注入
    - 状态：设计限制，永久不支持
    - 详见：[设计限制](#-设计限制出于安全或设计考虑不支持) 章节
@@ -423,5 +482,32 @@ cjpm test --show-all-output --filter 'ModernTest.testEval'
 
 **最后更新**: 2026-01-27
 **测试覆盖率**: 207 个单元测试全部通过
-**不支持功能**: 3 个（中优先级）
+**不支持功能**: 4 个（中优先级）
 **设计限制**: 1 个（字符串插值函数调用 - 永久不支持）
+
+## 已知问题
+
+### 宏的纯可变参数 Bug
+
+**问题描述**: 宏定义中的纯可变参数 `(. args)` 只能绑定第一个参数，而不是完整列表
+
+**具体表现**:
+```lisp
+(defmacro print-all (. args)
+  `(begin
+     ,@(map (lambda (arg) `(println ,arg)) args)))
+
+(print-all "Hello" "World" 42)
+; args 只绑定了 "Hello"，丢失了 "World" 和 42
+```
+
+**临时限制**:
+- ✅ 混合参数可用：`(defmacro name (x y . rest) ...)`
+- ❌ 纯可变参数不可用：`(defmacro name (. args) ...)`
+
+**影响**:
+- 无法实现优雅的可变参数宏
+- 需要使用混合参数作为临时解决方案
+
+**修复计划**: 修复 `src/core/eval_macro.cj` 中的 `bindMacroParams` 函数
+
