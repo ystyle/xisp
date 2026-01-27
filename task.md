@@ -76,12 +76,16 @@
 - [x] ,@ (comma-at) 拼接功能
 - [x] eval 特殊形式
 - [x] macroexpand 返回语法树
-- [ ] 宏的纯可变参数 bug（bindMacroParams 修复）
+- [x] 宏的纯可变参数 bug（bindMacroParams 修复） ✅ 已修复 (2026-01-27)
 
-### 4.2 文件和脚本支持
+### 4.2 文件和脚本支持 ✅
 - [x] evalFile 实现（通过 runScript + evalMultiple）
 - [x] CLI 脚本运行参数（-c 执行代码、直接运行 .lisp 文件）
 - [x] shebang 支持（Lexer 忽略 #! 行）
+
+### 4.3 HashMap 解构和模式匹配 ✅
+- [x] HashMap 解构：`(let [{:key1 var1 :key2 var2} hashmap-value] ...)`
+- [x] match HashMap 模式匹配：`(match value {:key1 var1 :key2 var2} result)`
 
 ### 4.4 模块系统（已完成）
 
@@ -157,6 +161,34 @@
 ---
 
 ## 📅 更新记录
+
+- 2026-01-27: **match HashMap 模式匹配实现** ✅
+  - 实现 match 表达式中的 HashMap 模式匹配功能
+  - 修改 `src/core/eval_pattern_match.cj`:
+    - `evalMatch()` - HashMap 模式路由（lines 100-107）
+    - `matchPattern()` - HashMap 模式检测（lines 369-381）
+    - `matchHashMapPattern()` - HashMap 模式匹配实现（lines 526-598）
+  - 修改 `src/core/eval_helpers.cj`:
+    - `extractHashMapBindings()` - 返回类型改为 `ArrayList<(String, LispValue)>` 以支持常量匹配
+  - 添加单元测试：`src/modern_test.cj:testMatchHashMapPattern` (7个测试用例)
+  - 集成测试：`lisp-tests/match_hashmap_test.lisp`
+  - 关键修复：将 HashMap 模式的 `areAllPatterns` 从 `false` 改为 `true`
+  - 测试覆盖：210 个单元测试全部通过（新增 1 个测试）
+  - 更新 UNSUPPORTED_FEATURES.md：match HashMap 模式从不支持移到已实现
+  - 不支持功能从 2 个减少到 1 个
+
+- 2026-01-27: **HashMap 解构实现** ✅
+  - 实现 let 表达式中的 HashMap 解构：`(let [{:key1 var1 :key2 var2} hashmap-value] ...)`
+  - 修改 `src/core/eval_helpers.cj`:
+    - `isHashMapDestructurePattern()` - 检测 `(hashmap (quote :key) var)` 格式
+    - `extractHashMapBindings()` - 从解析后的 HashMap 模式中提取键值对
+    - `processHashMapDestructure()` - 从 HashMap 值中获取并绑定变量
+  - 添加单元测试：`src/modern_test.cj:testHashMapDestructuring` (8个测试用例)
+  - 集成测试：`lisp-tests/hashmap_destruct_test.lisp`
+  - 代码优化：减少 match 嵌套层级（从 11 层降到 6-8 层）
+  - 测试覆盖：209 个单元测试全部通过（新增 1 个测试）
+  - 更新 UNSUPPORTED_FEATURES.md：HashMap 解构从不支持移到已实现
+  - 不支持功能从 3 个减少到 2 个
 
 - 2026-01-27: **shebang 支持** ✅
   - 实现 Lexer.skipShebang() 方法，跳过 #! 开头的行
