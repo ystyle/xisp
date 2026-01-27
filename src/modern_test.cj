@@ -771,3 +771,53 @@ class ModernTest {
         }
     }
 }
+
+@Test
+func testKeywordParameters() {
+    println("\n=== 测试命名参数功能 ===")
+
+    let env = Environment()
+    BuiltinFunctions.registerAll(env)
+    let evaluator = Evaluator(env)
+
+    // 测试 1: 基础命名参数
+    println("\n测试1: 基础命名参数")
+    evaluator.eval(Parser.parseSingleFromString("(define (foo &key x y z) (list x y z))"))
+    let result1 = evaluator.eval(Parser.parseSingleFromString("(foo :x 1 :y 2 :z 3)"))
+    println("result = ${result1.toString()}")
+    @Assert(result1.toString() == "(1 2 3)")
+
+    // 测试 2: 按任意顺序传递参数
+    println("\n测试2: 按任意顺序传递参数")
+    let result2 = evaluator.eval(Parser.parseSingleFromString("(foo :z 3 :x 1 :y 2)"))
+    println("result = ${result2.toString()}")
+    @Assert(result2.toString() == "(1 2 3)")
+
+    // 测试 3: 只传递部分参数
+    println("\n测试3: 只传递部分参数（未传递的为nil）")
+    let result3 = evaluator.eval(Parser.parseSingleFromString("(foo :x 1)"))
+    println("result = ${result3.toString()}")
+    @Assert(result3.toString() == "(1 nil nil)")
+
+    // 测试 4: 混合位置参数和命名参数
+    println("\n测试4: 混合位置参数和命名参数")
+    evaluator.eval(Parser.parseSingleFromString("(define (baz a b &key x y) (list a b x y))"))
+    let result4 = evaluator.eval(Parser.parseSingleFromString("(baz 1 2 :x 3 :y 4)"))
+    println("result = ${result4.toString()}")
+    @Assert(result4.toString() == "(1 2 3 4)")
+
+    // 测试 5: lambda 也支持命名参数
+    println("\n测试5: lambda 命名参数")
+    let result5 = evaluator.eval(Parser.parseSingleFromString("((lambda (&key x y) (list x y)) :x 5 :y 10)"))
+    println("result = ${result5.toString()}")
+    @Assert(result5.toString() == "(5 10)")
+
+    // 测试 6: 命名参数 + 可变参数
+    println("\n测试6: 命名参数 + 可变参数")
+    evaluator.eval(Parser.parseSingleFromString("(define (qux a &key x &rest args) (list a x args))"))
+    let result6 = evaluator.eval(Parser.parseSingleFromString("(qux 1 :x 2 3 4 5)"))
+    println("result = ${result6.toString()}")
+    @Assert(result6.toString() == "(1 2 (3 4 5))")
+
+    println("\n=== 所有命名参数测试通过 ===")
+}

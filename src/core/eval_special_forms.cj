@@ -9,6 +9,16 @@ import std.collection.ArrayList
  */
 extend Evaluator {
     /**
+     * 检查参数列表是否有命名参数或默认值
+     */
+    func hasKeyOrDefaultParams(paramInfos: ArrayList<ParamInfo>): Bool {
+        paramInfos.size > 0 && paramInfos.any({ p => p.isKey || match (p.defaultValue) {
+            case Some(_) => true
+            case None => false
+        } })
+    }
+
+    /**
      * 特殊形式：quote
      */
     func evalQuote(expr: LispValue): LispValue {
@@ -332,9 +342,29 @@ extend Evaluator {
                     Nil
                 }
             } else if (let Cons(paramsCell) <- first && let Symbol(name) <- paramsCell.car) {
-                let params = this.extractSymbols(paramsCell.cdr)
+                let paramInfos = this.extractParamsWithRest(paramsCell.cdr)
                 let body = rest
-                let proc = Procedure(params, body, this.env)
+
+                // 检查是否有命名参数或默认值
+                let hasKeyOrDefault = this.hasKeyOrDefaultParams(paramInfos)
+
+                let proc = if (hasKeyOrDefault) {
+                    // 求值所有默认值表达式
+                    let evaluatedParamInfos = ArrayList<ParamInfo>()
+                    for (param in paramInfos) {
+                        let evaluatedDefault = match (param.defaultValue) {
+                            case Some(defaultExpr) => Some(this.eval(defaultExpr))
+                            case None => None<LispValue>
+                        }
+                        evaluatedParamInfos.add(ParamInfo(param.name, param.isRest, param.isKey, evaluatedDefault))
+                    }
+                    ProcedureFromParams(evaluatedParamInfos, body, this.env)
+                } else {
+                    // 使用旧的参数格式（向后兼容）
+                    let params = this.extractParams(paramsCell.cdr)
+                    Procedure(params, body, this.env)
+                }
+
                 this.env.define(name, proc)
                 proc
             } else {
@@ -400,8 +430,27 @@ extend Evaluator {
             let body = cell.cdr
 
             if (let Cons(_) <- paramsExpr) {
-                let params = this.extractSymbols(paramsExpr)
-                Procedure(params, body, this.env)
+                let paramInfos = this.extractParamsWithRest(paramsExpr)
+
+                // 检查是否有命名参数或默认值
+                let hasKeyOrDefault = this.hasKeyOrDefaultParams(paramInfos)
+
+                if (hasKeyOrDefault) {
+                    // 求值所有默认值表达式
+                    let evaluatedParamInfos = ArrayList<ParamInfo>()
+                    for (param in paramInfos) {
+                        let evaluatedDefault = match (param.defaultValue) {
+                            case Some(defaultExpr) => Some(this.eval(defaultExpr))
+                            case None => None<LispValue>
+                        }
+                        evaluatedParamInfos.add(ParamInfo(param.name, param.isRest, param.isKey, evaluatedDefault))
+                    }
+                    ProcedureFromParams(evaluatedParamInfos, body, this.env)
+                } else {
+                    // 使用旧的参数格式（向后兼容）
+                    let params = this.extractParams(paramsExpr)
+                    Procedure(params, body, this.env)
+                }
             } else {
                 Procedure(ArrayList<String>(), body, this.env)
             }

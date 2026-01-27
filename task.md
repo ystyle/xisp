@@ -144,10 +144,19 @@
   - 影响：现在可以正常使用宏的纯可变参数
 
 ### 中优先级
-- [ ] 实现命名参数和默认值
+- [x] ~~实现命名参数和默认值~~ ✅ 已完成 (2026-01-27)
   - 功能：`&key` 参数和 `(x default)` 语法
-  - 复杂度：低-中
-  - 参考：已记录到项目记忆
+  - 复杂度：中
+  - 实现：
+    - 扩展 `ParamInfo` 类支持 `isKey` 和 `defaultValue` 字段
+    - 添加 `ProcedureFromParams` 和 `MacroFromParams` 类型
+    - 修改 `extractParamsWithRest` 识别 `&key` 标记和 `(param default)` 语法
+    - 修改 `applyProcedure` 实现三阶段参数绑定（位置→命名→可变）
+    - 修改 `evalArguments` 不求值 `:keyword` 符号
+    - 更新 `evalFunctionCall` 使用模式匹配支持新旧类型
+  - 文档：添加 `docs/syntax/01-basics.md` 高级参数特性章节
+  - 示例：创建 `examples/02-intermediate/06_keyword_args.lisp`
+  - 测试：213 个单元测试全部通过（新增 `testKeywordParameters`）
 
 ### 低优先级
 - [ ] 仓颉反向调用 Lisp 函数
@@ -161,6 +170,37 @@
 ---
 
 ## 📅 更新记录
+
+- 2026-01-27: **命名参数和默认值实现** ✅
+  - 实现 Common Lisp 风格的命名参数（&key）和默认值功能
+  - 修改 `src/types/types.cj`:
+    - 将 `ParamInfo` 类移到 types.cj（LispValue enum 之前）
+    - 添加 `isKey: Bool` 和 `defaultValue: ?LispValue` 字段
+    - 添加 `ProcedureFromParams` 和 `MacroFromParams` 枚举变体
+    - 更新 `cloneValue`, `isProcedure`, `isMacro`, `toString` 方法
+  - 修改 `src/core/eval_macro.cj`:
+    - 移除 `ParamInfo` 定义（移到 types.cj）
+    - 修改 `extractParamsWithRest` 支持：
+      - 纯可变参数（Symbol 处理 `(func . args)`）
+      - `&key` 标记进入命名参数区域
+      - `(param default)` 语法解析默认值
+    - 添加 `hasKeyOrDefaultParams` 辅助函数
+    - 更新 `evalDefmacro` 支持命名参数
+  - 修改 `src/core/eval_special_forms.cj`:
+    - 添加 `hasKeyOrDefaultParams` 辅助函数
+    - 修改 `evalLambda` 使用 `extractParamsWithRest` 并求值默认值
+    - 修改 `evalDefine` 支持命名参数
+  - 修改 `src/core/eval_higher_order.cj`:
+    - 修改 `evalArguments` 不求值 `:keyword` 符号
+    - 实现 `ProcedureFromParams` 的完整参数绑定逻辑（三阶段）
+    - 移除调试 println 语句
+  - 修改 `src/core/eval_core.cj`:
+    - 更新 `evalFunctionCall` 使用模式匹配处理新旧类型
+  - 添加单元测试：`src/modern_test.cj:testKeywordParameters`（6个测试用例）
+  - 文档更新：`docs/syntax/01-basics.md` 添加"高级参数特性"章节
+  - 示例文件：`examples/02-intermediate/06_keyword_args.lisp`
+  - 测试覆盖：213 个单元测试全部通过（新增 1 个测试）
+  - 向后兼容：保留旧的 `Procedure` 和 `Macro` 类型
 
 - 2026-01-27: **match HashMap 模式匹配实现** ✅
   - 实现 match 表达式中的 HashMap 模式匹配功能

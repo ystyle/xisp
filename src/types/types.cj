@@ -336,6 +336,31 @@ public open class ConsCell {
 }
 
 /**
+ * 参数信息
+ * 用于表示函数/宏的参数，包括是否为可变参数、是否为命名参数、默认值
+ */
+public class ParamInfo {
+    public let name: String
+    public let isRest: Bool
+    public let isKey: Bool
+    public let defaultValue: ?LispValue
+
+    public init(name: String, isRest: Bool) {
+        this.name = name
+        this.isRest = isRest
+        this.isKey = false
+        this.defaultValue = None
+    }
+
+    public init(name: String, isRest: Bool, isKey: Bool, defaultValue: ?LispValue) {
+        this.name = name
+        this.isRest = isRest
+        this.isKey = isKey
+        this.defaultValue = defaultValue
+    }
+}
+
+/**
  * Lisp 值类型枚举
  *
  * 支持递归定义，可以包含 ConsCell（它又包含 LispValue）
@@ -384,12 +409,26 @@ public enum LispValue <: ToString {
     | Procedure(ArrayList<String>, LispValue, Environment)
 
     /**
+     * 过程/函数（使用 ParamInfo，支持命名参数和默认值）
+     *
+     * 包含：参数信息列表、函数体、捕获的环境
+     */
+    | ProcedureFromParams(ArrayList<ParamInfo>, LispValue, Environment)
+
+    /**
      * 宏（编译时元编程）
      *
      * 包含：参数列表、宏体、捕获的环境
      * 与 Procedure 不同，宏接收的是未求值的语法树
      */
     | Macro(ArrayList<String>, LispValue, Environment)
+
+    /**
+     * 宏（使用 ParamInfo，支持命名参数和默认值）
+     *
+     * 包含：参数信息列表、宏体、捕获的环境
+     */
+    | MacroFromParams(ArrayList<ParamInfo>, LispValue, Environment)
 
     /**
      * 原生函数（用仓颉实现的内置函数）
@@ -509,7 +548,9 @@ public enum LispValue <: ToString {
     public func isProcedure(): Bool {
         match (this) {
             case Procedure(_, _, _) => true
+            case ProcedureFromParams(_, _, _) => true
             case Macro(_, _, _) => true
+            case MacroFromParams(_, _, _) => true
             case NativeFunc(_) => true
             case _ => false
         }
@@ -553,6 +594,7 @@ public enum LispValue <: ToString {
     public func isMacro(): Bool {
         match (this) {
             case Macro(_, _, _) => true
+            case MacroFromParams(_, _, _) => true
             case _ => false
         }
     }
@@ -570,7 +612,9 @@ public enum LispValue <: ToString {
             case Symbol(s) => s
             case Cons(c) => c.toString()
             case Procedure(_, _, _) => "#<procedure>"
+            case ProcedureFromParams(_, _, _) => "#<procedure>"
             case Macro(_, _, _) => "#<macro>"
+            case MacroFromParams(_, _, _) => "#<macro>"
             case NativeFunc(_) => "#<native-function>"
             case HashMap(map) => hashmapToString(map)
         }
@@ -589,7 +633,9 @@ public enum LispValue <: ToString {
             case Symbol(s) => Symbol(s)
             case Cons(cell) => Cons(cell.clone())
             case Procedure(params, body, env) => Procedure(params, body, env.clone())
+            case ProcedureFromParams(params, body, env) => ProcedureFromParams(params, body, env.clone())
             case Macro(params, body, env) => Macro(params, body, env.clone())
+            case MacroFromParams(params, body, env) => MacroFromParams(params, body, env.clone())
             case NativeFunc(f) => NativeFunc(f)  // 原生函数不需要克隆
             case HashMap(map) => HashMap(map)  // HashMap 是不可变的，直接复制引用
         }
@@ -670,8 +716,16 @@ public func procedureValue(params: ArrayList<String>, body: LispValue, env: Envi
     Procedure(params, body, env)
 }
 
+public func procedureFromParamsValue(params: ArrayList<ParamInfo>, body: LispValue, env: Environment): LispValue {
+    ProcedureFromParams(params, body, env)
+}
+
 public func macroValue(params: ArrayList<String>, body: LispValue, env: Environment): LispValue {
     Macro(params, body, env)
+}
+
+public func macroFromParamsValue(params: ArrayList<ParamInfo>, body: LispValue, env: Environment): LispValue {
+    MacroFromParams(params, body, env)
 }
 
 /**
