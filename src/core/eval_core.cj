@@ -206,7 +206,16 @@ extend Evaluator {
                     }
                 }
                 f(args)
-            case _ => Nil
+            case Nil =>
+                // 函数未定义
+                if (let Symbol(funcName) <- first) {
+                    Str("Error: Undefined function or variable: '${funcName}'")
+                } else {
+                    Str("Error: Attempt to call a non-function value: ${first.toString()}")
+                }
+            case _ =>
+                // 不是可调用的类型
+                Str("Error: Attempt to call a non-function value: ${first.toString()}")
         }
     }
 

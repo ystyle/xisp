@@ -770,6 +770,103 @@ class ModernTest {
             println("  表达式 ${i}: \"${multiExprs[i].toString()}\"")
         }
     }
+
+    @TestCase
+    func testErrorHandling() {
+        let env = Environment()
+        let evaluator = Evaluator(env)
+        BuiltinFunctions.registerAll(env)
+
+        // 测试1: 调用不存在的函数应该返回错误字符串
+        let result1 = evaluator.eval(Parser.parseSingleFromString("(nonexistent-function)"))
+        match (result1) {
+            case Str(s) =>
+                if (!s.startsWith("Error:")) {
+                    @Fail("错误消息应该以 Error: 开头，实际: ${s}")
+                }
+            case _ =>
+                @Fail("未定义函数应该返回错误字符串，实际: ${result1.toString()}")
+        }
+
+        // 测试2: 调用数字应该返回错误字符串
+        let result2 = evaluator.eval(Parser.parseSingleFromString("(123 456)"))
+        match (result2) {
+            case Str(s) =>
+                if (!s.startsWith("Error:")) {
+                    @Fail("错误消息应该以 Error: 开头，实际: ${s}")
+                }
+            case _ =>
+                @Fail("调用数字应该返回错误字符串，实际: ${result2.toString()}")
+        }
+
+        // 测试3: 调用字符串应该返回错误字符串
+        let result3 = evaluator.eval(Parser.parseSingleFromString("(\"hello\" \"world\")"))
+        match (result3) {
+            case Str(s) =>
+                if (!s.startsWith("Error:")) {
+                    @Fail("错误消息应该以 Error: 开头，实际: ${s}")
+                }
+            case _ =>
+                @Fail("调用字符串应该返回错误字符串，实际: ${result3.toString()}")
+        }
+
+        // 测试4: 调用未定义变量应该返回错误字符串
+        let result4 = evaluator.eval(Parser.parseSingleFromString("(undefined-var)"))
+        match (result4) {
+            case Str(s) =>
+                if (!s.startsWith("Error:")) {
+                    @Fail("错误消息应该以 Error: 开头，实际: ${s}")
+                }
+            case _ =>
+                @Fail("未定义变量应该返回错误字符串，实际: ${result4.toString()}")
+        }
+
+        // 测试5: 调用列表应该返回错误字符串
+        let result5 = evaluator.eval(Parser.parseSingleFromString("((1 2 3))"))
+        match (result5) {
+            case Str(s) =>
+                if (!s.startsWith("Error:")) {
+                    @Fail("错误消息应该以 Error: 开头，实际: ${s}")
+                }
+            case _ =>
+                @Fail("调用列表应该返回错误字符串，实际: ${result5.toString()}")
+        }
+
+        // 测试6: 调用 nil 应该返回错误字符串
+        let result6 = evaluator.eval(Parser.parseSingleFromString("(() 1 2)"))
+        match (result6) {
+            case Str(s) =>
+                if (!s.startsWith("Error:")) {
+                    @Fail("错误消息应该以 Error: 开头，实际: ${s}")
+                }
+            case _ =>
+                @Fail("调用nil应该返回错误字符串，实际: ${result6.toString()}")
+        }
+
+        // 测试7: 正确的函数调用应该正常工作
+        evaluator.eval(Parser.parseSingleFromString("(define add (lambda (x y) (+ x y)))"))
+        let result7 = evaluator.eval(Parser.parseSingleFromString("(add 1 2)"))
+        match (result7) {
+            case LispValue.Int(i) =>
+                if (i != 3) {
+                    @Fail("add(1, 2) 应该返回 3，实际: ${i}")
+                }
+            case _ =>
+                @Fail("正确函数调用应该返回整数，实际: ${result7.toString()}")
+        }
+
+        // 测试8: 错误不应该传播到正常代码
+        evaluator.eval(Parser.parseSingleFromString("(define x 42)"))
+        let result8 = evaluator.eval(Parser.parseSingleFromString("(+ x 10)"))
+        match (result8) {
+            case LispValue.Int(i) =>
+                if (i != 52) {
+                    @Fail("错误后正常代码应该仍然工作，期望 52，实际: ${i}")
+                }
+            case _ =>
+                @Fail("应该返回整数 52，实际: ${result8.toString()}")
+        }
+    }
 }
 
 @Test
