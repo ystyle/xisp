@@ -64,7 +64,7 @@ cjpm clean
 │   └── types
 ├── target                           # 编译结果
 ├── task.md
-├── temp-test                        # 临时测试
+├── temp-test                        # 临时测试-不提交git
 ├── temp-docs                        # 临时文档-不提交git
 ├── UNICODE_SUPPORT.md
 ```

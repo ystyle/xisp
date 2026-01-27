@@ -485,6 +485,105 @@ counter                 ; => 1
 ; => 26 (square(5) = 25, increment(25) = 26)
 ```
 
+### 高级参数特性
+
+Xisp 支持可变参数、命名参数和默认值，让函数定义更加灵活。
+
+#### 可变参数
+
+使用 `&rest` 标记可变参数，收集所有剩余参数到一个列表：
+
+```lisp
+; 收集所有参数
+(define (list-all . args)
+  args)
+
+(list-all 1 2 3 4)
+; => (1 2 3 4)
+
+; 混合位置参数和可变参数
+(define (display-info name . details)
+  (println "Name:" name)
+  (for-each println details))
+
+(display-info "Alice" "Age: 25" "City: Beijing")
+; => Name: Alice
+;    Age: 25
+;    City: Beijing
+```
+
+使用点对语法 `.` 定义纯可变参数函数：
+
+```lisp
+(define (sum-all . numbers)
+  (apply + numbers))
+
+(sum-all 1 2 3 4 5)
+; => 15
+```
+
+#### 命名参数
+
+使用 `&key` 标记命名参数，调用时使用 `:keyword value` 格式：
+
+```lisp
+; 定义带命名参数的函数
+(define (create-person &key name age city)
+  (list "name:" name "age:" age "city:" city))
+
+; 按任意顺序传递参数
+(create-person :name "张三" :age 25 :city "北京")
+; => ("name:" "张三" "age:" 25 "city:" "北京")
+
+(create-person :city "上海" :name "李四" :age 30)
+; => ("name:" "李四" "age:" 30 "city:" "上海")
+
+; 只传递部分参数
+(create-person :name "王五")
+; => ("name:" "王五" "age:" nil "city:" nil)
+```
+
+#### 默认值
+
+命名参数可以指定默认值：
+
+```lisp
+; 使用 (param default-value) 语法
+(define (connect &key (host "localhost") (port 8080) (ssl false))
+  (list "host:" host "port:" port "ssl:" ssl))
+
+; 使用默认值
+(connect)
+; => ("host:" "localhost" "port:" 8080 "ssl:" false)
+
+; 覆盖部分默认值
+(connect :port 9000)
+; => ("host:" "localhost" "port:" 9000 "ssl:" false)
+
+; 覆盖所有默认值
+(connect :host "example.com" :port 443 :ssl true)
+; => ("host:" "example.com" "port:" 443 "ssl:" true)
+```
+
+#### 混合使用
+
+可以同时使用位置参数、命名参数和可变参数：
+
+```lisp
+; 顺序：位置参数 → 命名参数 → 可变参数
+(define (complex-function a b &key x y &rest options)
+  (list "a:" a "b:" b "x:" x "y:" y "options:" options))
+
+; 调用示例
+(complex-function 1 2 :x 100 :y 200 :opt1 :opt2)
+; => ("a:" 1 "b:" 2 "x:" 100 "y:" 200 "options:" (:opt1 :opt2))
+```
+
+**参数顺序规则**：
+1. 位置参数在前
+2. 命名参数（`&key` 标记）在中间
+3. 可变参数（`&rest` 标记）在最后
+
 ---
 
 ## 条件判断

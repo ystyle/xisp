@@ -2,6 +2,7 @@ package ystyle::xisp.core
 
 import ystyle::xisp.types.*
 import std.collection.ArrayList
+import std.collection.HashMap
 
 /**
  * 高阶函数扩展
@@ -272,7 +273,13 @@ extend Evaluator {
 
         while (!current.isNil()) {
             if (let Cons(cell) <- current) {
-                let evaluated = this.eval(cell.car)
+                let arg = cell.car
+                let evaluated = if (let Symbol(sym) <- arg && sym.startsWith(":")) {
+                    // 关键字符号，不求值，直接返回
+                    arg
+                } else {
+                    this.eval(arg)
+                }
                 // 检查是否有错误
                 match (evaluated) {
                     case Str(s) =>
@@ -345,6 +352,132 @@ extend Evaluator {
                         }
                         i = i + 1
                     }
+                }
+
+                let oldEnv = this.env
+                this.env = newEnv
+
+                let result = this.evalBegin(body)
+
+                this.env = oldEnv
+                this.stackDepth = this.stackDepth - 1
+
+                result
+            case ProcedureFromParams(paramInfos, body, procEnv) =>
+                // 检查栈深度（在增加之前检查）
+                if (this.stackDepth >= this.maxStackDepth) {
+                    return Str("Error: Maximum stack depth exceeded (limit: ${this.maxStackDepth})")
+                }
+
+                this.stackDepth = this.stackDepth + 1
+                let newEnv = procEnv.createChild()
+
+                var argIndex = 0
+                var i = 0
+
+                while (i < paramInfos.size && argIndex < args.size) {
+                    let paramInfo = paramInfos[i]
+
+                    // 遇到命名参数或可变参数，停止位置参数绑定
+                    if (paramInfo.isKey || paramInfo.isRest) {
+                        break
+                    }
+
+                    // 绑定位置参数
+                    newEnv.define(paramInfo.name, args[argIndex])
+                    i = i + 1
+                    argIndex = argIndex + 1
+                }
+
+                // 跳过位置参数区域
+                while (i < paramInfos.size && !paramInfos[i].isKey && !paramInfos[i].isRest) {
+                    i = i + 1
+                }
+
+                let keywordArgs = HashMap<String, LispValue>()
+                var j = argIndex
+                while (j < args.size - 1) {
+                    // 检查是否是关键字符号（以 : 开头）
+                    if (let Symbol(sym) <- args[j] && sym.startsWith(":")) {
+                        let keyName = sym[1..]  // 去掉 ":" 前缀
+                        keywordArgs[keyName] = args[j + 1]
+                        j = j + 2
+                    } else {
+                        // 不是关键字，停止解析命名参数
+                        break
+                    }
+                }
+
+                // 绑定所有命名参数
+                while (i < paramInfos.size) {
+                    let paramInfo = paramInfos[i]
+
+                    if (paramInfo.isRest) {
+                        // 遇到可变参数，停止命名参数绑定
+                        break
+                    }
+
+                    if (paramInfo.isKey) {
+                        // 这是一个命名参数
+                        let value = if (keywordArgs.contains(paramInfo.name)) {
+                            keywordArgs.get(paramInfo.name)
+                        } else {
+                            // 使用默认值或 Nil
+                            match (paramInfo.defaultValue) {
+                                case Some(defaultVal) => defaultVal
+                                case None => Nil
+                            }
+                        }
+                        match (value) {
+                            case Some(v) => newEnv.define(paramInfo.name, v)
+                            case None => newEnv.define(paramInfo.name, Nil)
+                        }
+                    }
+
+                    i = i + 1
+                }
+
+                // 找到可变参数
+                var foundRest = false
+                for (paramInfo in paramInfos) {
+                    if (paramInfo.isRest) {
+                        foundRest = true
+                        let restArgs = ArrayList<LispValue>()
+                        var restIndex = argIndex
+                        // 跳过命名参数（它们已经在上面的循环中处理了）
+                        // 现在需要找到命名参数之后的参数
+                        // 重新计算 argIndex，跳过命名参数
+                        while (restIndex < args.size) {
+                            if (let Symbol(sym) <- args[restIndex] && sym.startsWith(":")) {
+                                // 跳过关键字参数对
+                                restIndex = restIndex + 2
+                            } else {
+                                // 位置参数
+                                restArgs.add(args[restIndex])
+                                restIndex = restIndex + 1
+                            }
+                        }
+
+                        // 将 ArrayList 转换为 Lisp 列表
+                        var restList: LispValue = Nil
+                        var k = restArgs.size - 1
+                        while (k >= 0) {
+                            restList = Cons(ConsCell(restArgs[k], restList))
+                            k = k - 1
+                        }
+
+                        newEnv.define(paramInfo.name, restList)
+                        break
+                    }
+                }
+
+                // 如果还有未绑定的位置参数（在可变参数之前），绑定它们为 Nil
+                while (i < paramInfos.size) {
+                    let paramInfo = paramInfos[i]
+                    if (!paramInfo.isRest && !paramInfo.isKey) {
+                        newEnv.define(paramInfo.name, Nil)
+                    }
+                    i = i + 1
                 }
 
                 let oldEnv = this.env

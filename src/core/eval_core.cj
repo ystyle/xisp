@@ -166,11 +166,11 @@ extend Evaluator {
         let funcValue = this.eval(first)
 
         match (funcValue) {
-            case Macro(_, _, _) =>
+            case Macro(_, _, _) | MacroFromParams(_, _, _) =>
                 // 这是一个宏，展开它并递归求值
                 let expanded = this.expandMacro(funcValue, rest)
                 this.eval(expanded)
-            case Procedure(_, _, _) =>
+            case Procedure(_, _, _) | ProcedureFromParams(_, _, _) =>
                 let args = this.evalArguments(rest)
                 // 检查参数中是否有错误
                 for (arg in args) {

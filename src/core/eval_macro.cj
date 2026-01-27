@@ -4,20 +4,6 @@ import ystyle::xisp.types.*
 import std.collection.ArrayList
 
 /**
- * 参数信息
- * 用于表示函数/宏的参数，包括是否为可变参数
- */
-public class ParamInfo {
-    public let name: String
-    public let isRest: Bool
-
-    public init(name: String, isRest: Bool) {
-        this.name = name
-        this.isRest = isRest
-    }
-}
-
-/**
  * 宏系统扩展
  * 包含宏展开机制、defmacro、macroexpand
  */
@@ -35,7 +21,9 @@ extend Evaluator {
             case Symbol(_) => "Symbol"
             case Cons(_) => "Cons"
             case Procedure(_, _, _) => "Procedure"
+            case ProcedureFromParams(_, _, _) => "ProcedureFromParams"
             case Macro(_, _, _) => "Macro"
+            case MacroFromParams(_, _, _) => "MacroFromParams"
             case NativeFunc(_) => "NativeFunc"
             case HashMap(_) => "HashMap"
             case _ => "Unknown"
@@ -76,7 +64,7 @@ extend Evaluator {
         if (let Symbol(sym) <- cell.car) {
             let resolvedSym = this.env.lookupKeyword(sym)
             let value = this.env.lookup(resolvedSym)
-            if (let Macro(_, _, _) <- value) {
+            if (let Macro(_, _, _) <- value || let MacroFromParams(_, _, _) <- value) {
                 // 这是一个宏，展开它（不递归展开子表达式）
                 this.macroExpandDepth = this.macroExpandDepth + 1
                 let expanded = this.expandMacro(value, cell.cdr)
@@ -159,40 +147,72 @@ extend Evaluator {
      * 展开宏
      */
     func expandMacro(macroValue: LispValue, args: LispValue): LispValue {
-        if (let Macro(params, body, macroEnv) <- macroValue) {
-            let newEnv = macroEnv.createChild()
-            this.bindMacroParams(params, args, newEnv)
+        match (macroValue) {
+            case Macro(params, body, macroEnv) =>
+                let newEnv = macroEnv.createChild()
+                this.bindMacroParams(params, args, newEnv)
 
-            let oldEnv = this.env
-            this.env = newEnv
+                let oldEnv = this.env
+                this.env = newEnv
 
-            // body 是一个 cons cell (类似 begin 块)，需要按顺序求值
-            // 检查是否是单个表达式 (cdr 是 nil)
-            let result = if (let Cons(bodyCell) <- body) {
-                if (bodyCell.cdr.isNil()) {
-                    // 单个表达式
-                    let expr = bodyCell.car
-                    if (this.inMacroExpandCall && this.isBackquoteExpr(expr)) {
-                        // 在 macroexpand 调用中，且是 backquote 表达式
-                        // 展开 backquote 但不执行结果
-                        this.expandBackquoteInMacro(expr)
+                // body 是一个 cons cell (类似 begin 块)，需要按顺序求值
+                // 检查是否是单个表达式 (cdr 是 nil)
+                let result = if (let Cons(bodyCell) <- body) {
+                    if (bodyCell.cdr.isNil()) {
+                        // 单个表达式
+                        let expr = bodyCell.car
+                        if (this.inMacroExpandCall && this.isBackquoteExpr(expr)) {
+                            // 在 macroexpand 调用中，且是 backquote 表达式
+                            // 展开 backquote 但不执行结果
+                            this.expandBackquoteInMacro(expr)
+                        } else {
+                            // 正常求值
+                            this.eval(expr)
+                        }
                     } else {
-                        // 正常求值
-                        this.eval(expr)
+                        // 多个表达式，按顺序求值（类似 begin）
+                        this.evalBegin(body)
                     }
                 } else {
-                    // 多个表达式，按顺序求值（类似 begin）
-                    this.evalBegin(body)
+                    // body 不是 cons，直接求值
+                    this.eval(body)
                 }
-            } else {
-                // body 不是 cons，直接求值
-                this.eval(body)
-            }
 
-            this.env = oldEnv
-            result
-        } else {
-            Str("Error: expandMacro called with non-macro value")
+                this.env = oldEnv
+                result
+            case MacroFromParams(paramInfos, body, macroEnv) =>
+                let newEnv = macroEnv.createChild()
+                this.bindMacroParamsFromParamInfo(paramInfos, args, newEnv)
+
+                let oldEnv = this.env
+                this.env = newEnv
+
+                // body 是一个 cons cell (类似 begin 块)，需要按顺序求值
+                // 检查是否是单个表达式 (cdr 是 nil)
+                let result = if (let Cons(bodyCell) <- body) {
+                    if (bodyCell.cdr.isNil()) {
+                        // 单个表达式
+                        let expr = bodyCell.car
+                        if (this.inMacroExpandCall && this.isBackquoteExpr(expr)) {
+                            // 在 macroexpand 调用中，且是 backquote 表达式
+                            // 展开 backquote 但不执行结果
+                            this.expandBackquoteInMacro(expr)
+                        } else {
+                            // 正常求值
+                            this.eval(expr)
+                        }
+                    } else {
+                        // 多个表达式，按顺序求值（类似 begin）
+                        this.evalBegin(body)
+                    }
+                } else {
+                    // body 不是 cons，直接求值
+                    this.eval(body)
+                }
+
+                this.env = oldEnv
+                result
+            case _ => Str("Error: expandMacro called with non-macro value")
         }
     }
 
@@ -265,6 +285,29 @@ extend Evaluator {
     }
 
     /**
+     * 绑定宏参数到环境（使用 ParamInfo）
+     */
+    func bindMacroParamsFromParamInfo(paramInfos: ArrayList<ParamInfo>, args: LispValue, env: Environment) {
+        var currentArg: LispValue = args
+        var i = 0
+
+        while (i < paramInfos.size) {
+            let paramInfo = paramInfos[i]
+
+            if (paramInfo.isRest) {
+                // 可变参数：将剩余所有参数绑定为一个列表
+                env.define(paramInfo.name, currentArg)
+                break
+            } else {
+                // 普通参数或命名参数：绑定单个参数
+                // 对于宏，命名参数也当作普通参数处理（因为宏接收的是未求值的语法树）
+                currentArg = this.bindOneMacroParam(paramInfo.name, currentArg, env)
+                i = i + 1
+            }
+        }
+    }
+
+    /**
      * 绑定单个宏参数
      */
     func bindOneMacroParam(param: String, arg: LispValue, env: Environment): LispValue {
@@ -298,9 +341,29 @@ extend Evaluator {
         if (let Symbol(name) <- cell.car) {
             if (let Cons(restCell) <- cell.cdr) {
                 let paramsExpr = restCell.car
-                let params = this.extractParams(paramsExpr)
+                let paramInfos = this.extractParamsWithRest(paramsExpr)
                 let body = restCell.cdr
-                let m = macroValue(params, body, this.env)
+
+                // 检查是否有命名参数或默认值
+                let hasKeyOrDefault = this.hasKeyOrDefaultParams(paramInfos)
+
+                let m = if (hasKeyOrDefault) {
+                    // 求值所有默认值表达式
+                    let evaluatedParamInfos = ArrayList<ParamInfo>()
+                    for (param in paramInfos) {
+                        let evaluatedDefault = match (param.defaultValue) {
+                            case Some(defaultExpr) => Some(this.eval(defaultExpr))
+                            case None => None<LispValue>
+                        }
+                        evaluatedParamInfos.add(ParamInfo(param.name, param.isRest, param.isKey, evaluatedDefault))
+                    }
+                    macroFromParamsValue(evaluatedParamInfos, body, this.env)
+                } else {
+                    // 使用旧的参数格式（向后兼容）
+                    let params = this.extractParams(paramsExpr)
+                    macroValue(params, body, this.env)
+                }
+
                 this.env.define(name, m)
                 Symbol(name)
             } else {
@@ -329,53 +392,84 @@ extend Evaluator {
     }
 
     /**
-     * 从参数表达式中提取参数信息列表（支持可变参数）
+     * 从参数表达式中提取参数信息列表（支持可变参数和命名参数）
      * 支持语法：
      * - Common Lisp 风格：(x y . rest)
      * - Scheme 风格：(x y &rest rest)
+     * - 命名参数：(x y &key z w)
+     * - 带默认值：(x y &key (z 0) (w 1))
+     * - 纯可变参数：args (直接是一个符号，用于 (func . args) 的情况)
      */
     func extractParamsWithRest(paramsExpr: LispValue): ArrayList<ParamInfo> {
         let paramInfos = ArrayList<ParamInfo>()
+
+        // 特殊情况：纯可变参数
+        // 如果 paramsExpr 本身就是一个符号（不是 ConsCell），则表示纯可变参数
+        // 例如：(define (func . args) ...) 中的 args
+        if (let Symbol(restName) <- paramsExpr) {
+            paramInfos.add(ParamInfo(restName, true, false, None<LispValue>))
+            return paramInfos
+        }
+
         var current: LispValue = paramsExpr
         var iteration = 0
         let maxIterations = 100
-        var restSeen = false
+        var inKeySection = false  // 是否进入命名参数区域
 
         while (!current.isNil() && iteration < maxIterations) {
             iteration = iteration + 1
             if (let Cons(currCell) <- current) {
                 let car = currCell.car
 
-                // 检查是否为 . 或 &rest 标记
+                // 检查是否为特殊标记
                 if (let Symbol(marker) <- car) {
                     if (marker == "." || marker == "&rest") {
-                        restSeen = true
-                        // 跳到下一个参数，它应该是可变参数名
+                        // 可变参数标记
                         current = currCell.cdr
                         if (let Cons(nextCell) <- current) {
                             if (let Symbol(restName) <- nextCell.car) {
-                                paramInfos.add(ParamInfo(restName, true))
+                                paramInfos.add(ParamInfo(restName, true, false, None))
                             }
                             current = nextCell.cdr
                         } else if (let Symbol(restName) <- current) {
-                            // (. rest) 的情况，rest 直接作为符号
-                            paramInfos.add(ParamInfo(restName, true))
+                            paramInfos.add(ParamInfo(restName, true, false, None))
                             current = Nil
                         }
                         break
+                    } else if (marker == "&key") {
+                        // 命名参数标记
+                        inKeySection = true
+                        current = currCell.cdr
                     } else {
-                        // 普通参数
-                        paramInfos.add(ParamInfo(marker, false))
+                        // 普通符号参数
+                        let (name, defaultVal) = if (inKeySection) {
+                            // 在命名参数区域，检查是否有默认值
+                            this.extractParamNameAndDefault(marker, currCell.cdr)
+                        } else {
+                            // 位置参数，没有默认值
+                            (marker, None<LispValue>)
+                        }
+                        paramInfos.add(ParamInfo(name, false, inKeySection, defaultVal))
 
                         // 检查 cdr 是否为可变参数（点对情况）
                         if (let Symbol(restName) <- currCell.cdr) {
-                            // 如果 cdr 是符号，说明这是最后一个参数的 rest 参数
-                            paramInfos.add(ParamInfo(restName, true))
+                            paramInfos.add(ParamInfo(restName, true, false, None<LispValue>))
                             break
                         }
 
                         current = currCell.cdr
                     }
+                } else if (let Cons(paramCell) <- car && inKeySection) {
+                    // 命名参数的列表形式：(param default)
+                    if (let Symbol(paramName) <- paramCell.car) {
+                        let defaultVal = if (let Cons(defaultCell) <- paramCell.cdr) {
+                            Some(defaultCell.car)
+                        } else {
+                            None<LispValue>
+                        }
+                        paramInfos.add(ParamInfo(paramName, false, true, defaultVal))
+                    }
+                    current = currCell.cdr
                 } else {
                     // 非符号，跳过
                     current = currCell.cdr
@@ -386,6 +480,31 @@ extend Evaluator {
         }
 
         paramInfos
+    }
+
+    /**
+     * 提取参数名和默认值
+     * 用于命名参数区域
+     * 返回：(参数名, 默认值表达式)
+     */
+    func extractParamNameAndDefault(symbol: String, cdr: LispValue): (String, ?LispValue) {
+        // 检查下一个元素是否是一个列表，且以该符号开头
+        // 如果是，则说明使用了 (name default) 语法
+        if (let Cons(nextCell) <- cdr) {
+            if (let Cons(nextCarCell) <- nextCell.car) {
+                if (let Symbol(nextSym) <- nextCarCell.car && nextSym == symbol) {
+                    // 这是一个 (name default) 列表
+                    let defaultVal = if (let Cons(defaultCell) <- nextCarCell.cdr) {
+                        Some(defaultCell.car)
+                    } else {
+                        None<LispValue>
+                    }
+                    return (symbol, defaultVal)
+                }
+            }
+        }
+        // 普通符号，没有默认值
+        (symbol, None<LispValue>)
     }
 
     /**
