@@ -639,4 +639,135 @@ class ModernTest {
         println("result = ${result7.toString()}")
         @Assert(result7.toString() == "42")
     }
+
+    @TestCase
+    func testMatchGuardClauses() {
+        let env = Environment()
+        BuiltinFunctions.registerAll(env)
+        let evaluator = Evaluator(env)
+
+        println("\n=== 测试 match 守卫条件 ===")
+
+        // 测试1: 基本 when 守卫 - 单行格式
+        println("\n测试1: 基本 when 守卫")
+        let result1 = evaluator.eval(Parser.parseSingleFromString("(match 15 (x when (> x 10) \"large\") (x \"small\"))"))
+        println("result = ${result1.toString()}")
+        @Assert(result1.toString() == "\"large\"")
+
+        // 测试2: 守卫失败
+        println("\n测试2: 守卫失败")
+        let result2 = evaluator.eval(Parser.parseSingleFromString("(match 5 (x when (> x 10) \"large\") (x \"small\"))"))
+        println("result = ${result2.toString()}")
+        @Assert(result2.toString() == "\"small\"")
+
+        // 测试3: 多个分支带 when
+        println("\n测试3: 多个分支带 when")
+        let result3 = evaluator.eval(Parser.parseSingleFromString("(match 7 (x when (> x 20) \"very large\") (x when (> x 10) \"large\") (x when (> x 5) \"medium\") (x \"small\"))"))
+        println("result = ${result3.toString()}")
+        @Assert(result3.toString() == "\"medium\"")
+
+        // 测试4: 列表模式 + when
+        println("\n测试4: 列表模式 + when")
+        let result4 = evaluator.eval(Parser.parseSingleFromString("(match '(1 2 3) ((x y z) when (= (+ x y) z) \"sum matches\") (_ \"not matched\"))"))
+        println("result = ${result4.toString()}")
+        @Assert(result4.toString() == "\"sum matches\"")
+
+        // 测试5: when 守卫 + 多个表达式
+        println("\n测试5: when 守卫 + 多个表达式")
+        let result5 = evaluator.eval(Parser.parseSingleFromString("(match 15 (x when (> x 10) (println \"x is large\") \"large\") (x \"small\"))"))
+        println("result = ${result5.toString()}")
+        @Assert(result5.toString() == "\"large\"")
+
+        // 测试6: 多行格式 - when 子句单独在一个括号内
+        println("\n测试6: 多行格式 - when 子句单独在一个括号内")
+        let result6 = evaluator.eval(Parser.parseSingleFromString("(match 15 (x when (> x 10)) (str \"large: \" x) (x when (< x 5)) (str \"small: \" x) _ \"medium\")"))
+        println("result = ${result6.toString()}")
+        @Assert(result6.toString() == "\"large: 15\"")
+
+        // 测试7: 多行格式 - 守卫失败，跳到下一个分支
+        println("\n测试7: 多行格式 - 守卫失败")
+        let result7 = evaluator.eval(Parser.parseSingleFromString("(match 3 (x when (> x 10)) \"large\" (x when (< x 5)) \"small\" _ \"medium\")"))
+        println("result = ${result7.toString()}")
+        @Assert(result7.toString() == "\"small\"")
+
+        // 测试8: 多行格式 - 所有守卫失败，使用默认分支
+        println("\n测试8: 多行格式 - 所有守卫失败，使用默认分支")
+        let result8 = evaluator.eval(Parser.parseSingleFromString("(match 7 (x when (> x 20)) \"very large\" (x when (< x 5)) \"small\" _ \"medium\")"))
+        println("result = ${result8.toString()}")
+        @Assert(result8.toString() == "\"medium\"")
+
+        // 测试9: 多行格式 - HashMap 模式 + when
+        println("\n测试9: 多行格式 - HashMap 模式 + when")
+        let result9 = evaluator.eval(Parser.parseSingleFromString("(match {:name \"Alice\" :age 30} ({:name n :age a} when (> a 25)) (list \"adult\" n) ({:name n} (list \"child\" n)))"))
+        println("result = ${result9.toString()}")
+        @Assert(result9.toString() == "(\"adult\" \"Alice\")")
+
+        // 测试10: 混合格式 - 单行和多行守卫混合
+        println("\n测试10: 混合格式 - 单行和多行守卫混合")
+        let result10 = evaluator.eval(Parser.parseSingleFromString("(match 15 (x when (> x 10) \"large\") (x when (< x 5)) \"small\" _ \"medium\")"))
+        println("result = ${result10.toString()}")
+        @Assert(result10.toString() == "\"large\"")
+
+        // 测试11: 正确的单行格式 - 守卫条件在单独括号内
+        println("\n测试11: 正确的单行格式 - 多个守卫条件")
+        let result11 = evaluator.eval(Parser.parseSingleFromString("(match 15 (x when (> x 10)) \"large\" (x when (< x 5)) \"small\" _ \"medium\")"))
+        println("result = ${result11.toString()}")
+        @Assert(result11.toString() == "\"large\"")
+
+        // 测试12: 正确的单行格式 - 守卫条件失败
+        println("\n测试12: 正确的单行格式 - 守卫条件失败")
+        let result12 = evaluator.eval(Parser.parseSingleFromString("(match 3 (x when (> x 10)) \"large\" (x when (< x 5)) \"small\" _ \"medium\")"))
+        println("result = ${result12.toString()}")
+        @Assert(result12.toString() == "\"small\"")
+    }
+
+    @TestCase
+    func testParseMultilineGuard() {
+        println("\n=== 测试多行守卫条件解析 ===")
+
+        // 正确的单行格式
+        println("\n1. 正确的单行格式:")
+        let singleLine = "(match 15 (x when (> x 10)) \"large\" (x when (< x 5)) \"small\" _ \"medium\")"
+        let singleExprs = Parser.parseFromString(singleLine)
+        println("表达式数量: ${singleExprs.size}")
+        if (singleExprs.size > 0) {
+            println("解析结果: ${singleExprs[0].toString()}")
+
+            // 检查子句
+            if (let Cons(cell) <- singleExprs[0]) {
+                var current = cell.cdr
+                var index = 0
+                while (!current.isNil() && index < 4) {
+                    if (let Cons(currCell) <- current) {
+                        println("  子句 ${index}: ${currCell.car.toString()}")
+                        current = currCell.cdr
+                        index = index + 1
+                    } else {
+                        break
+                    }
+                }
+            }
+        }
+
+        // 错误的单行格式 - 多写了一个右括号
+        println("\n2. 错误的单行格式（多写了一个括号）:")
+        let problematicLine = "(match 15 (x when (> x 10)) (str \"large: \" x) (x when (< x 10)) (str \"small: \" x)) _ \"medium\")"
+        let problematicExprs = Parser.parseFromString(problematicLine)
+        println("表达式数量: ${problematicExprs.size}")
+        for (i in 0..problematicExprs.size) {
+            println("  表达式 ${i}: ${problematicExprs[i].toString()}")
+        }
+
+        // 多行格式
+        println("\n3. 多行格式:")
+        let multiLineCode = #"""(match 15
+  (x when (> x 10)) "large"
+  (x when (< x 5)) "small"
+  _ "medium")"""#
+        let multiExprs = Parser.parseFromString(multiLineCode)
+        println("表达式数量: ${multiExprs.size}")
+        for (i in 0..multiExprs.size) {
+            println("  表达式 ${i}: \"${multiExprs[i].toString()}\"")
+        }
+    }
 }

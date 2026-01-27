@@ -100,6 +100,7 @@ extend Evaluator {
             var clauses = cell.cdr
             var clauseIndex = 0
             while (!clauses.isNil()) {
+                var skipped = false  // 标记是否已经跳过了子句
                 if (let Cons(clauseCell) <- clauses) {
                     let clause = clauseCell.car
 
@@ -111,6 +112,19 @@ extend Evaluator {
                             // 应该把整个 clause 当作列表模式，结果在下一个元素
                             let rest = clauseCons.cdr
 
+                            // 检查是否是守卫条件单独在一个括号内的格式：(pattern when guard)
+                            // 格式特征：when 是倒数第二个元素，后面跟着一个守卫表达式
+                            let isGuardClause = if (let Cons(restCell) <- rest && let Symbol("when") <- restCell.car) {
+                                // when 存在，检查 when 后面是否只有一个元素（守卫表达式）
+                                if (let Cons(afterWhen) <- restCell.cdr && afterWhen.cdr.isNil()) {
+                                    true  // (pattern when guard) 格式
+                                } else {
+                                    false  // when 后面有多个元素，不是这种格式
+                                }
+                            } else {
+                                false
+                            }
+
                             // 判断是否是列表模式
                             // 条件：rest 不为空（即这是一个多元素列表）
                             let needNextResult = if (!rest.isNil()) {
@@ -119,6 +133,7 @@ extend Evaluator {
                                 // 2. (x y) "ok" - 两个符号，(x y)是列表模式，"ok"在下一个元素
                                 // 3. (x "result") - first是模式，rest是结果
                                 // 4. {:key val} - HashMap 模式
+                                // 5. (x when guard) - 守卫条件单独在一个括号内
 
                                 // 首先检查是否是 HashMap 模式
                                 let isHashMapPattern = match (clauseCons.car) {
@@ -126,7 +141,10 @@ extend Evaluator {
                                     case _ => false
                                 }
 
-                                let areAllPatterns = if (isHashMapPattern) {
+                                if (isGuardClause) {
+                                    // 守卫条件单独在一个括号内：(x when guard) - 结果在下一个元素
+                                    false  // 使用单元素模式，守卫条件在 rest 中
+                                } else if (isHashMapPattern) {
                                     true  // HashMap 模式，整个clause是模式，结果在下一个元素
                                 } else if (this.isPatternElement(clauseCons.car)) {
                                     var allPatterns = true
@@ -142,18 +160,15 @@ extend Evaluator {
                                             allPatterns = false
                                         }
                                     }
-                                    allPatterns
-                                } else {
-                                    false
-                                }
-
-
-                                if (areAllPatterns) {
-                                    // 检查是否有守卫条件 - 使用 if-let
-                                    if (let Cons(restCell) <- rest && let Symbol("when") <- restCell.car) {
-                                        false  // 使用单元素模式
+                                    if (allPatterns) {
+                                        // 检查是否有守卫条件在开头 - 使用 if-let
+                                        if (let Cons(restCell) <- rest && let Symbol("when") <- restCell.car) {
+                                            false  // 使用单元素模式
+                                        } else {
+                                            true  // 列表模式
+                                        }
                                     } else {
-                                        true  // 列表模式
+                                        false  // 使用第一个元素作为pattern
                                     }
                                 } else {
                                     false  // 使用第一个元素作为pattern
@@ -187,7 +202,7 @@ extend Evaluator {
                                         clauses = newClauses
                                 }
                             } else {
-                                // 正常处理：pattern 是模式，rest 是结果表达式
+                                // 正常处理：pattern 是模式，rest 是结果表达式（或者守卫条件）
 
                                 // 检查是否有守卫条件 when
                                 let (hasGuard, guard, actualBody) = this.extractGuard(rest)
@@ -198,7 +213,21 @@ extend Evaluator {
                                         if (hasGuard) {
                                             let guardResult = this.evalInEnv(guard, matchedEnv)
                                             if (guardResult.isTruthy()) {
-                                                return this.evalBody(actualBody, matchedEnv)
+                                                // 守卫条件成功，执行结果表达式
+                                                if (isGuardClause && actualBody.isNil()) {
+                                                    // (x when guard) 格式：结果在下一个子句
+                                                    if (let Some(result) <- this.evalListPatternMatchResult(clauses, matchedEnv)) {
+                                                        return result
+                                                    }
+                                                } else {
+                                                    // (x when guard expr...) 格式：结果在 actualBody
+                                                    return this.evalBody(actualBody, matchedEnv)
+                                                }
+                                            } else {
+                                                // 守卫条件失败，跳过下一个子句（结果表达式）并继续
+                                                let (newClauses, _) = this.getNextAndSkip(clauses)
+                                                clauses = newClauses
+                                                skipped = true
                                             }
                                         } else {
                                             // 执行结果表达式
@@ -271,7 +300,9 @@ extend Evaluator {
                         }
                     }  // 关闭 match (clause)
 
-                    clauses = clauseCell.cdr
+                    if (!skipped) {
+                        clauses = clauseCell.cdr
+                    }
                     clauseIndex = clauseIndex + 1
                 } else {
                     break
