@@ -132,15 +132,7 @@ func runScript(filePath: String): Unit {
 
     // 执行脚本
     try {
-        let result = interpreter.evalMultiple(content)
-        // 检查是否是错误
-        match (result) {
-            case Str(s) =>
-                if (s.startsWith("Error:")) {
-                    eprintln(s)
-                }
-            case _ => ()
-        }
+        interpreter.evalMultiple(content)
     } catch (e: Exception) {
         eprintln("错误: ${e.message}")
     }

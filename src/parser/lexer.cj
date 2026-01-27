@@ -401,6 +401,11 @@ public class Lexer {
                 }
             } else if (r.isAsciiNumber()) {
                 this.readNumber()
+            } else if (r == r'\\') {
+                // 反斜杠转义字符只能在字符串中使用
+                // 在代码上下文中遇到 \ 是语法错误
+                this.advance()  // 消费 \
+                Token.Error("Syntax error: escape character '\\' outside string literal")
             } else if (r == r'-') {
                 // 检查是否是负数
                 if (let Some(nextR) <- this.peekAhead(1) && nextR.isAsciiNumber()) {
