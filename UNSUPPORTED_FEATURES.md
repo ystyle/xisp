@@ -6,180 +6,6 @@
 
 ---
 
-## ✅ 已实现的功能（5个）
-
-### 1. 宏/函数的可变参数
-
-**状态**: ✅ 已实现（2026-01-27）
-
-**优先级**: 🔴 高
-
-**已实现**:
-- ✅ Common Lisp 风格：`(x y . rest)`
-- ✅ Scheme 风格：`(x y &rest rest)`
-- ✅ 纯可变参数：`(. all)` 或 `(&rest all)`
-- ✅ 空可变参数：`(x . rest)` 当只传入 x 时，rest 为 nil
-
-**实现位置**:
-- 解析器：`src/parser/parser.cj` - `parseRestParameter`
-- 参数提取：`src/core/eval_helpers.cj` - `extractSymbols`
-- 参数绑定：`src/core/eval_higher_order.cj` - `applyProcedure`
-
-**单元测试**: `src/modern_test.cj`
-- `testRestParameters` - 测试可变参数
-- `testOnlyRestParameter` - 测试纯可变参数
-
-**集成测试**: `lisp-tests/rest_params_test.lisp`
-
-**使用示例**:
-```lisp
-; Common Lisp 风格
-(define test-lambda
-  (lambda (x y . rest)
-    (list 'x=x x 'y=y 'rest=rest rest)))
-(test-lambda 1 2 3 4 5)
-; => (x=x 1 y=y 2 rest=rest (3 4 5))
-
-; Scheme 风格
-(define test-scheme
-  (lambda (x y &rest rest)
-    (list x y rest)))
-(test-scheme 1 2 3 4)
-; => (1 2 (3 4))
-
-; 纯可变参数
-(define test-all
-  (lambda (. all)
-    all))
-(test-all 'a 'b 'c)
-; => (a b c)
-
-; 空可变参数
-(test-lambda 1)
-; => (x=x 1 y=y nil rest=rest nil)
-```
-
----
-
-### 2. ,@ (comma-at) 拼接
-
-**状态**: ✅ 已实现（2026-01-27）
-
-**优先级**: 🔴 高
-
-**已实现**:
-- ✅ 中间拼接：`` `(x y z ,@lst) ``
-- ✅ 开头拼接：`` `(,@lst) ``
-- ✅ 多个拼接：`` `(,@lst1 ,@lst2) ``
-- ✅ 混合拼接：`` `(1 2 ,@lst 4 5) ``
-
-**实现位置**:
-- 核心逻辑：`src/core/eval_special_forms.cj` - `expandBackquote`
-
-**单元测试**: `src/modern_test.cj` - `testCommaAtSplice`
-
-**集成测试**: `lisp-tests/rest_params_test.lisp`
-
-**使用示例**:
-```lisp
-(define lst1 '(a b c))
-(define lst2 '(1 2 3))
-
-; 中间拼接
-`(x y z ,@lst1)
-; => (x y z a b c)
-
-; 开头拼接
-`(,@lst2)
-; => (1 2 3)
-
-; 多个拼接
-`(,@lst1 ,@lst2)
-; => (a b c 1 2 3)
-
-; 混合拼接
-`(1 2 ,@lst1 4 5)
-; => (1 2 a b c 4 5)
-```
-
----
-
-### 3. eval 特殊形式
-
-**状态**: ✅ 已实现（2026-01-27）
-
-**优先级**: 🔴 高
-
-**已实现**:
-- ✅ eval 整数
-- ✅ eval 符号
-- ✅ eval quoted list
-- ✅ eval 动态构造的表达式
-- ✅ eval 嵌套调用
-- ✅ eval 字符串、nil 等基本类型
-
-**实现位置**: `src/core/eval_higher_order.cj` - `evalEval`
-
-**单元测试**: `src/modern_test.cj` - `testEval`
-
-**使用示例**:
-```lisp
-; eval 整数
-(eval 42)
-; => 42
-
-; eval 符号
-(define x 100)
-(eval (quote x))
-; => 100
-
-; eval quoted list - 动态执行 lambda
-(eval (quote ((lambda (x y) (+ x y)) 10 20)))
-; => 30
-
-; eval 动态构造的表达式
-(define code (quote (+ 1 2 3)))
-(eval code)
-; => 6
-
-; eval 嵌套调用
-(eval (list (quote +) 5 10))
-; => 15
-```
-
----
-
-### 4. 符号/关键字比较
-
-**状态**: ✅ 已实现（2026-01-27）
-
-**优先级**: 🔴 高
-
-**已实现**: `eq?` - 相等性比较（支持符号、字符串、整数、布尔值、nil）
-
-**实现位置**: `src/core/builtin_logic.cj`
-
-**测试文件**: `lisp-tests/equality_test.lisp`
-
----
-
-### 5. 字符串比较函数
-
-**状态**: ✅ 已实现（2026-01-27）
-
-**优先级**: 🔴 高
-
-**已实现**:
-- `string=?` - 字符串相等比较
-- `string<` - 字符串小于比较
-- `string>` - 字符串大于比较
-
-**实现位置**: `src/core/builtin_print.cj`
-
-**测试文件**: `lisp-tests/equality_test.lisp`
-
----
-
 ## ✅ 已实现的功能（6个）
 
 ### 1. 宏/函数的可变参数
@@ -354,55 +180,40 @@
 
 ---
 
-### 6. 宏的纯可变参数 (已修复)
+### 6. shebang 支持
 
-**状态**: ✅ 已修复（2026-01-27）
+**状态**: ✅ 已实现（2026-01-27）
 
-**优先级**: 🔴 高
+**优先级**: 🟡 中
 
-**问题**: 宏定义中的纯可变参数 `(. args)` 只能绑定第一个参数
+**已实现**:
+- ✅ Lexer 自动跳过 `#!` 开头的行
+- ✅ 支持 .lisp 脚本作为可执行文件
+- ✅ 跳过开头的空白字符后检测 shebang
+- ✅ 正确处理非 shebang 的情况
 
-**根本原因**:
-1. 解析器问题：`src/parser/parser.cj` 的 `parseAtom()` 遇到 `Token.Dot` 时返回 `Nil`，导致 `.` 被解析为 `nil`
-2. 求值器问题：`src/core/eval_core.cj` 的 `evalFunctionCall()` 没有处理宏的情况
+**实现位置**: `src/parser/lexer.cj` - `skipShebang()`
 
-**修复内容**:
-1. 修改 `parseAtom()` 添加 `case Token.Dot => Symbol(".")`，正确解析点号
-2. 修改 `evalFunctionCall()` 添加 `case Macro(_, _, _)` 分支，正确展开并求值宏
+**单元测试**: `src/parser/lexer_test.cj` - 测试 24-27（4个测试用例）
 
-**实现位置**:
-- `src/parser/parser.cj:93` - 点号解析
-- `src/core/eval_core.cj:169-172` - 宏调用处理
-
-**单元测试**: `src/modern_test.cj` - `testMacroRestParameters` (5个测试用例)
+**测试脚本**: `lisp-tests/test_shebang.lisp`
 
 **使用示例**:
 ```lisp
-; ✅ 现在可以正常使用纯可变参数宏
-(defmacro list-all (. args)
-  `(list ,@args))
+#!/usr/bin/env xisp-cli
+;; 可执行的 Lisp 脚本
+(println "Hello from shebang!")
+(println "This script can be executed directly")
 
-(list-all 1 2 3)
-; => (1 2 3)
-
-; ✅ 使用 map 和 ,@
-(defmacro print-all (. args)
-  `(begin
-     ,@(map (lambda (x) `(println ,x)) args)))
-
-(print-all "Hello" "World" 42)
-; 打印: Hello World 42
-
-; ✅ 混合参数仍然可用
-(defmacro mixed-macro (x y . rest)
-  `(list 'x= ,x 'y= ,y 'rest= (quote ,rest)))
-
-(mixed-macro 1 2 3 4)
-; => (x= 1 y= 2 rest= (3 4))
+; 运行方式：
+; 1. 添加执行权限：chmod +x script.lisp
+; 2. 直接运行：./script.lisp
+; 3. 或使用 xisp-cli：./target/release/bin/ystyle::xisp.cli script.lisp
 ```
 
 ---
 
+## ❌ 确认不支持的功能（3个）
 ## ❌ 确认不支持的功能（3个）
 
 ### 1. 哈希映射解构
@@ -676,3 +487,36 @@ cjpm test --show-all-output --filter 'ModernTest.testMacroRestParameters'
 
 **测试结果**: 所有 208 个单元测试通过 ✅
 
+
+---
+
+### 2026-01-27: shebang 支持实现 ✅
+
+**功能描述**: 支持 .lisp 脚本文件作为可执行文件
+
+**实现内容**:
+- Lexer 新增 `skipShebang()` 方法
+- 自动跳过 `#!` 开头的行
+- 支持跳过开头的空白字符后检测 shebang
+- 正确处理非 shebang 的情况（恢复位置）
+
+**实现位置**: `src/parser/lexer.cj` - `skipShebang()`
+
+**单元测试**: `src/parser/lexer_test.cj` - 测试 24-27（4个测试用例）
+
+**测试脚本**: `lisp-tests/test_shebang.lisp`
+
+**使用示例**:
+```lisp
+#!/usr/bin/env xisp-cli
+;; 可执行的 Lisp 脚本
+(println "Hello from shebang!")
+(println "This script can be executed directly")
+
+; 运行方式：
+; 1. 添加执行权限：chmod +x script.lisp
+; 2. 直接运行：./script.lisp
+; 3. 或使用 xisp-cli：./target/release/bin/ystyle::xisp.cli script.lisp
+```
+
+**测试结果**: 所有 208 个单元测试通过 ✅
