@@ -118,22 +118,6 @@ func runScript(filePath: String): Unit {
         withQuietMode()
     ])
 
-    // 读取文件内容
-    let content = try {
-        let bytes = File.readFrom(filePath)
-        String.fromUtf8(bytes)
-    } catch (e: FSException) {
-        eprintln("错误: 无法读取文件: ${e.message}")
-        return
-    } catch (e: Exception) {
-        eprintln("错误: ${e.message}")
-        return
-    }
-
-    // 执行脚本
-    try {
-        interpreter.evalMultiple(content)
-    } catch (e: Exception) {
-        eprintln("错误: ${e.message}")
-    }
+    // 使用 interpreter.evalFile() 执行文件
+    interpreter.evalFile(filePath)
 }
