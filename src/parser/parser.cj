@@ -170,6 +170,12 @@ public class Parser {
     public func parseExpression(): LispValue {
         let token = this.peek()
 
+        // 处理词法错误
+        if (let Token.Error(msg) <- token) {
+            this.advance()  // 消费 Error token
+            return LispValue.Error(XispError(ErrorType.SyntaxError, msg))
+        }
+
         // 处理引用符号 '
         if (token == Token.Quote) {
             this.advance()  // 消费 Quote

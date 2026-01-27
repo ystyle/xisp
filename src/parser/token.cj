@@ -102,6 +102,11 @@ public enum Token <: Equatable<Token> {
     | InterpolateString
 
     /**
+     * 词法错误
+     */
+    | Error(String)
+
+    /**
      * 文件结束
      */
     | EOF
@@ -130,6 +135,7 @@ public enum Token <: Equatable<Token> {
             case (HashMapStart, HashMapStart) => true
             case (HashMapEnd, HashMapEnd) => true
             case (InterpolateString, InterpolateString) => true
+            case (Error(_), Error(_)) => true
             case (EOF, EOF) => true
             case _ => false
         }
@@ -159,6 +165,7 @@ public enum Token <: Equatable<Token> {
             case HashMapStart => "{"
             case HashMapEnd => "}"
             case InterpolateString => "#\""
+            case Error(msg) => "<Error: ${msg}>"
             case EOF => "<EOF>"
         }
     }

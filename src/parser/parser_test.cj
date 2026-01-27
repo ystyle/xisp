@@ -163,4 +163,39 @@ class ParserTest {
         println("Parsed ${exprs.size} expression(s)")
         println("SUCCESS")
     }
+
+    @TestCase
+    func testEscapeCharOutsideString() {
+        println("=== Test: Escape character outside string ===")
+
+        // 测试反斜杠在字符串外应报告语法错误
+        // "\n" 被解析为两个 token: "\" (错误) 和 "n" (符号)
+        let input = "\\n"
+        println("Parsing: ${input}")
+
+        let exprs = Parser.parseFromString(input)
+
+        println("Parsed ${exprs.size} expression(s)")
+
+        // 第一个表达式应该是语法错误
+        match (exprs[0]) {
+            case Error(err) =>
+                @Assert(err.kind == ErrorType.SyntaxError)
+                @Assert(err.message.contains("escape character"))
+                println("First expr correctly reported syntax error: ${err.message}")
+            case _ =>
+                @Fail("Expected first expr to be Error for escape character outside string")
+        }
+
+        // 第二个表达式应该是符号 "n"
+        if (exprs.size >= 2) {
+            match (exprs[1]) {
+                case Symbol(s) =>
+                    @Assert(s == "n")
+                    println("Second expr is symbol: ${s}")
+                case _ =>
+                    @Fail("Expected second expr to be Symbol 'n'")
+            }
+        }
+    }
 }

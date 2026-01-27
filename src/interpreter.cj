@@ -589,6 +589,11 @@ public class LispInterpreter {
             var result: LispValue = Nil
             for (expr in exprs) {
                 result = evaluator.eval(expr)
+                // 如果是错误，打印错误信息（但继续执行）
+                match (result) {
+                    case Error(err) => eprintln(err.toString())
+                    case _ => ()
+                }
             }
             result
         } catch (e: Exception) {
