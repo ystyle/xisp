@@ -29,13 +29,13 @@
 ## M2: 仓颉互操作桥接 ✅
 
 - [x] Lisp → 仓颉函数调用
-- [ ] 仓颉 → Lisp 函数调用
+- [x] 仓颉 → Lisp 函数调用 ✅ 已完成 (2026-01-28)
 - [x] std.io 桥接
 - [x] std.fs 桥接
 - [x] LispInterpreter API
 - [x] 桥接层文档
 
-**完成时间**: 2026-01-22
+**完成时间**: 2026-01-28
 
 ---
 
@@ -164,7 +164,7 @@
   - 测试：213 个单元测试全部通过（新增 `testKeywordParameters`）
 
 ### 低优先级
-- [ ] 仓颉反向调用 Lisp 函数
+(无)
 
 ---
 
@@ -175,6 +175,44 @@
 ---
 
 ## 📅 更新记录
+
+- 2026-01-28: **仓颉反向调用 Lisp 函数** ✅
+  - 实现 `LispDeserializable<T>` 接口（Lisp → 仓颉类型转换）
+  - 为 Int64、Float64、String、Bool 实现 LispDeserializable
+  - 实现 `ExtendLispValue` 接口定义类型转换契约
+  - 在 bridge 包中通过接口扩展为 LispValue 添加转换方法：
+    - `asInt(): ?Int64` - 支持从 Int 和 Float 转换
+    - `asFloat(): ?Float64` - 支持从 Float 和 Int 转换
+    - `asString(): ?String` - 支持从 Str 和 Symbol 转换
+    - `asBool(): ?Bool` - 支持从 Boolean 转换
+    - `asCjValue<T>(): ?T` - 泛型转换方法，使用 LispDeserializable 接口
+  - 在 `LispInterpreter` 中实现 `call<T>(funcName, args)` 方法
+    - 支持变长参数：`Array<T>` 其中 `T <: LispConvertible`
+    - 自动将仓颉类型转换为 LispValue
+    - 构造函数调用表达式并求值
+  - 创建完整测试套件（12个测试用例）：
+    - testCallWithInt - 整数类型转换
+    - testCallWithFloat - 浮点类型转换
+    - testCallWithString - 字符串类型转换
+    - testCallWithBool - 布尔类型转换
+    - testCallWithMultipleArgs - 多参数调用
+    - testCallNoArgs - 无参数调用
+    - testTypeMismatch - 类型不匹配处理
+    - testDirectFromLisp - 直接使用 fromLisp 静态方法
+    - testIntFromFloat - Float 转 Int
+    - testFloatFromInt - Int 转 Float
+    - testStringFromSymbol - Symbol 转 String
+    - testComplexScenario - 复杂场景综合测试
+  - 测试覆盖：所有 228 个测试通过（新增 12 个）
+  - 代码文件：
+    - `src/bridge/lisp_deserializable.cj` - 接口定义和实现
+    - `src/interpreter.cj` - call 方法实现
+    - `src/reverse_call_test.cj` - 测试套件
+  - 设计要点：
+    - 使用接口扩展而非直接扩展，确保跨包可见性
+    - 接口定义在 bridge 包，扩展也在 bridge 包
+    - 通过 `<: ExtendLispValue` 实现接口扩展
+    - 类型转换支持自动类型提升（Int ↔ Float）
 
 - 2026-01-27: **实现 evalFile 公共 API** ✅
   - 在 interpreter.cj 中实现 evalFile(filePath) 方法

@@ -337,7 +337,7 @@ Xisp 已实现 std.io 和 std.fs 的桥接函数：
 **详细文档**：完整的桥接 API 文档请参见 **[docs/integration/bridge.md](integration/bridge.md)**，包括：
 - LispInterpreter 完整 API
 - LispConvertible 接口
-- TypeConverter 工具类
+- LispDeserializable<T> 接口
 - 错误处理最佳实践
 - 完整使用示例
 

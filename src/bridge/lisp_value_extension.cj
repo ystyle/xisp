@@ -151,14 +151,12 @@ extend<T> Option<T> <: LispConvertible where T <: LispConvertible {
 extend<K, V> HashMap<K, V> <: LispConvertible
     where K <: ToString & LispConvertible, V <: LispConvertible {
     public func toLisp(): LispValue {
-        // 转换为 Lisp 列表：((key1 . value1) (key2 . value2) ...)
-        let temp = ArrayList<LispValue>()
+        // 转换为 LispValue.HashMap
+        let result = HashMap<String, LispValue>()
         for ((key, value) in this) {
-            // 创建键值对 (key . value)
-            let pair = consValue(key.toLisp(), consValue(value.toLisp(), Nil))
-            temp.add(pair)
+            result[key.toString()] = value.toLisp()
         }
-        list(temp)
+        LispValue.HashMap(result)
     }
 }
 
@@ -171,107 +169,4 @@ extend<T> HashSet<T> <: LispConvertible where T <: LispConvertible {
         }
         list(temp)
     }
-}
-
-/**
- * 类型转换器 - 简化类型转换操作
- *
- * 现在可以使用泛型约束来接受所有 LispConvertible 类型
- */
-public class TypeConverter {
-    /**
-     * 将任意 LispConvertible 类型转换为 LispValue
-     *
-     * 使用示例：
-     * ```
-     * let values = ArrayList<Int64>()
-     * let lispValues = toLispList(values)
-     * ```
-     */
-    public static func from<T>(value: T): LispValue where T <: LispConvertible {
-        value.toLisp()
-    }
-
-    /**
-     * 将仓颉列表转换为 LispValue 列表
-     *
-     * 使用泛型约束，所有 LispConvertible 类型都可以使用
-     */
-    public static func fromList<T>(values: ArrayList<T>): LispValue
-        where T <: LispConvertible {
-        let temp = ArrayList<LispValue>()
-        for (v in values) {
-            temp.add(v.toLisp())
-        }
-        list(temp)
-    }
-
-    /**
-     * 从 LispValue 中提取字符串（如果可能）
-     */
-    public static func asString(value: LispValue): ?String {
-        match (value) {
-            case Str(s) => Some(s)
-            case Symbol(s) => Some(s)
-            case _ => None
-        }
-    }
-
-    /**
-     * 从 LispValue 中提取浮点数（如果可能）
-     */
-    public static func asFloat(value: LispValue): ?Float64 {
-        match (value) {
-            case LispValue.Int(i) => Some(Float64(i))
-            case LispValue.Float(f) => Some(f)
-            case _ => None
-        }
-    }
-
-    /**
-     * 从 LispValue 中提取整数（如果可能）
-     */
-    public static func asInt64(value: LispValue): ?Int64 {
-        match (value) {
-            case LispValue.Int(i) => Some(i)
-            case LispValue.Float(f) => Some(Int64(f))
-            case _ => None
-        }
-    }
-
-    /**
-     * 从 LispValue 中提取布尔值（如果可能）
-     */
-    public static func asBool(value: LispValue): ?Bool {
-        match (value) {
-            case Boolean(b) => Some(b)
-            case _ => None
-        }
-    }
-}
-
-/**
- * 辅助函数 - 创建 Lisp 列表的便捷方法
- */
-
-/**
- * 将任意 LispConvertible 列表转换为 LispValue
- *
- * 使用示例：
- * ```
- * let numbers = ArrayList<Int64>([1, 2, 3])
- * let lispList = toLispList(numbers)  // => (1 2 3)
- * ```
- */
-public func toLispList<T>(values: ArrayList<T>): LispValue
-    where T <: LispConvertible {
-    TypeConverter.fromList(values)
-}
-
-/**
- * 将单个值转换为 LispValue
- */
-public func toLisp<T>(value: T): LispValue
-    where T <: LispConvertible {
-    TypeConverter.from(value)
 }
