@@ -417,9 +417,55 @@ public class Lexer {
     }
 
     /**
+     * 跳过 shebang（#!）行
+     * 支持 .lisp 脚本作为可执行文件
+     */
+    private func skipShebang() {
+        // 保存当前位置（跳过空白之前）
+        let originalPos = this.pos
+
+        // 先跳过开头的空白字符
+        this.skipWhitespace()
+
+        // 保存当前位置（跳过空白后）
+        let startPos = this.pos
+
+        // 检查是否以 #! 开头
+        if (let Some(r1) <- this.peek() && r1 == r'#') {
+            this.advance()  // 消费 #
+            if (let Some(r2) <- this.peek() && r2 == r'!') {
+                this.advance()  // 消费 !
+
+                // 跳过 shebang 行的所有字符，包括换行符
+                while (let Some(r) <- this.peek()) {
+                    this.advance()
+                    // 检查刚才 advance 的字符
+                    let prevIndex = this.pos - 1
+                    if (prevIndex >= 0 && prevIndex < this.runeArray.size) {
+                        let prevChar = this.runeArray[prevIndex]
+                        if (prevChar == r'\n') {
+                            break
+                        }
+                    }
+                }
+
+                // Shebang 成功跳过，返回成功
+                return
+            }
+        }
+
+        // 不是 shebang，恢复到跳过空白之前的位置
+        // 这样，如果不是 shebang，空白字符会被保留，由 nextToken() 处理
+        this.pos = originalPos
+    }
+
+    /**
      * 获取所有 Token
      */
     public func tokenize(): ArrayList<Token> {
+        // 跳过可能的 shebang 行
+        this.skipShebang()
+
         let tokens = ArrayList<Token>()
         var token = this.nextToken()
 
