@@ -68,7 +68,7 @@ class ReplTest {
         // env2 不应该有这个变量
         let result2 = evaluator2.eval(expr1)
         match (result2) {
-            case Nil => ()  // 正常：未定义的变量返回 nil
+            case Error(err) => ()  // 正常：未定义的变量返回错误
             case _ => @Fail("env2 should not have x from env1")
         }
     }

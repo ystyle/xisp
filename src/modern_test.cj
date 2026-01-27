@@ -777,70 +777,58 @@ class ModernTest {
         let evaluator = Evaluator(env)
         BuiltinFunctions.registerAll(env)
 
-        // 测试1: 调用不存在的函数应该返回错误字符串
+        // 测试1: 调用不存在的函数应该返回错误
         let result1 = evaluator.eval(Parser.parseSingleFromString("(nonexistent-function)"))
         match (result1) {
-            case Str(s) =>
-                if (!s.startsWith("Error:")) {
-                    @Fail("错误消息应该以 Error: 开头，实际: ${s}")
-                }
+            case Error(err) =>
+                @Assert(err.kind == ErrorType.UndefinedFunction)
             case _ =>
-                @Fail("未定义函数应该返回错误字符串，实际: ${result1.toString()}")
+                @Fail("未定义函数应该返回错误，实际: ${result1.toString()}")
         }
 
-        // 测试2: 调用数字应该返回错误字符串
+        // 测试2: 调用数字应该返回错误
         let result2 = evaluator.eval(Parser.parseSingleFromString("(123 456)"))
         match (result2) {
-            case Str(s) =>
-                if (!s.startsWith("Error:")) {
-                    @Fail("错误消息应该以 Error: 开头，实际: ${s}")
-                }
+            case Error(err) =>
+                @Assert(err.kind == ErrorType.TypeError)
             case _ =>
-                @Fail("调用数字应该返回错误字符串，实际: ${result2.toString()}")
+                @Fail("调用数字应该返回错误，实际: ${result2.toString()}")
         }
 
-        // 测试3: 调用字符串应该返回错误字符串
+        // 测试3: 调用字符串应该返回错误
         let result3 = evaluator.eval(Parser.parseSingleFromString("(\"hello\" \"world\")"))
         match (result3) {
-            case Str(s) =>
-                if (!s.startsWith("Error:")) {
-                    @Fail("错误消息应该以 Error: 开头，实际: ${s}")
-                }
+            case Error(err) =>
+                @Assert(err.kind == ErrorType.TypeError)
             case _ =>
-                @Fail("调用字符串应该返回错误字符串，实际: ${result3.toString()}")
+                @Fail("调用字符串应该返回错误，实际: ${result3.toString()}")
         }
 
-        // 测试4: 调用未定义变量应该返回错误字符串
+        // 测试4: 调用未定义变量应该返回错误
         let result4 = evaluator.eval(Parser.parseSingleFromString("(undefined-var)"))
         match (result4) {
-            case Str(s) =>
-                if (!s.startsWith("Error:")) {
-                    @Fail("错误消息应该以 Error: 开头，实际: ${s}")
-                }
+            case Error(err) =>
+                @Assert(err.kind == ErrorType.UndefinedFunction)
             case _ =>
-                @Fail("未定义变量应该返回错误字符串，实际: ${result4.toString()}")
+                @Fail("未定义变量应该返回错误，实际: ${result4.toString()}")
         }
 
-        // 测试5: 调用列表应该返回错误字符串
+        // 测试5: 调用列表应该返回错误
         let result5 = evaluator.eval(Parser.parseSingleFromString("((1 2 3))"))
         match (result5) {
-            case Str(s) =>
-                if (!s.startsWith("Error:")) {
-                    @Fail("错误消息应该以 Error: 开头，实际: ${s}")
-                }
+            case Error(err) =>
+                @Assert(err.kind == ErrorType.UndefinedFunction || err.kind == ErrorType.TypeError)
             case _ =>
-                @Fail("调用列表应该返回错误字符串，实际: ${result5.toString()}")
+                @Fail("调用列表应该返回错误，实际: ${result5.toString()}")
         }
 
-        // 测试6: 调用 nil 应该返回错误字符串
+        // 测试6: 调用 nil 应该返回错误
         let result6 = evaluator.eval(Parser.parseSingleFromString("(() 1 2)"))
         match (result6) {
-            case Str(s) =>
-                if (!s.startsWith("Error:")) {
-                    @Fail("错误消息应该以 Error: 开头，实际: ${s}")
-                }
+            case Error(err) =>
+                @Assert(err.kind == ErrorType.UndefinedFunction || err.kind == ErrorType.TypeError)
             case _ =>
-                @Fail("调用nil应该返回错误字符串，实际: ${result6.toString()}")
+                @Fail("调用nil应该返回错误，实际: ${result6.toString()}")
         }
 
         // 测试7: 正确的函数调用应该正常工作

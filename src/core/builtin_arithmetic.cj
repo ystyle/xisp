@@ -245,7 +245,7 @@ extend BuiltinFunctions {
         // digits: 保留的小数位数，默认为0
         env.define("round", NativeFunc({ args =>
             if (args.size < 1 || args.size > 2) {
-                return Str("Error: round requires 1 or 2 arguments")
+                return LispValue.Error(XispError(ErrorType.ArityMismatch, "round requires 1 or 2 arguments"))
             }
 
             // 检查 digits 参数并提取值
@@ -253,7 +253,7 @@ extend BuiltinFunctions {
             if (args.size == 2) {
                 match (args[1]) {
                     case LispValue.Int(d) => digitsVal = d
-                    case _ => return Str("Error: round digits must be an integer")
+                    case _ => return LispValue.Error(XispError(ErrorType.TypeError, "round digits must be an integer"))
                 }
             }
 

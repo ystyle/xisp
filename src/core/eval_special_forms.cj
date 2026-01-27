@@ -314,7 +314,7 @@ extend Evaluator {
      * 只在 backquote 内有效，单独使用时返回错误
      */
     func evalComma(expr: LispValue): LispValue {
-        Str("Error: comma used outside of backquote")
+        LispValue.Error(XispError(ErrorType.SyntaxError, "comma used outside of backquote"))
     }
 
     /**
@@ -322,7 +322,7 @@ extend Evaluator {
      * 只在 backquote 内有效，单独使用时返回错误
      */
     func evalCommaAt(expr: LispValue): LispValue {
-        Str("Error: comma-at used outside of backquote")
+        LispValue.Error(XispError(ErrorType.SyntaxError, "comma-at used outside of backquote"))
     }
 
     /**

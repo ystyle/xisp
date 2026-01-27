@@ -21,7 +21,12 @@ extend Evaluator {
                 if (s.size > 0 && s.startsWith(":")) {
                     Symbol(s)  // 直接返回符号本身
                 } else {
-                    this.env.lookup(s)
+                    let value = this.env.lookup(s)
+                    // 检查是否是错误
+                    match (value) {
+                        case Error(_) => value  // 传播错误
+                        case _ => value
+                    }
                 }
             case Cons(cell) => this.evalCons(expr, cell)
             case _ => expr
@@ -37,14 +42,19 @@ extend Evaluator {
         if (let Symbol(sym) <- cell.car) {
             let resolvedSym = this.env.lookupKeyword(sym)
             let value = this.env.lookup(resolvedSym)
-            if (let Macro(_, _, _) <- value) {
-                // 这是一个宏，展开并重新求值
-                let expanded = this.expandMacro(value, cell.cdr)
-                // 对展开后的表达式求值
-                this.eval(expanded)
-            } else {
-                // 不是宏，正常求值（会先求值参数）
-                this.doEvalList(cell)
+            // 检查是否是宏（忽略错误，当作不是宏处理）
+            match (value) {
+                case Macro(_, _, _) | MacroFromParams(_, _, _) =>
+                    // 这是一个宏，展开并重新求值
+                    let expanded = this.expandMacro(value, cell.cdr)
+                    // 对展开后的表达式求值
+                    this.eval(expanded)
+                case Error(_) =>
+                    // lookup 返回错误，说明符号未定义，继续正常求值流程
+                    this.doEvalList(cell)
+                case _ =>
+                    // 不是宏，正常求值（会先求值参数）
+                    this.doEvalList(cell)
             }
         } else {
             // car 不是符号，正常求值
@@ -61,7 +71,7 @@ extend Evaluator {
         }
 
         if (this.stackDepth > this.maxStackDepth) {
-            return Str("Error: Maximum stack depth exceeded (limit: ${this.maxStackDepth})")
+            return LispValue.Error(XispError(ErrorType.RuntimeError, "Maximum stack depth exceeded (limit: ${this.maxStackDepth})"))
         }
 
         this.stackDepth = this.stackDepth + 1
@@ -156,7 +166,7 @@ extend Evaluator {
                 match (this.funcChecker) {
                     case Some(checker) =>
                         if (!checker(funcName)) {
-                            return Str("Error: Function '${funcName}' is not allowed")
+                            return LispValue.Error(XispError(ErrorType.UndefinedFunction, "Function '${funcName}' is not allowed"))
                         }
                     case None => ()
                 }
@@ -164,6 +174,20 @@ extend Evaluator {
         }
 
         let funcValue = this.eval(first)
+
+        // 检查 funcValue 是否是错误
+        match (funcValue) {
+            case Error(err) =>
+                // 如果是未定义变量错误，且在函数调用位置，转换为未定义函数错误
+                match (err.kind) {
+                    case UnboundVariable =>
+                        // 区分是变量还是函数：如果是函数调用位置，转换为函数错误
+                        let name = if (let Symbol(sym) <- first) { sym } else { first.toString() }
+                        return LispValue.Error(XispError(ErrorType.UndefinedFunction, "Undefined function: '${name}'"))
+                    case _ => return funcValue  // 其他错误直接传播
+                }
+            case _ => ()
+        }
 
         match (funcValue) {
             case Macro(_, _, _) | MacroFromParams(_, _, _) =>
@@ -175,22 +199,14 @@ extend Evaluator {
                 // 检查参数中是否有错误
                 for (arg in args) {
                     match (arg) {
-                        case Str(s) =>
-                            if (s.startsWith("Error:")) {
-                                return arg
-                            }
+                        case Error(_) => return arg  // 传播第一个错误
                         case _ => ()
                     }
                 }
                 let result = this.applyProcedure(funcValue, args)
                 // 检查是否返回错误
                 match (result) {
-                    case Str(s) =>
-                        if (s.startsWith("Error:")) {
-                            result  // 传播错误
-                        } else {
-                            result
-                        }
+                    case Error(_) => result  // 传播错误
                     case _ => result
                 }
             case NativeFunc(f) =>
@@ -198,24 +214,21 @@ extend Evaluator {
                 // 检查参数中是否有错误
                 for (arg in args) {
                     match (arg) {
-                        case Str(s) =>
-                            if (s.startsWith("Error:")) {
-                                return arg
-                            }
+                        case Error(_) => return arg  // 传播第一个错误
                         case _ => ()
                     }
                 }
                 f(args)
             case Nil =>
-                // 函数未定义
+                // 函数未定义（符号定义为 nil 后作为函数调用）
                 if (let Symbol(funcName) <- first) {
-                    Str("Error: Undefined function or variable: '${funcName}'")
+                    LispValue.Error(XispError(ErrorType.UndefinedFunction, "Undefined function: '${funcName}'"))
                 } else {
-                    Str("Error: Attempt to call a non-function value: ${first.toString()}")
+                    LispValue.Error(XispError(ErrorType.TypeError, "Attempt to call a non-function value: ${first.toString()}"))
                 }
             case _ =>
                 // 不是可调用的类型
-                Str("Error: Attempt to call a non-function value: ${first.toString()}")
+                LispValue.Error(XispError(ErrorType.TypeError, "Attempt to call a non-function value: ${first.toString()}"))
         }
     }
 

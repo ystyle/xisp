@@ -55,7 +55,7 @@ public class Bridge {
                 case Some(checker) =>
                     if (args.size > 0 && let Str(path) <- args[0]) {
                         if (!checker(path, false)) {
-                            return Str("Error: File read denied: ${path}")
+                            return LispValue.Error(XispError(ErrorType.IOError, "File read denied: ${path}"))
                         }
                     }
                 case None => ()
@@ -67,12 +67,12 @@ public class Bridge {
                     let content = String.fromUtf8(bytes)
                     Str(content)
                 } catch (e: FSException) {
-                    Str("Error: ${e.message}")
+                    LispValue.Error(XispError(ErrorType.IOError, "${e.message}"))
                 } catch (e: Exception) {
-                    Str("Error: ${e.message}")
+                    LispValue.Error(XispError(ErrorType.IOError, "${e.message}"))
                 }
             } else {
-                Str("Error: invalid arguments")
+                LispValue.Error(XispError(ErrorType.ArityMismatch, "invalid arguments"))
             }
         })
 
@@ -83,7 +83,7 @@ public class Bridge {
                 case Some(checker) =>
                     if (args.size > 0 && let Str(path) <- args[0]) {
                         if (!checker(path, true)) {
-                            return Str("Error: File write denied: ${path}")
+                            return LispValue.Error(XispError(ErrorType.IOError, "File write denied: ${path}"))
                         }
                     }
                 case None => ()
@@ -101,12 +101,12 @@ public class Bridge {
                     file.close()
                     Str("Success: written to ${path}")
                 } catch (e: FSException) {
-                    Str("Error: ${e.message}")
+                    LispValue.Error(XispError(ErrorType.IOError, "${e.message}"))
                 } catch (e: Exception) {
-                    Str("Error: ${e.message}")
+                    LispValue.Error(XispError(ErrorType.IOError, "${e.message}"))
                 }
             } else {
-                Str("Error: invalid arguments")
+                LispValue.Error(XispError(ErrorType.ArityMismatch, "invalid arguments"))
             }
         })
 
@@ -117,7 +117,7 @@ public class Bridge {
                 case Some(checker) =>
                     if (args.size > 0 && let Str(path) <- args[0]) {
                         if (!checker(path, true)) {
-                            return Str("Error: File write denied: ${path}")
+                            return LispValue.Error(XispError(ErrorType.IOError, "File write denied: ${path}"))
                         }
                     }
                 case None => ()
@@ -128,12 +128,12 @@ public class Bridge {
                     File.appendTo(path, content.toArray())
                     Str("Success: appended to ${path}")
                 } catch (e: FSException) {
-                    Str("Error: ${e.message}")
+                    LispValue.Error(XispError(ErrorType.IOError, "${e.message}"))
                 } catch (e: Exception) {
-                    Str("Error: ${e.message}")
+                    LispValue.Error(XispError(ErrorType.IOError, "${e.message}"))
                 }
             } else {
-                Str("Error: invalid arguments")
+                LispValue.Error(XispError(ErrorType.ArityMismatch, "invalid arguments"))
             }
         })
     }
@@ -168,9 +168,9 @@ public class Bridge {
                     }
                     list(lispFiles)
                 } catch (e: FSException) {
-                    Str("Error: ${e.message}")
+                    LispValue.Error(XispError(ErrorType.IOError, "${e.message}"))
                 } catch (e: Exception) {
-                    Str("Error: ${e.message}")
+                    LispValue.Error(XispError(ErrorType.IOError, "${e.message}"))
                 }
             } else {
                 Nil

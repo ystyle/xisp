@@ -309,7 +309,7 @@ extend Evaluator {
             case Procedure(params, body, procEnv) =>
                 // 检查栈深度（在增加之前检查）
                 if (this.stackDepth >= this.maxStackDepth) {
-                    return Str("Error: Maximum stack depth exceeded (limit: ${this.maxStackDepth})")
+                    return LispValue.Error(XispError(ErrorType.RuntimeError, "Maximum stack depth exceeded (limit: ${this.maxStackDepth})"))
                 }
 
                 this.stackDepth = this.stackDepth + 1
@@ -366,7 +366,7 @@ extend Evaluator {
             case ProcedureFromParams(paramInfos, body, procEnv) =>
                 // 检查栈深度（在增加之前检查）
                 if (this.stackDepth >= this.maxStackDepth) {
-                    return Str("Error: Maximum stack depth exceeded (limit: ${this.maxStackDepth})")
+                    return LispValue.Error(XispError(ErrorType.RuntimeError, "Maximum stack depth exceeded (limit: ${this.maxStackDepth})"))
                 }
 
                 this.stackDepth = this.stackDepth + 1

@@ -42,7 +42,7 @@ extend Evaluator {
      */
     func macroExpand(expr: LispValue): LispValue {
         if (this.macroExpandDepth >= this.maxMacroExpandDepth) {
-            return Str("Error: Maximum macro expand depth exceeded (limit: ${this.maxMacroExpandDepth})")
+            return LispValue.Error(XispError(ErrorType.RuntimeError, "Maximum macro expand depth exceeded (limit: ${this.maxMacroExpandDepth})"))
         }
 
         match (expr) {
@@ -137,7 +137,7 @@ extend Evaluator {
         }
 
         if (iteration >= maxIterations) {
-            Str("Error: Macro expansion did not terminate after ${maxIterations} iterations")
+            LispValue.Error(XispError(ErrorType.RuntimeError, "Macro expansion did not terminate after ${maxIterations} iterations"))
         } else {
             expanded
         }
@@ -212,7 +212,7 @@ extend Evaluator {
 
                 this.env = oldEnv
                 result
-            case _ => Str("Error: expandMacro called with non-macro value")
+            case _ => LispValue.Error(XispError(ErrorType.TypeError, "expandMacro called with non-macro value"))
         }
     }
 
@@ -326,11 +326,11 @@ extend Evaluator {
     func evalDefmacro(expr: LispValue): LispValue {
         if (let Cons(cell) <- expr) {
             if (cell.length() < 3) {
-                return Str("Error: defmacro requires at least 2 arguments")
+                return LispValue.Error(XispError(ErrorType.ArityMismatch, "defmacro requires at least 2 arguments"))
             }
             return this.evalDefmacroWithName(cell)
         } else {
-            Str("Error: defmacro invalid syntax")
+            LispValue.Error(XispError(ErrorType.SyntaxError, "defmacro invalid syntax"))
         }
     }
 
@@ -367,10 +367,10 @@ extend Evaluator {
                 this.env.define(name, m)
                 Symbol(name)
             } else {
-                Str("Error: defmacro invalid syntax")
+                LispValue.Error(XispError(ErrorType.SyntaxError, "defmacro invalid syntax"))
             }
         } else {
-            Str("Error: defmacro first argument must be a symbol")
+            LispValue.Error(XispError(ErrorType.SyntaxError, "defmacro first argument must be a symbol"))
         }
     }
 
@@ -520,7 +520,7 @@ extend Evaluator {
             this.inMacroExpandCall = oldFlag
             result
         } else {
-            Str("Error: macroexpand requires exactly 1 argument")
+            LispValue.Error(XispError(ErrorType.ArityMismatch, "macroexpand requires exactly 1 argument"))
         }
     }
 
@@ -536,7 +536,7 @@ extend Evaluator {
             this.inMacroExpandCall = oldFlag
             result
         } else {
-            Str("Error: macroexpand-all requires exactly 1 argument")
+            LispValue.Error(XispError(ErrorType.ArityMismatch, "macroexpand-all requires exactly 1 argument"))
         }
     }
 
