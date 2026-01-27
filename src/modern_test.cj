@@ -524,4 +524,119 @@ class ModernTest {
         println("(only-rest) = ${result5.toString()}")
         @Assert(result5.toString() == "nil")
     }
+
+    @TestCase
+    func testHashMapDestructuring() {
+        let env = Environment()
+        BuiltinFunctions.registerAll(env)
+        let evaluator = Evaluator(env)
+
+        println("\n=== 测试 HashMap 解构 ===")
+
+        // 测试1: 基本 HashMap 解构 - 使用返回值而不是 define
+        println("\n测试1: 基本 HashMap 解构")
+        evaluator.eval(Parser.parseSingleFromString("(define config {:host \"localhost\" :port 8080})"))
+        let result1 = evaluator.eval(Parser.parseSingleFromString("(let [{:host h :port p} config] (list h p))"))
+        println("result = ${result1.toString()}")
+        @Assert(result1.toString() == "(\"localhost\" 8080)")
+
+        // 测试2: 部分键解构
+        println("\n测试2: 部分键解构")
+        evaluator.eval(Parser.parseSingleFromString("(define data {:name \"Alice\" :age 30 :city \"Beijing\"})"))
+        let result2 = evaluator.eval(Parser.parseSingleFromString("(let [{:name n :age a} data] (list n a))"))
+        println("result = ${result2.toString()}")
+        @Assert(result2.toString() == "(\"Alice\" 30)")
+
+        // 测试3: 单键解构
+        println("\n测试3: 单键解构")
+        evaluator.eval(Parser.parseSingleFromString("(define single {:value 42})"))
+        let result3 = evaluator.eval(Parser.parseSingleFromString("(let [{:value v} single] v)"))
+        println("result = ${result3.toString()}")
+        @Assert(result3.toString() == "42")
+
+        // 测试4: 空HashMap 解构
+        println("\n测试4: 空 HashMap 解构")
+        evaluator.eval(Parser.parseSingleFromString("(define empty-map {})"))
+        let result4 = evaluator.eval(Parser.parseSingleFromString("(let [{:x x} empty-map] x)"))
+        println("result = ${result4.toString()}")
+        @Assert(result4.toString() == "nil")
+
+        // 测试5: 不存在的键
+        println("\n测试5: 不存在的键")
+        let result5 = evaluator.eval(Parser.parseSingleFromString("(let [{:nonexistent x} {:value 100}] x)"))
+        println("result = ${result5.toString()}")
+        @Assert(result5.toString() == "nil")
+
+        // 测试6: 嵌套解构（向量 + HashMap）- 分步测试
+        println("\n测试6: 嵌套 HashMap 解构")
+        // 先定义变量，再解构
+        evaluator.eval(Parser.parseSingleFromString("(define user1 {:name \"Bob\" :email \"bob@example.com\"})"))
+        evaluator.eval(Parser.parseSingleFromString("(define user2 {:name \"Carol\" :email \"carol@example.com\"})"))
+        let result6a = evaluator.eval(Parser.parseSingleFromString("(let [{:name n1} user1] (let [{:name n2} user2] (list n1 n2))))"))
+        println("嵌套 HashMap 解构结果 = ${result6a.toString()}")
+        @Assert(result6a.toString() == "(\"Bob\" \"Carol\")")
+
+        // 测试7: 直接在 let 中创建 HashMap 并解构
+        println("\n测试7: 直接 HashMap 解构")
+        let result7 = evaluator.eval(Parser.parseSingleFromString("(let [{:name n :email e} {:name \"Dave\" :email \"dave@example.com\"}] (list n e)))"))
+        println("result = ${result7.toString()}")
+        @Assert(result7.toString() == "(\"Dave\" \"dave@example.com\")")
+
+        // 测试8: 多个 HashMap 解构
+        println("\n测试8: 多个 HashMap 解构")
+        let result8 = evaluator.eval(Parser.parseSingleFromString("(let [{:name n1} {:name \"Alice\"} {:name n2} {:name \"Bob\"}] (list n1 n2))"))
+        println("result = ${result8.toString()}")
+        @Assert(result8.toString() == "(\"Alice\" \"Bob\")")
+    }
+
+    @TestCase
+    func testMatchHashMapPattern() {
+        let env = Environment()
+        BuiltinFunctions.registerAll(env)
+        let evaluator = Evaluator(env)
+
+        println("\n=== 测试 match HashMap 模式 ===")
+
+        // 测试1: 基本 HashMap 匹配
+        println("\n测试1: 基本 HashMap 匹配")
+        let result1 = evaluator.eval(Parser.parseSingleFromString("(match {:name \"Alice\" :age 30} {:name n :age a} (list n a) _ \"not matched\")"))
+        println("result = ${result1.toString()}")
+        @Assert(result1.toString() == "(\"Alice\" 30)")
+
+        // 测试2: 部分键匹配
+        println("\n测试2: 部分键匹配")
+        let result2 = evaluator.eval(Parser.parseSingleFromString("(match {:name \"Bob\" :age 25} {:name n} n _ \"not matched\")"))
+        println("result = ${result2.toString()}")
+        @Assert(result2.toString() == "\"Bob\"")
+
+        // 测试3: 不匹配的情况，跳到下一个分支
+        println("\n测试3: 不匹配跳到下一个分支")
+        let result3 = evaluator.eval(Parser.parseSingleFromString("(match {:name \"Charlie\"} {:name n :age a} \"should not match\" {:name n} (list \"matched\" n))"))
+        println("result = ${result3.toString()}")
+        @Assert(result3.toString() == "(\"matched\" \"Charlie\")")
+
+        // 测试4: 多个分支
+        println("\n测试4: 多个分支 - 变量匹配")
+        let result4 = evaluator.eval(Parser.parseSingleFromString("(match {:type \"user\" :name \"Dave\"} {:type t :name n} (list t n) {:type \"admin\"} \"admin\" _ \"unknown\")"))
+        println("result = ${result4.toString()}")
+        @Assert(result4.toString() == "(\"user\" \"Dave\")")
+
+        // 测试5: 通配符 _
+        println("\n测试5: 通配符 _")
+        let result5 = evaluator.eval(Parser.parseSingleFromString("(match {:x 1 :y 2} _ \"wildcard\")"))
+        println("result = ${result5.toString()}")
+        @Assert(result5.toString() == "\"wildcard\"")
+
+        // 测试6: 单键匹配
+        println("\n测试6: 单键匹配")
+        let result6 = evaluator.eval(Parser.parseSingleFromString("(match {:value 42} {:value v} v)"))
+        println("result = ${result6.toString()}")
+        @Assert(result6.toString() == "42")
+
+        // 测试7: 值类型匹配
+        println("\n测试7: 值类型匹配")
+        let result7 = evaluator.eval(Parser.parseSingleFromString("(match {:count 42} {:count c} c)"))
+        println("result = ${result7.toString()}")
+        @Assert(result7.toString() == "42")
+    }
 }
