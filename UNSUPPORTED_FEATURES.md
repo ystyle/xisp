@@ -6,7 +6,7 @@
 
 ---
 
-## ✅ 已实现的功能（6个）
+## ✅ 已实现的功能（9个）
 
 ### 1. 宏/函数的可变参数
 
@@ -213,58 +213,127 @@
 
 ---
 
-## ❌ 确认不支持的功能（3个）
-## ❌ 确认不支持的功能（3个）
+### 7. HashMap 解构
 
-### 1. 哈希映射解构
+**状态**: ✅ 已实现（2026-01-27）
 
 **优先级**: 🟡 中
 
-**问题**:
+**已实现**:
+- ✅ 基本 HashMap 解构：`(let [{:key1 var1 :key2 var2} hashmap-value] ...)`
+- ✅ 部分键解构：只解构需要的键
+- ✅ 嵌套解构：向量解构 + HashMap 解构
+- ✅ 优化的代码结构：减少 match 嵌套层级
+
+**实现位置**:
+- 解析检测：`src/core/eval_helpers.cj` - `isHashMapDestructurePattern()`
+- 绑定提取：`src/core/eval_helpers.cj` - `extractHashMapBindings()`
+- 解构处理：`src/core/eval_helpers.cj` - `processHashMapDestructure()`
+- let 集成：`src/core/eval_helpers.cj` - `processBindingsNew()`
+
+**测试文件**: `lisp-tests/hashmap_destruct_test.lisp`
+
+**使用示例**:
 ```lisp
-;; ❌ 不工作
-(let [[{:host h :port p}] [{:host "localhost" :port 8080}]])
-;; h → nil, p → nil (应该是 "localhost" 和 8080)
+; 基本 HashMap 解构
+(define config {:host "localhost" :port 8080})
+(let [{:host h :port p} config]
+  (println h)  ; => "localhost"
+  (println p))  ; => 8080
+
+; 部分键解构
+(define data {:name "Alice" :age 30 :city "Beijing"})
+(let [{:name n :age a} data]
+  (println n)  ; => "Alice"
+  (println a))  ; => 30
+
+; 嵌套解构（向量 + HashMap）
+(define users [{:name "Bob" :email "bob@example.com"}
+              {:name "Carol" :email "carol@example.com"}])
+(let [[user1 user2] users]
+  (let [{:name n1 :email e1} user1]
+    (let [{:name n2 :email e2} user2]
+      (println n1)  ; => "Bob"
+      (println e1)  ; => "bob@example.com"
+      (println n2)  ; => "Carol"
+      (println e2))))  ; => "carol@example.com"
 ```
 
-**影响范围**:
-- 配置解析示例
-- 任何需要解构哈希映射的场景
-
-**当前解决方案**:
-```lisp
-;; ✅ 使用 hget
-(let ((config {:host "localhost" :port 8080})
-      (h (hget config :host))
-      (p (hget config :port)))
-  ...)
-```
-
-**建议**: 需要扩展 `src/core/eval_let.cj` 中的解构逻辑
+**实现细节**:
+- HashMap 字面量 `{:key1 var1 :key2 var2}` 被解析为 `(hashmap (quote :key1) var1 (quote :key2) var2)`
+- 在 let 中，通过检测第一个元素是否为 `hashmap` 符号来识别解构模式
+- 从模式中提取 `(quote :key)` 和 `varName` 对，去掉 `:key` 的冒号前缀
+- 使用提取的键从实际 HashMap 值中获取并绑定变量
 
 ---
 
-### 2. match 哈希映射模式
+### 8. match HashMap 模式匹配
+
+**状态**: ✅ 已实现（2026-01-27）
 
 **优先级**: 🟡 中
 
-**问题**:
+**已实现**:
+- ✅ 基本 HashMap 匹配：`(match {:name "Alice" :age 30} {:name n :age a} (list n a))`
+- ✅ 部分键匹配：`(match {:name "Bob" :age 25} {:name n} n)`
+- ✅ 多分支匹配：匹配失败时跳到下一个分支
+- ✅ 通配符 `_`：匹配任意 HashMap
+- ✅ 变量绑定：`{:key varName}` 绑定任何值
+- ✅ 常量匹配：`{:key "value"}` 需要精确匹配
+
+**实现位置**:
+- 模式路由：`src/core/eval_pattern_match.cj` - `evalMatch()` - HashMap 模式检测（lines 100-107）
+- 模式匹配：`src/core/eval_pattern_match.cj` - `matchHashMapPattern()` - HashMap 模式匹配（lines 526-598）
+- 绑定提取：`src/core/eval_helpers.cj` - `extractHashMapBindings()` - 从模式中提取键值对
+
+**单元测试**: `src/modern_test.cj` - `testMatchHashMapPattern` (7个测试用例)
+
+**测试文件**: `lisp-tests/match_hashmap_test.lisp`
+
+**使用示例**:
 ```lisp
-;; ❌ 不工作
+; 基本 HashMap 匹配
 (match {:name "Alice" :age 30}
-  [{:name n :age a} (println n a)])
-;; 没有输出，匹配失败
+  {:name n :age a} (list n a)
+  _ "not matched")
+; => ("Alice" 30)
+
+; 部分键匹配
+(match {:name "Bob" :age 25}
+  {:name n} n
+  _ "not matched")
+; => "Bob"
+
+; 多分支匹配
+(match {:name "Charlie"}
+  {:name n :age a} "should not match"
+  {:name n} (list "matched" n))
+; => ("matched" "Charlie")
+
+; 通配符
+(match {:x 1 :y 2}
+  _ "wildcard")
+; => "wildcard"
+
+; 常量匹配（精确匹配键值）
+(match {:type "admin"}
+  {:type "admin"} "is admin"
+  {:type t} (list "is" t))
+; => "is admin"
 ```
 
-**影响范围**:
-- 现代语法文档中的示例
-- 使用哈希映射作为数据结构的场景
-
-**建议**: 需要扩展 `src/core/eval_match.cj` 支持 HashMap 模式
+**实现细节**:
+- HashMap 字面量 `{:key1 var1 :key2 var2}` 被解析为 `(hashmap (quote :key1) var1 (quote :key2) var2)`
+- 在 `evalMatch()` 中检测到 `hashmap` 符号时，设置 `areAllPatterns = true`
+- 这使得整个 clause 被当作模式，结果表达式在下一个元素
+- `matchHashMapPattern()` 从 HashMap 值中提取键，并与模式中的键值对匹配
+- 支持变量绑定（`{:key varName}` 绑定任何值）和常量匹配（`{:key "value"}` 需要精确匹配）
 
 ---
 
-### 3. match 守卫条件多行格式
+## ❌ 确认不支持的功能（1个）
+
+### 1. match 守卫条件多行格式
 
 **优先级**: 🟡 中
 
@@ -388,14 +457,15 @@
 1. ✅ 简单向量解构: `let [[x y] [1 2]]`
 2. ✅ 向量解构 with &: `let [[x y & rest] [1 2 3 4 5]]`
 3. ✅ 嵌套向量解构: `let [[[a b] c] [[1 2] 3]]`
-4. ✅ match 符号匹配: `match :admin :admin "Administrator"`
-5. ✅ match 多行常量匹配、列表解构、向量匹配（除守卫条件外）
+4. ✅ HashMap 解构: `let [{:key1 var1 :key2 var2} hashmap-value]`
+5. ✅ match 符号匹配: `match :admin :admin "Administrator"`
+6. ✅ match 多行常量匹配、列表解构、向量匹配（除守卫条件外）
 
 ---
 
 ## 实现优先级建议
 
-### ✅ 已完成高优先级功能（6个）
+### ✅ 已完成功能（8个）
 
 1. ✅ **符号/关键字比较** (`eq?`) - 2026-01-27 完成
 2. ✅ **字符串比较函数** (`string=?`, `string<`, `string>`) - 2026-01-27 完成
@@ -403,18 +473,10 @@
 4. ✅ **,@ (comma-at) 拼接** - 2026-01-27 完成
 5. ✅ **eval 特殊形式** - 2026-01-27 完成
 6. ✅ **宏的纯可变参数 bug 修复** - 2026-01-27 完成
+7. ✅ **HashMap 解构** - 2026-01-27 完成
+8. ✅ **match HashMap 模式匹配** - 2026-01-27 完成
 
 ### 🟡 中优先级（增强语法特性）
-
-7. **match 哈希映射匹配**
-   - 原因：提升 match 的实用性
-   - 实现难度：中
-   - 文件：`src/core/eval_match.cj`
-
-8. **哈希映射解构**
-   - 原因：让代码更简洁
-   - 实现难度：中
-   - 文件：`src/core/eval_let.cj`
 
 9. **match 守卫条件多行格式**
    - 原因：有单行替代方案，可以使用嵌套 if
@@ -460,9 +522,131 @@ cjpm test --show-all-output --filter 'ModernTest.testMacroRestParameters'
 6. 📝 考虑：中优先级功能的实现计划
 
 **最后更新**: 2026-01-27
-**测试覆盖率**: 208 个单元测试全部通过
-**不支持功能**: 3 个（中优先级）
+**测试覆盖率**: 210 个单元测试全部通过（新增 match HashMap 测试）
+**不支持功能**: 1 个（中优先级）
 **设计限制**: 1 个（字符串插值函数调用 - 永久不支持）
+
+---
+
+## 修复历史
+
+### 2026-01-27: HashMap 解构实现 ✅
+
+**功能描述**: 实现 let 表达式中的 HashMap 解构功能
+
+**实现内容**:
+- **检测机制**: 修改 `isHashMapDestructurePattern()` 检测 `(hashmap (quote :key) var ...)` 格式
+- **绑定提取**: 修改 `extractHashMapBindings()` 从 `(hashmap (quote :key1) var1 ...)` 中提取键值对
+- **解构处理**: 实现 `processHashMapDestructure()` 从 HashMap 值中获取并绑定变量
+- **代码优化**: 使用 match 模式嵌套减少代码嵌套层级（从 11 层降到 6-8 层）
+- **单元测试**: 添加 8 个测试用例覆盖基本解构、部分键解构、嵌套解构等场景
+
+**实现位置**:
+- `src/core/eval_helpers.cj` - `isHashMapDestructurePattern()`, `extractHashMapBindings()`, `processHashMapDestructure()`
+- `src/core/eval_helpers.cj` - `processBindingsNew()` - HashMap 解构集成
+- `src/modern_test.cj` - `testHashMapDestructuring()` - 单元测试
+
+**测试文件**:
+- 单元测试: `src/modern_test.cj` - `testHashMapDestructuring` (8个测试用例)
+- 集成测试: `lisp-tests/hashmap_destruct_test.lisp`
+- 调试测试: `lisp-tests/debug_hashmap.lisp`
+
+**测试结果**: 209 个单元测试全部通过 ✅
+
+**使用示例**:
+```lisp
+; 基本 HashMap 解构
+(define config {:host "localhost" :port 8080})
+(let [{:host h :port p} config]
+  (println h)  ; => "localhost"
+  (println p))  ; => 8080
+
+; 部分键解构
+(let [{:name n :age a} {:name "Alice" :age 30 :city "Beijing"}]
+  (list n a))  ; => ("Alice" 30)
+
+; 嵌套 HashMap 解构
+(let [{:name n1} {:name "Bob"}]
+  (let [{:name n2} {:name "Carol"}]
+    (list n1 n2)))  ; => ("Bob" "Carol")
+```
+
+**技术细节**:
+- HashMap 字面量 `{:key var}` 被解析为 `(hashmap (quote :key) var)`
+- 通过检测第一个元素是否为 `hashmap` 符号来识别解构模式
+- 从 `(quote :key)` 中提取键，去掉冒号前缀用于 HashMap 查找
+- 如果键不存在，绑定变量为 nil（静默失败）
+
+
+
+---
+
+### 2026-01-27: match HashMap 模式匹配实现 ✅
+
+**功能描述**: 实现 match 表达式中的 HashMap 模式匹配功能
+
+**实现内容**:
+- **模式路由**: 修改 `evalMatch()` 检测 HashMap 模式并正确路由到 `matchHashMapPattern()`
+- **模式匹配**: 实现 `matchHashMapPattern()` 支持变量绑定和常量匹配
+- **修复关键bug**: 将 HashMap 模式的 `areAllPatterns` 从 `false` 改为 `true`，确保整个 clause 被当作模式
+- **单元测试**: 添加 7 个测试用例覆盖基本匹配、部分键匹配、多分支匹配、通配符等场景
+
+**实现位置**:
+- `src/core/eval_pattern_match.cj` - `evalMatch()` - HashMap 模式路由（lines 100-107）
+- `src/core/eval_pattern_match.cj` - `matchPattern()` - HashMap 模式检测（lines 369-381）
+- `src/core/eval_pattern_match.cj` - `matchHashMapPattern()` - HashMap 模式匹配（lines 526-598）
+- `src/core/eval_helpers.cj` - `extractHashMapBindings()` - 返回类型改为 `ArrayList<(String, LispValue)>` 以支持常量
+
+**测试文件**:
+- 单元测试: `src/modern_test.cj` - `testMatchHashMapPattern` (7个测试用例)
+- 集成测试: `lisp-tests/match_hashmap_test.lisp`
+
+**测试结果**: 210 个单元测试全部通过 ✅
+
+**使用示例**:
+```lisp
+; 基本 HashMap 匹配
+(match {:name "Alice" :age 30}
+  {:name n :age a} (list n a)
+  _ "not matched")
+; => ("Alice" 30)
+
+; 部分键匹配
+(match {:name "Bob" :age 25}
+  {:name n} n)
+; => "Bob"
+
+; 多分支匹配
+(match {:name "Charlie"}
+  {:name n :age a} "should not match"
+  {:name n} (list "matched" n))
+; => ("matched" "Charlie")
+
+; 变量绑定 vs 常量匹配
+(match {:type "user" :name "Dave"}
+  {:type t :name n} (list t n)
+  {:type "admin"} "admin"
+  _ "unknown")
+; => ("user" "Dave")
+```
+
+**技术细节**:
+- HashMap 字面量 `{:key1 var1 :key2 var2}` 被解析为 `(hashmap (quote :key1) var1 (quote :key2) var2)`
+- 在 `evalMatch()` 中检测到 `hashmap` 符号时，设置 `areAllPatterns = true`
+- 这使得整个 clause 被当作模式（`needNextResult = true`），结果表达式在下一个元素
+- `matchHashMapPattern()` 从 HashMap 值中提取键，并与模式中的键值对匹配
+- 支持两种模式：
+  - `{:key varName}` - 变量绑定，匹配任何值
+  - `{:key "value"}` - 常量匹配，需要精确匹配
+- 如果模式中的键在 HashMap 中不存在，匹配失败（返回 None）
+
+**关键修复**:
+- 问题：HashMap 模式被错误地当作单元素模式处理
+- 原因：`areAllPatterns` 被设为 `false`，导致 `pattern = clauseCons.car`（即 `hashmap` 符号）
+- 修复：将 `areAllPatterns` 改为 `true`，使得 `pattern = clause`（整个 `(hashmap ...)` 列表）
+
+
+
 
 ---
 

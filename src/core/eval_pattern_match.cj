@@ -1,5 +1,7 @@
 package ystyle::xisp.core
 import ystyle::xisp.types.*
+import std.collection.ArrayList
+import std.collection.HashMap
 
 /**
  * 模式匹配扩展
@@ -13,17 +15,11 @@ extend Evaluator {
     private func extractGuard(body: LispValue): (Bool, LispValue, LispValue) {
         match (body) {
             case Cons(cell) =>
-                let first = cell.car
-                match (first) {
-                    case Symbol("when") =>
+                // 使用 Tuple 模式一次性匹配 car 和 cdr
+                match ((cell.car, cell.cdr)) {
+                    case (Symbol("when"), Cons(rest)) =>
                         // (when guard expr...)
-                        if (let Cons(rest) <- cell.cdr) {
-                            let guard = rest.car
-                            let actualBody = rest.cdr
-                            (true, guard, actualBody)
-                        } else {
-                            (false, Nil, body)
-                        }
+                        (true, rest.car, rest.cdr)
                     case _ =>
                         (false, Nil, body)
                 }
@@ -54,6 +50,34 @@ extend Evaluator {
     /**
      * 判断一个元素是否是模式元素
      */
+
+    /**
+     * 获取下一个子句的表达式并跳过
+     * @return (剩余子句, 获取的表达式或None)
+     */
+    private func getNextAndSkip(clauses: LispValue): (LispValue, ?LispValue) {
+        if (let Cons(restClauses) <- clauses) {
+            if (let Cons(nextClauses) <- restClauses.cdr) {
+                (Cons(nextClauses.clone()), Some(nextClauses.car))
+            } else {
+                (Nil, None)
+            }
+        } else {
+            (Nil, None)
+        }
+    }
+
+    /**
+     * 处理列表模式匹配成功后的结果求值
+     */
+    private func evalListPatternMatchResult(clauses: LispValue, matchedEnv: Environment): ?LispValue {
+        if (let Cons(restClauses) <- clauses && let Cons(nextClauseCell) <- restClauses.cdr) {
+            let resultExpr = nextClauseCell.car
+            Some(this.evalInEnv(resultExpr, matchedEnv))
+        } else {
+            Some(Nil)
+        }
+    }
     private func isPatternElement(elem: LispValue): Bool {
         match (elem) {
             case Symbol(_) => true
@@ -94,8 +118,17 @@ extend Evaluator {
                                 // 1. (x y z body...) - 多个符号，整个是列表模式
                                 // 2. (x y) "ok" - 两个符号，(x y)是列表模式，"ok"在下一个元素
                                 // 3. (x "result") - first是模式，rest是结果
+                                // 4. {:key val} - HashMap 模式
 
-                                let areAllPatterns = if (this.isPatternElement(clauseCons.car)) {
+                                // 首先检查是否是 HashMap 模式
+                                let isHashMapPattern = match (clauseCons.car) {
+                                    case Symbol("hashmap") => true
+                                    case _ => false
+                                }
+
+                                let areAllPatterns = if (isHashMapPattern) {
+                                    true  // HashMap 模式，整个clause是模式，结果在下一个元素
+                                } else if (this.isPatternElement(clauseCons.car)) {
                                     var allPatterns = true
                                     var current = rest
                                     while (!current.isNil() && allPatterns) {
@@ -116,17 +149,8 @@ extend Evaluator {
 
 
                                 if (areAllPatterns) {
-                                    // 检查是否有守卫条件
-                                    let hasGuard = if (let Cons(restCell) <- rest) {
-                                        match (restCell.car) {
-                                            case Symbol("when") => true
-                                            case _ => false
-                                        }
-                                    } else {
-                                        false
-                                    }
-
-                                    if (hasGuard) {
+                                    // 检查是否有守卫条件 - 使用 if-let
+                                    if (let Cons(restCell) <- rest && let Symbol("when") <- restCell.car) {
                                         false  // 使用单元素模式
                                     } else {
                                         true  // 列表模式
@@ -151,43 +175,16 @@ extend Evaluator {
                             if (needNextResult) {
                                 // 列表模式在 clause，结果在下一个元素
                                 let matchEnv = this.matchPattern(value, pattern, this.env)
-                                var needReturnValue: ?LispValue = None
                                 match (matchEnv) {
                                     case Some(matchedEnv) =>
-                                        // 获取下一个元素作为结果
-                                        match (clauses) {
-                                            case Cons(restClauses) =>
-                                                match (restClauses.cdr) {
-                                                    case Cons(nextClauseCell) =>
-                                                        let resultExpr = nextClauseCell.car
-                                                        let result = this.evalInEnv(resultExpr, matchedEnv)
-                                                        needReturnValue = Some(result)
-                                                    case _ =>
-                                                        needReturnValue = Some(Nil)
-                                                }
-                                            case _ =>
-                                                needReturnValue = Some(Nil)
+                                        // 匹配成功，获取并求值下一个元素
+                                        if (let Some(result) <- this.evalListPatternMatchResult(clauses, matchedEnv)) {
+                                            return result
                                         }
                                     case None =>
                                         // 不匹配，需要跳过下一个元素（结果表达式）
-                                        match (clauses) {
-                                            case Cons(restClauses) =>
-                                                match (restClauses.cdr) {
-                                                    case Cons(nextClauses) =>
-                                                        clauses = Cons(nextClauses.clone())
-                                                    case _ =>
-                                                        clauses = Nil
-                                                }
-                                            case _ =>
-                                                clauses = Nil
-                                        }
-                                }
-
-                                // 检查是否需要返回值
-                                match (needReturnValue) {
-                                    case Some(v) =>
-                                        return v
-                                    case None => ()
+                                        let (newClauses, _) = this.getNextAndSkip(clauses)
+                                        clauses = newClauses
                                 }
                             } else {
                                 // 正常处理：pattern 是模式，rest 是结果表达式
@@ -228,21 +225,11 @@ extend Evaluator {
                         // 检查是否匹配（常量、符号、通配符）
                         let isMatch = match (clause) {
                             case Symbol("_") => true  // 通配符
-                            case Symbol(s) => true     // 变量符号，总是匹配
-                            case LispValue.Int(n) =>
-                                match (value) {
-                                    case LispValue.Int(v) => v == n
-                                    case LispValue.Float(f) => Float64(n) == f
-                                    case _ => false
-                                }
-                            case LispValue.Float(f) =>
-                                match (value) {
-                                    case LispValue.Int(i) => f == Float64(i)
-                                    case LispValue.Float(v) => f == v
-                                    case _ => false
-                                }
-                            case Str(s) => if (let Str(v) <- value) { v == s } else { false }
-                            case Boolean(b) => if (let Boolean(v) <- value) { v == b } else { false }
+                            case Symbol(_) => true     // 变量符号，总是匹配
+                            case LispValue.Int(n) => this.compareNumbers(value, clause)
+                            case LispValue.Float(f) => this.compareNumbers(value, clause)
+                            case Str(s) => if (let Str(v) <- value && v == s) { true } else { false }
+                            case Boolean(b) => if (let Boolean(v) <- value && v == b) { true } else { false }
                             case Nil => value.isNil()
                             case _ => false
                         }
@@ -250,58 +237,37 @@ extend Evaluator {
 
                         if (isMatch) {
                             // 匹配成功，处理结果表达式
-                            // result表达式在下一个clause中，使用clauseCell.cdr获取
-                            let nextClauses = clauseCell.cdr
-
-                            match (clause) {
-                                case Symbol(s) =>
-                                    // 符号处理
-                                    match (s) {
-                                        case "_" =>
-                                            // 通配符：返回下一个表达式的值
-                                            match (nextClauses) {
-                                                case Cons(resultCell) =>
-                                                    let resultExpr = resultCell.car
-                                                    return this.eval(resultExpr)
-                                                case _ => return value
-                                            }
-                                        case _ =>
-                                            // 变量绑定：创建新环境并执行下一个表达式
-                                            match (nextClauses) {
-                                                case Cons(resultCell) =>
-                                                    let resultExpr = resultCell.car
-                                                    let newEnv = this.env.createChild()
-                                                    newEnv.define(s, value)
-                                                    let result = this.evalInEnv(resultExpr, newEnv)
-                                                    return result
-                                                case _ =>
-                                                    return value
-                                            }
+                            if (let Symbol(s) <- clause) {
+                                // 符号处理
+                                if (s == "_") {
+                                    // 通配符：返回下一个表达式的值
+                                    if (let Cons(resultCell) <- clauseCell.cdr) {
+                                        return this.eval(resultCell.car)
+                                    } else {
+                                        return value
                                     }
-                                case _ =>
-                                    // 常量：返回下一个表达式的值
-                                    match (nextClauses) {
-                                        case Cons(resultCell) =>
-                                            let resultExpr = resultCell.car
-                                            return this.eval(resultExpr)
-                                        case _ => return value
+                                } else {
+                                    // 变量绑定：创建新环境并执行下一个表达式
+                                    if (let Cons(resultCell) <- clauseCell.cdr) {
+                                        let newEnv = this.env.createChild()
+                                        newEnv.define(s, value)
+                                        return this.evalInEnv(resultCell.car, newEnv)
+                                    } else {
+                                        return value
                                     }
+                                }
+                            } else {
+                                // 常量：返回下一个表达式的值
+                                if (let Cons(resultCell) <- clauseCell.cdr) {
+                                    return this.eval(resultCell.car)
+                                } else {
+                                    return value
+                                }
                             }
-                            // 不应该执行到这里，因为上面已经 return 了
                         } else {
                             // 不匹配，需要跳过下一个元素（结果表达式）
-                            match (clauses) {
-                                case Cons(restClauses) =>
-                                    match (restClauses.cdr) {
-                                        case Cons(nextClauses) =>
-                                            clauses = Cons(nextClauses.clone())
-                                        case _ =>
-                                            // 没有更多元素了
-                                            clauses = Nil
-                                    }
-                                case _ =>
-                                    clauses = Nil
-                            }
+                            let (newClauses, _) = this.getNextAndSkip(clauses)
+                            clauses = newClauses
                         }
                     }  // 关闭 match (clause)
 
@@ -329,18 +295,18 @@ extend Evaluator {
             // 通配符 _ - 匹配任何值
             case Symbol("_") => Some(env)
 
-            // 常量匹配
+            // 常量匹配 - 使用 compareNumbers 辅助函数
             case LispValue.Int(n) =>
-                match (value) {
-                    case LispValue.Int(v) => if (v == n) { Some(env) } else { None<Environment> }
-                    case LispValue.Float(f) => if (f == Float64(n)) { Some(env) } else { None<Environment> }
-                    case _ => None<Environment>
+                if (this.compareNumbers(value, pattern)) {
+                    Some(env)
+                } else {
+                    None<Environment>
                 }
-            case LispValue.Float(f) =>
-                match (value) {
-                    case LispValue.Int(i) => if (Float64(i) == f) { Some(env) } else { None<Environment> }
-                    case LispValue.Float(v) => if (v == f) { Some(env) } else { None<Environment> }
-                    case _ => None<Environment>
+            case LispValue.Float(n) =>
+                if (this.compareNumbers(value, pattern)) {
+                    Some(env)
+                } else {
+                    None<Environment>
                 }
             case Str(s) =>
                 if (let Str(v) <- value && v == s) { Some(env) } else { None<Environment> }
@@ -357,7 +323,10 @@ extend Evaluator {
 
             // 列表模式 (x y z) 或 (x . y)
             case Cons(patternCell) =>
-                if (value.isList()) {
+                // 检查是否是 HashMap 模式 {:key1 var1 :key2 var2}
+                if (let Symbol("hashmap") <- patternCell.car) {
+                    this.matchHashMapPattern(value, patternCell, env)
+                } else if (value.isList()) {
                     this.matchListPattern(value, patternCell, env)
                 } else {
                     None<Environment>
@@ -386,11 +355,8 @@ extend Evaluator {
         var patternList: LispValue = Cons(pattern)
 
         // 检查是否是向量语法
-        let isVector = if (let Cons(p) <- patternList) {
-            match (p.car) {
-                case Symbol("cangjie::vector") => true
-                case _ => false
-            }
+        let isVector = if (let Cons(p) <- patternList && let Symbol("cangjie::vector") <- p.car) {
+            true
         } else {
             false
         }
@@ -402,20 +368,14 @@ extend Evaluator {
                 patternList = vecCall.cdr
 
                 // 值也应该是向量，或者是普通列表（因为cangjie::vector函数返回列表）
-                if (let Cons(valueVecCall) <- value) {
-                    match (valueVecCall.car) {
-                        case Symbol("cangjie::vector") =>
-                            // 值是向量形式，提取参数
-                            if (let Cons(valueVecArgs) <- valueVecCall.cdr) {
-                                valueList = valueVecArgs.car
-                            }
-                        case _ =>
-                            // 值不是向量形式，可能是普通列表（cangjie::vector函数返回的）
-                            // 直接使用这个值作为valueList
-                            valueList = value
-                    }
+                if (let Cons(valueVecCall) <- value &&
+                    let Symbol("cangjie::vector") <- valueVecCall.car &&
+                    let Cons(valueVecArgs) <- valueVecCall.cdr) {
+                    // 值是向量形式，提取参数
+                    valueList = valueVecArgs.car
                 } else {
-                    // value不是Cons，可能是Nil或其他类型
+                    // 值不是向量形式，可能是普通列表（cangjie::vector函数返回的）
+                    // 直接使用这个值作为valueList
                     valueList = value
                 }
             }
@@ -430,58 +390,48 @@ extend Evaluator {
                 let patternElem = patternCell.car
 
                 // 检查是否有 & rest 语法（优先检查，不依赖 valueList）
-                match (patternElem) {
-                    case Symbol("&") =>
-                        // 找到 rest 变量
-                        if (let Cons(restPattern) <- patternCell.cdr) {
-                            match (restPattern.car) {
-                                case Symbol(restVar) =>
-                                    let newEnv = currentEnv.createChild()
-                                    newEnv.define(restVar, valueList)
-                                    return Some(newEnv)
-                                case _ =>
+                if (let Symbol("&") <- patternElem) {
+                    // 找到 rest 变量
+                    if (let Cons(restPattern) <- patternCell.cdr &&
+                        let Symbol(restVar) <- restPattern.car) {
+                        let newEnv = currentEnv.createChild()
+                        newEnv.define(restVar, valueList)
+                        return Some(newEnv)
+                    } else {
+                        return None
+                    }
+                } else {
+                    // 普通元素匹配 - 需要 valueList 有元素
+                    if (valueList.isNil()) {
+                        return None  // 模式还有元素，但值列表已空，匹配失败
+                    }
+
+                    if (let Cons(vCell) <- valueList) {
+                        let valueElem = vCell.car
+
+                        // 特殊处理：如果是 Symbol，直接在当前环境中绑定，避免创建嵌套环境
+                        if (let Symbol(sym) <- patternElem) {
+                            if (sym != "_") {
+                                // 变量绑定：直接在当前环境中定义
+                                currentEnv.define(sym, valueElem)
+                            }
+                            // 通配符 "_"：不做任何事
+                        } else {
+                            // 其他模式：调用 matchPattern
+                            match (this.matchPattern(valueElem, patternElem, currentEnv)) {
+                                case Some(newEnv) =>
+                                    currentEnv = newEnv
+                                case None =>
                                     return None
                             }
-                        } else {
-                            return None
-                        }
-                    case _ =>
-                        // 普通元素匹配 - 需要 valueList 有元素
-                        if (valueList.isNil()) {
-                            return None  // 模式还有元素，但值列表已空，匹配失败
                         }
 
-                        match (valueList) {
-                            case Cons(vCell) =>
-                                let valueElem = vCell.car
-
-                                // 特殊处理：如果是 Symbol，直接在当前环境中绑定，避免创建嵌套环境
-                                match (patternElem) {
-                                    case Symbol(sym) =>
-                                        match (sym) {
-                                            case "_" =>
-                                                // 通配符：不做任何事
-                                                ()
-                                            case _ =>
-                                                // 变量绑定：直接在当前环境中定义
-                                                currentEnv.define(sym, valueElem)
-                                        }
-                                    case _ =>
-                                        // 其他模式：调用 matchPattern
-                                        match (this.matchPattern(valueElem, patternElem, currentEnv)) {
-                                            case Some(newEnv) =>
-                                                currentEnv = newEnv
-                                            case None =>
-                                                return None
-                                        }
-                                }
-
-                                // 前进到下一个元素
-                                valueList = vCell.cdr
-
-                                patternList = patternCell.cdr
-                            case _ => return None
-                        }
+                        // 前进到下一个元素
+                        valueList = vCell.cdr
+                        patternList = patternCell.cdr
+                    } else {
+                        return None
+                    }
                 }
             } else {
                 break
@@ -498,44 +448,116 @@ extend Evaluator {
     }
 
     /**
+     * 匹配 HashMap 模式
+     * 模式格式：{:key1 var1 :key2 var2}
+     * 解析为：(hashmap (quote :key1) var1 (quote :key2) var2)
+     *
+     * 语义：
+     * - {:key symbol} - symbol 是变量，绑定任何值
+     * - {:key value} - value 是常量，需要精确匹配
+     */
+    /**
+     * 匹配 HashMap 模式中的单个键值对
+     * @return (成功标志, 新环境)
+     */
+    private func matchHashMapKeyValue(valueMap: HashMap<String, LispValue>, key: String, patternValue: LispValue, currentEnv: Environment): (Bool, ?Environment) {
+        match ((valueMap.get(key), patternValue)) {
+            case (Some(v), Symbol(varName)) =>
+                // 变量：创建子环境并绑定
+                let newEnv = currentEnv.createChild()
+                newEnv.define(varName, v)
+                (true, Some(newEnv))
+            case (Some(v), Str(s)) =>
+                // 字符串常量：需要精确匹配
+                if (let Str(vs) <- v && vs == s) {
+                    (true, Some(currentEnv))
+                } else {
+                    (false, None)
+                }
+            case (Some(v), Int(n)) =>
+                // 整数常量：需要精确匹配
+                if (let Int(vn) <- v && vn == n) {
+                    (true, Some(currentEnv))
+                } else {
+                    (false, None)
+                }
+            case (Some(v), _) =>
+                // 其他常量类型：使用 matchPatternValue
+                if (this.matchPatternValue(v, patternValue)) {
+                    (true, Some(currentEnv))
+                } else {
+                    (false, None)
+                }
+            case (None, _) =>
+                // 键不存在，匹配失败
+                (false, None)
+        }
+    }
+
+    private func matchHashMapPattern(value: LispValue, pattern: ConsCell, env: Environment): ?Environment {
+        // value 必须是 HashMap
+        if (let HashMap(valueMap) <- value) {
+            // 从模式中提取键值对
+            let bindings = this.extractHashMapBindings(Cons(pattern))
+
+            // 创建新环境并绑定变量
+            var currentEnv = env
+            var i = 0
+            while (i < bindings.size) {
+                if (let (key, patternValue) <- bindings[i]) {
+                    let (success, newEnv) = this.matchHashMapKeyValue(valueMap, key, patternValue, currentEnv)
+                    if (!success) {
+                        return None
+                    }
+                    if (let Some(env) <- newEnv) {
+                        currentEnv = env
+                    }
+                }
+                i = i + 1
+            }
+
+            // 所有键都匹配成功
+            Some(currentEnv)
+        } else {
+            // value 不是 HashMap，匹配失败
+            None
+        }
+    }
+
+    /**
+     * 比较两个数字是否相等（Int 和 Float 可以混合比较）
+     */
+    private func compareNumbers(left: LispValue, right: LispValue): Bool {
+        match ((left, right)) {
+            case (LispValue.Int(l), LispValue.Int(r)) => l == r
+            case (LispValue.Int(l), LispValue.Float(r)) => Float64(l) == r
+            case (LispValue.Float(l), LispValue.Int(r)) => l == Float64(r)
+            case (LispValue.Float(l), LispValue.Float(r)) => l == r
+            case _ => false
+        }
+    }
+
+    /**
      * 简单值匹配（不绑定变量）
      */
     private func matchPatternValue(value: LispValue, pattern: LispValue): Bool {
         match (pattern) {
             case Symbol("_") => true
-            case LispValue.Int(n) =>
-                match (value) {
-                    case LispValue.Int(v) => v == n
-                    case LispValue.Float(f) => f == Float64(n)
-                    case _ => false
-                }
-            case LispValue.Float(f) =>
-                match (value) {
-                    case LispValue.Int(i) => Float64(i) == f
-                    case LispValue.Float(v) => v == f
-                    case _ => false
-                }
+            case LispValue.Int(n) => this.compareNumbers(value, pattern)
+            case LispValue.Float(f) => this.compareNumbers(value, pattern)
             case Str(s) => if (let Str(v) <- value) { v == s } else { false }
             case Boolean(b) => if (let Boolean(v) <- value) { v == b } else { false }
             case Nil => value.isNil()
             case _ =>
-                // 尝试深度比较
-                match (value) {
-                    case LispValue.Int(v) =>
-                        match (pattern) {
-                            case LispValue.Int(p) => v == p
-                            case LispValue.Float(f) => Float64(v) == f
-                            case _ => false
-                        }
-                    case LispValue.Float(v) =>
-                        match (pattern) {
-                            case LispValue.Int(i) => v == Float64(i)
-                            case LispValue.Float(f) => v == f
-                            case _ => false
-                        }
-                    case Str(v) => if (let Str(p) <- pattern) { v == p } else { false }
-                    case Boolean(v) => if (let Boolean(p) <- pattern) { v == p } else { false }
-                    case _ => false
+                // 尝试深度比较（交换参数）
+                if (isNumber(value)) {
+                    this.compareNumbers(value, pattern)
+                } else {
+                    match (value) {
+                        case Str(v) => if (let Str(p) <- pattern) { v == p } else { false }
+                        case Boolean(v) => if (let Boolean(p) <- pattern) { v == p } else { false }
+                        case _ => false
+                    }
                 }
         }
     }

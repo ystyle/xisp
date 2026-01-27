@@ -138,31 +138,22 @@ extend Evaluator {
         let first = specCell.car
         let rest = specCell.cdr
 
-        match (first) {
-            case Symbol(moduleName) =>
-                match (rest) {
-                    case Cons(restCell) =>
-                        // 检查是否有 :as
-                        match (restCell.car) {
-                            case Symbol(":as") =>
-                                // (module::name :as alias)
-                                match (restCell.cdr) {
-                                    case Cons(aliasCell) =>
-                                        match (aliasCell.car) {
-                                            case Symbol(alias) =>
-                                                this.importModuleByName(moduleName, Some(alias), ArrayList<String>())
-                                            case _ => Str("Error: :as requires a symbol alias")
-                                        }
-                                    case _ => Str("Error: :as requires an alias")
-                                }
-                            case _ =>
-                                // 只有模块名，普通导入
-                                this.importModuleByName(moduleName, None, ArrayList<String>())
-                        }
-                    case _ =>
-                        this.importModuleByName(moduleName, None, ArrayList<String>())
-                }
-            case _ => Str("Error: module name must be a symbol")
+        if (let Symbol(moduleName) <- first) {
+            if (let Cons(restCell) <- rest &&
+                let Symbol(":as") <- restCell.car &&
+                let Cons(aliasCell) <- restCell.cdr &&
+                let Symbol(alias) <- aliasCell.car) {
+                // (module::name :as alias)
+                this.importModuleByName(moduleName, Some(alias), ArrayList<String>())
+            } else if (let Cons(restCell) <- rest && let Symbol(":as") <- restCell.car) {
+                // (module::name :as ?) - 缺少别名
+                Str("Error: :as requires a symbol alias")
+            } else {
+                // 只有模块名，普通导入
+                this.importModuleByName(moduleName, None, ArrayList<String>())
+            }
+        } else {
+            Str("Error: module name must be a symbol")
         }
     }
 
@@ -702,15 +693,11 @@ extend Evaluator {
                 let exportedSymbols = ArrayList<String>()
 
                 while (!current.isNil()) {
-                    match (current) {
-                        case Cons(currCell) =>
-                            match (currCell.car) {
-                                case Symbol(sym) =>
-                                    exportedSymbols.add(sym)
-                                case _ => ()
-                            }
-                            current = currCell.cdr
-                        case _ => break
+                    if (let Cons(currCell) <- current && let Symbol(sym) <- currCell.car) {
+                        exportedSymbols.add(sym)
+                        current = currCell.cdr
+                    } else {
+                        break
                     }
                 }
 

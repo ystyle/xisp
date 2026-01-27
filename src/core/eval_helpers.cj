@@ -12,33 +12,82 @@ extend Evaluator {
      * 检查是否为向量解构模式 (cangjie::vector ...)
      */
     func isVectorDestructurePattern(value: LispValue): Bool {
-        match (value) {
-            case Cons(cell) =>
-                match (cell.car) {
-                    case Symbol("cangjie::vector") => true
-                    case _ => false
-                }
-            case _ => false
+        if (let LispValue.Cons(cell) <- value && let Symbol("cangjie::vector") <- cell.car) {
+            true
+        } else {
+            false
         }
     }
+
+    /**
+     * 检查是否为 HashMap 解构模式 {:key1 var1 :key2 var2 ...}
+     * 实际解析为：(hashmap (quote :key1) var1 (quote :key2) var2 ...)
+     */
+    func isHashMapDestructurePattern(value: LispValue): Bool {
+        if (let Cons(cell) <- value && let Symbol("hashmap") <- cell.car) {
+            true
+        } else {
+            false
+        }
+    }
+
+    /**
+     * 提取单个 quote 表达式中的符号
+     * 输入：(quote :key)
+     * 输出：Some("key") 或 None
+     */
+    private func extractQuotedSymbol(expr: LispValue): ?String {
+        if (let LispValue.Cons(quoteCell) <- expr &&
+            let (Symbol("quote"), Cons(keySymCell)) <- (quoteCell.car, quoteCell.cdr) &&
+            let Symbol(keySym) <- keySymCell.car && 
+            keySym.startsWith(":")) {
+            return keySym.split(":")[1]
+        }
+        return None
+    }
+
+    /**
+     * 从 HashMap 解构模式中提取键值对
+     * 模式格式：{:key1 var1 :key2 var2 ...}
+     * 实际解析为：(hashmap (quote :key1) var1 (quote :key2) var2 ...)
+     * 返回：ArrayList<(:key1, var1), (:key2, var2), ...>  （key 已去掉冒号）
+     */
+    func extractHashMapBindings(pattern: LispValue): ArrayList<(String, LispValue)> {
+        let result = ArrayList<(String, LispValue)>()
+        if (let LispValue.Cons(cell) <- pattern) {
+            var current = cell.cdr  // 跳过 hashmap 符号
+            // 遍历 ((quote :key1) var1 (quote :key2) var2 ...)
+            while (!current.isNil()) {
+                if (let Cons(keyQuoteCell) <- current &&
+                    let Some(key) <- this.extractQuotedSymbol(keyQuoteCell.car) && 
+                    let Cons(varCell) <- keyQuoteCell.cdr) {
+                        result.add((key, varCell.car))
+                        // 移动到下一对
+                        current = varCell.cdr
+                } else {
+                    break
+                }
+            }
+        }
+        result
+    }
+
 
     /**
      * 提取向量元素列表
      */
     func extractVectorElements(pattern: LispValue): ArrayList<LispValue> {
         let result = ArrayList<LispValue>()
-        match (pattern) {
-            case Cons(cell) =>
-                var current = cell.cdr
-                while (!current.isNil()) {
-                    match (current) {
-                        case Cons(currCell) =>
-                            result.add(currCell.car)
-                            current = currCell.cdr
-                        case _ => break
-                    }
+        if (let Cons(cell) <- pattern) {
+            var current = cell.cdr
+            while (!current.isNil()) {
+                if (let Cons(currCell) <- current) {
+                    result.add(currCell.car)
+                    current = currCell.cdr
+                } else {
+                    break
                 }
-            case _ => ()
+            }
         }
         result
     }
@@ -61,61 +110,58 @@ extend Evaluator {
 
         // 特殊情况：处理纯可变参数 (. all) 或 (&rest all)
         // 这些会被 Parser 解析为 (nil . (all)) 或 (nil all)
-        if (let Cons(cell) <- expr) {
-            if (let Nil <- cell.car) {
-                // 第一个元素是 nil，检查是否为纯可变参数
-                if (let Cons(cdrCell) <- cell.cdr) {
-                    if (let Symbol(restName) <- cdrCell.car && cdrCell.cdr.isNil()) {
-                        // (nil all) 或 (nil . (all)) 的情况，all 是可变参数
-                        result.add("&rest-" + restName)
-                        return result
-                    }
-                } else if (let Symbol(restName) <- cell.cdr) {
-                    // (nil . all) 的情况，all 是可变参数
-                    result.add("&rest-" + restName)
-                    return result
-                }
-            }
+        if (let Cons(cell) <- expr &&
+            let Nil <- cell.car &&
+            let Cons(cdrCell) <- cell.cdr &&
+            let Symbol(restName) <- cdrCell.car &&
+            cdrCell.cdr.isNil()) {
+            // (nil all) 或 (nil . (all)) 的情况，all 是可变参数
+            result.add("&rest-" + restName)
+            return result
+        }
+
+        if (let Cons(cell) <- expr && let Nil <- cell.car && let Symbol(restName) <- cell.cdr) {
+            // (nil . all) 的情况，all 是可变参数
+            result.add("&rest-" + restName)
+            return result
         }
 
         while (!current.isNil()) {
-            if (let Cons(cell) <- current) {
-                if (let Symbol(s) <- cell.car) {
-                    // 检查是否为 . 或 &rest 标记
-                    if (s == "." || s == "&rest") {
-                        // 跳到下一个参数，它应该是可变参数名
-                        current = cell.cdr
-                        if (let Cons(nextCell) <- current) {
-                            if (let Symbol(restName) <- nextCell.car) {
-                                // 为可变参数添加特殊前缀
-                                result.add("&rest-" + restName)
-                            }
-                            current = nextCell.cdr
-                        } else if (let Symbol(restName) <- current) {
-                            // (. rest) 的情况，rest 直接作为符号
-                            result.add("&rest-" + restName)
-                            current = Nil
-                        }
-                        break
-                    } else {
-                        // 普通参数
-                        result.add(s)
-
-                        // 检查 cdr 是否为可变参数（点对情况）
-                        if (let Symbol(restName) <- cell.cdr) {
-                            // 如果 cdr 是符号，说明这是最后一个参数的 rest 参数
-                            result.add("&rest-" + restName)
-                            break
-                        }
-
-                        current = cell.cdr
+            if (let Cons(cell) <- current && let Symbol(s) <- cell.car) {
+                // 检查是否为 . 或 &rest 标记
+                if (s == "." || s == "&rest") {
+                    // 跳到下一个参数，它应该是可变参数名
+                    current = cell.cdr
+                    if (let Cons(nextCell) <- current && let Symbol(restName) <- nextCell.car) {
+                        // 为可变参数添加特殊前缀
+                        result.add("&rest-" + restName)
+                        current = nextCell.cdr
+                    } else if (let Symbol(restName) <- current) {
+                        // (. rest) 的情况，rest 直接作为符号
+                        result.add("&rest-" + restName)
+                        current = Nil
                     }
+                    break
                 } else {
-                    // 非符号，跳过
+                    // 普通参数
+                    result.add(s)
+
+                    // 检查 cdr 是否为可变参数（点对情况）
+                    if (let Symbol(restName) <- cell.cdr) {
+                        // 如果 cdr 是符号，说明这是最后一个参数的 rest 参数
+                        result.add("&rest-" + restName)
+                        break
+                    }
+
                     current = cell.cdr
                 }
             } else {
-                break
+                // 非符号，跳过 - cell 不可见，需要重新声明
+                if (let Cons(c) <- current) {
+                    current = c.cdr
+                } else {
+                    break
+                }
             }
         }
 
@@ -131,11 +177,9 @@ extend Evaluator {
         // 查找 & 符号的位置
         var restIndex = -1
         for (i in 0..elements.size) {
-            match (elements[i]) {
-                case Symbol("&") =>
-                    restIndex = i
-                    break
-                case _ => ()
+            if (let LispValue.Symbol("&") <-  elements[i]) {
+                restIndex = i
+                break
             }
         }
 
@@ -147,11 +191,11 @@ extend Evaluator {
             for (i in 0..restIndex) {
                 match (elements[i]) {
                     case Symbol(name) =>
-                        match (valueCurrent) {
-                            case Cons(vCell) =>
-                                env.define(name, vCell.car)
-                                valueCurrent = vCell.cdr
-                            case _ => env.define(name, Nil)
+                        if (let LispValue.Cons(vCell) <- valueCurrent) {
+                            env.define(name, vCell.car)
+                            valueCurrent = vCell.cdr
+                        } else {
+                            env.define(name, Nil)
                         }
                     case Cons(subPattern) =>
                         match (valueCurrent) {
@@ -171,10 +215,8 @@ extend Evaluator {
 
             // 绑定 & 之后的 rest 变量
             if (restIndex + 1 < elements.size) {
-                match (elements[restIndex + 1]) {
-                    case Symbol(restName) =>
-                        env.define(restName, valueCurrent)
-                    case _ => ()
+                if (let LispValue.Symbol(restName) <- elements[restIndex + 1]) {
+                    env.define(restName, valueCurrent)
                 }
             }
         } else {
@@ -183,11 +225,11 @@ extend Evaluator {
             for (elem in elements) {
                 match (elem) {
                     case Symbol(name) =>
-                        match (valueCurrent) {
-                            case Cons(vCell) =>
-                                env.define(name, vCell.car)
-                                valueCurrent = vCell.cdr
-                            case _ => env.define(name, Nil)
+                        if (let LispValue.Cons(vCell) <- valueCurrent) {
+                            env.define(name, vCell.car)
+                            valueCurrent = vCell.cdr
+                        } else {
+                            env.define(name, Nil)
                         }
                     case Cons(subPattern) =>
                         match (valueCurrent) {
@@ -208,7 +250,41 @@ extend Evaluator {
     }
 
     /**
-     * 处理 let 绑定列表（新版本，支持向量）
+     * 处理 HashMap 解构 {:key1 var1 :key2 var2 ...}
+     */
+    func processHashMapDestructure(pattern: LispValue, value: LispValue, env: Environment): Unit {
+        match (value) {
+            case HashMap(mapValue) =>
+                // 从模式中提取键值对（key 已去掉冒号）
+                let bindings = this.extractHashMapBindings(pattern)
+
+                // 使用索引访问
+                var i = 0
+                while (i < bindings.size) {
+                    let binding = bindings[i]
+                    match (binding) {
+                        case (key, pattern) =>
+                            // pattern 是 LispValue，可能是变量或常量
+                            // 在 let 中，总是绑定变量
+                            match (pattern) {
+                                case Symbol(varName) =>
+                                    // 从 HashMap 中获取值并绑定
+                                    match (mapValue.get(key)) {
+                                        case Some(v) => env.define(varName, v)
+                                        case None => ()  // 键不存在
+                                    }
+                                case _ => ()
+                            }
+                        case _ => ()
+                    }
+                    i = i + 1
+                }
+            case _ => ()
+        }
+    }
+
+    /**
+     * 处理 let 绑定列表（新版本，支持向量和 HashMap）
      */
     func processBindingsNew(bindingsValue: LispValue, env: Environment) {
         // 检查 bindings 是否为向量
@@ -224,6 +300,9 @@ extend Evaluator {
                 if (this.isVectorDestructurePattern(pattern)) {
                     // 嵌套向量解构
                     this.processVectorDestructure(pattern, value, env)
+                } else if (this.isHashMapDestructurePattern(pattern)) {
+                    // HashMap 解构
+                    this.processHashMapDestructure(pattern, value, env)
                 } else {
                     match (pattern) {
                         case Symbol(name) => env.define(name, value)
@@ -242,29 +321,31 @@ extend Evaluator {
                     let binding = currCell.car
 
                     // 检查是否为向量解构模式
-                    if (this.isVectorDestructurePattern(binding)) {
+                    if (this.isVectorDestructurePattern(binding) && let Cons(nextCell) <- currCell.cdr) {
                         // 向量解构：binding 是 pattern，下一个元素是值表达式
-                        if (let Cons(nextCell) <- currCell.cdr) {
-                            let value = this.eval(nextCell.car)
-                            this.processVectorDestructure(binding, value, env)
-                        }
+                        let value = this.eval(nextCell.car)
+                        this.processVectorDestructure(binding, value, env)
                         // 跳过下一个元素
-                        current = if (let Cons(nextCell) <- currCell.cdr) { nextCell.cdr } else { currCell.cdr }
+                        current = nextCell.cdr
+                    } else if (this.isHashMapDestructurePattern(binding) && let Cons(nextCell) <- currCell.cdr) {
+                        // HashMap 解构：binding 是 {:key1 var1 :key2 var2}
+                        let value = this.eval(nextCell.car)
+                        this.processHashMapDestructure(binding, value, env)
+                        // 跳过下一个元素
+                        current = nextCell.cdr
                     } else if (binding.isDottedPair()) {
                         // 传统点对绑定：((pattern . rest) value)
                         // binding 本身是一个点对
-                        match (binding) {
-                            case Cons(bindingCell) =>
-                                let pattern = binding
-                                let valueExpr = if (let Cons(nextCell) <- currCell.cdr) { nextCell.car } else { currCell.cdr }
-                                let value = this.eval(valueExpr)
+                        if (let Cons(_) <- binding) {
+                            let pattern = binding
+                            let valueExpr = if (let Cons(nextCell) <- currCell.cdr) { nextCell.car } else { currCell.cdr }
+                            let value = this.eval(valueExpr)
 
-                                match (pattern) {
-                                    case Symbol(name) => env.define(name, value)
-                                    case Cons(_) => this.destructurePattern(pattern, value, env)
-                                    case _ => ()
-                                }
-                            case _ => ()
+                            match (pattern) {
+                                case Symbol(name) => env.define(name, value)
+                                case Cons(_) => this.destructurePattern(pattern, value, env)
+                                case _ => ()
+                            }
                         }
                         current = currCell.cdr
                     } else {
@@ -277,7 +358,15 @@ extend Evaluator {
 
                             match (pattern) {
                                 case Symbol(name) => env.define(name, value)
-                                case Cons(_) => this.destructurePattern(pattern, value, env)
+                                case Cons(_) =>
+                                    // 检查是否为嵌套向量或 HashMap 解构
+                                    if (this.isVectorDestructurePattern(pattern)) {
+                                        this.processVectorDestructure(pattern, value, env)
+                                    } else if (this.isHashMapDestructurePattern(pattern)) {
+                                        this.processHashMapDestructure(pattern, value, env)
+                                    } else {
+                                        this.destructurePattern(pattern, value, env)
+                                    }
                                 case _ => ()
                             }
                         }
