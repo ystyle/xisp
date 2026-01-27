@@ -668,6 +668,40 @@ public class LispInterpreter {
     }
 
     /**
+     * 调用已定义的 Lisp 函数（支持变长参数）
+     *
+     * 使用示例：
+     * ```
+     * // 先定义 Lisp 函数
+     * interpreter.eval("(define (square x) (* x x))")
+     *
+     * // 从仓颉调用
+     * let result = interpreter.call("square", [5])
+     * if (let Some(i) <- result.asInt()) {
+     *     println(i)  // 25
+     * }
+     * ```
+     *
+     * @param funcName 函数名
+     * @param args 0个或多个参数，自动调用 toLisp() 转换
+     * @return 函数返回值（LispValue 格式）
+     */
+    public func call<T>(funcName: String, args: Array<T>): LispValue where T <: LispConvertible {
+        // 将参数转换为 LispValue
+        let lispArgs = ArrayList<LispValue>()
+        for (arg in args) {
+            lispArgs.add(arg.toLisp())
+        }
+
+        // 构造函数调用表达式：(funcName arg1 arg2 ...)
+        let argsList = list(lispArgs)
+        let callExpr = consValue(Symbol(funcName), argsList)
+
+        // 求值并返回
+        this.evaluator.eval(callExpr)
+    }
+
+    /**
      * 重置解释器状态（清空环境）
      */
     public func reset(): Unit {

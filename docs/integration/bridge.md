@@ -4,9 +4,11 @@
 
 Xisp 桥接层提供了 Lisp 与仓颉（Cangjie）之间的双向互操作能力，包括：
 
-- **LispConvertible 接口**：统一类型转换系统
+- **LispConvertible 接口**：仓颉 → Lisp 类型转换
+- **LispDeserializable 接口**：Lisp → 仓颉类型转换
+- **ExtendLispValue 接口**：LispValue 类型转换方法契约
+- **LispInterpreter.call 方法**：从仓颉反向调用 Lisp 函数
 - **类型转换器**：便捷的类型转换工具
-- **LispInterpreter**：面向对象的解释器 API
 - **桥接管理器**：灵活的函数注册机制
 - **标准库桥接**：std.io、std.fs 等标准库的 Lisp 接口
 
@@ -191,6 +193,329 @@ bridge.registerStdFS()
 
 ---
 
+## 反向调用 Lisp 函数（仓颉 → Lisp）
+
+### call 方法
+
+从仓颉代码中直接调用已定义的 Lisp 函数。
+
+```cangjie
+public func call<T>(funcName: String, args: Array<T>): LispValue
+    where T <: LispConvertible
+```
+
+**特性**：
+- 支持变长参数
+- 自动将仓颉类型转换为 LispValue
+- 返回 `LispValue`，可使用 `asInt()`/`asString()` 等方法提取
+
+**示例 1：调用简单函数**
+
+```cangjie
+import ystyle::xisp.*
+
+let interpreter = LispInterpreter([withStdLib()])
+
+// 定义 Lisp 函数
+interpreter.eval("(define (square x) (* x x))")
+
+// 从仓颉调用
+let result = interpreter.call("square", [5])
+
+// 提取结果
+if (let Some(i) <- result.asInt()) {
+    println(i)  // 输出: 25
+}
+```
+
+**示例 2：多参数函数**
+
+```cangjie
+// 定义多参数函数
+interpreter.eval("(define (add-three a b c) (+ a b c))")
+
+// 调用
+let result = interpreter.call("add-three", [1, 2, 3])
+if (let Some(i) <- result.asInt()) {
+    println(i)  // 输出: 6
+}
+```
+
+**示例 3：不同类型参数**
+
+```cangjie
+// 字符串处理
+interpreter.eval("(define (greet name) (str \"Hello, \" name))")
+let result = interpreter.call("greet", ["World"])
+if (let Some(s) <- result.asString()) {
+    println(s)  // 输出: "Hello, World"
+}
+
+// 布尔判断
+interpreter.eval("(define (is-positive x) (> x 0))")
+let r1 = interpreter.call("is-positive", [5])
+if (let Some(b) <- r1.asBool()) {
+    println(b)  // 输出: true
+}
+```
+
+**示例 4：无参数函数**
+
+```cangjie
+interpreter.eval("(define (constant) 42)")
+let result = interpreter.call("constant", [])
+if (let Some(i) <- result.asInt()) {
+    println(i)  // 输出: 42
+}
+```
+
+**示例 5：复杂业务场景**
+
+```cangjie
+interpreter.eval("""
+    (define (calculate-discount price discount-rate)
+        (* price (- 1.0 discount-rate)))
+
+    (define (is-expensive price)
+        (> price 100))
+""")
+
+// 计算折扣
+let price = interpreter.call("calculate-discount", [100.0, 0.2])
+if (let Some(f) <- price.asFloat()) {
+    println(f)  // 输出: 80.0
+}
+
+// 判断是否昂贵
+let check = interpreter.call("is-expensive", [150])
+if (let Some(b) <- check.asBool()) {
+    println(b)  // 输出: true
+}
+```
+
+---
+
+## LispDeserializable 接口
+
+### 接口定义
+
+从 `LispValue` 转换为仓颉类型的接口。
+
+```cangjie
+public interface LispDeserializable<T> {
+    static func fromLisp(value: LispValue): ?T
+}
+```
+
+与 `LispConvertible` 成对使用：
+- `LispConvertible`：仓颉 → Lisp（序列化）
+- `LispDeserializable`：Lisp → 仓颉（反序列化）
+
+### 内置类型支持
+
+#### Int64
+
+支持从 `Int` 和 `Float` 转换（自动截断）。
+
+```cangjie
+let lispInt = LispValue.Int(42)
+let lispFloat = LispValue.Float(3.14)
+
+match (Int64.fromLisp(lispInt)) {
+    case Some(i) => println(i)  // 42
+    case None => println("Conversion failed")
+}
+
+match (Int64.fromLisp(lispFloat)) {
+    case Some(i) => println(i)  // 3 (自动截断)
+    case None => println("Conversion failed")
+}
+```
+
+#### Float64
+
+支持从 `Float` 和 `Int` 转换。
+
+```cangjie
+let lispFloat = LispValue.Float(3.14)
+let lispInt = LispValue.Int(42)
+
+match (Float64.fromLisp(lispFloat)) {
+    case Some(f) => println(f)  // 3.14
+    case None => println("Conversion failed")
+}
+
+match (Float64.fromLisp(lispInt)) {
+    case Some(f) => println(f)  // 42.0
+    case None => println("Conversion failed")
+}
+```
+
+#### String
+
+支持从 `Str` 和 `Symbol` 转换。
+
+```cangjie
+let lispString = LispValue.Str("hello")
+let lispSymbol = LispValue.Symbol("test-symbol")
+
+match (String.fromLisp(lispString)) {
+    case Some(s) => println(s)  // "hello"
+    case None => println("Conversion failed")
+}
+
+match (String.fromLisp(lispSymbol)) {
+    case Some(s) => println(s)  // "test-symbol"
+    case None => println("Conversion failed")
+}
+```
+
+#### Bool
+
+支持从 `Boolean` 转换。
+
+```cangjie
+let lispBool = Boolean(true)
+
+match (Bool.fromLisp(lispBool)) {
+    case Some(b) => println(b)  // true
+    case None => println("Conversion failed")
+}
+```
+
+### 自定义类型支持
+
+为自定义类型实现 `LispDeserializable` 接口：
+
+```cangjie
+class MyType {
+    let data: String
+    public init(data: String) {
+        this.data = data
+    }
+}
+
+extend MyType <: LispDeserializable<MyType> {
+    public static func fromLisp(value: LispValue): ?MyType {
+        match (value) {
+            case Str(s) => Some(MyType(s))
+            case _ => None
+        }
+    }
+}
+
+// 使用
+let lispValue = Str("test data")
+if (let Some(myType) <- MyType.fromLisp(lispValue)) {
+    println(myType.data)  // "test data"
+}
+```
+
+---
+
+## ExtendLispValue 接口
+
+### 接口定义
+
+定义 `LispValue` 类型转换方法的契约接口。
+
+```cangjie
+public interface ExtendLispValue {
+    func asInt(): ?Int64
+    func asFloat(): ?Float64
+    func asString(): ?String
+    func asBool(): ?Bool
+    func asCjValue<T>(): ?T where T <: LispDeserializable<T>
+}
+```
+
+### 便捷方法
+
+#### asInt()
+
+将 `LispValue` 转换为 `Int64`，支持从 `Int` 和 `Float` 转换。
+
+```cangjie
+let lispValue = LispValue.Int(42)
+
+if (let Some(i) <- lispValue.asInt()) {
+    println(i)  // 42
+}
+```
+
+#### asFloat()
+
+将 `LispValue` 转换为 `Float64`，支持从 `Float` 和 `Int` 转换。
+
+```cangjie
+let lispValue = LispValue.Float(3.14)
+
+if (let Some(f) <- lispValue.asFloat()) {
+    println(f)  // 3.14
+}
+```
+
+#### asString()
+
+将 `LispValue` 转换为 `String`，支持从 `Str` 和 `Symbol` 转换。
+
+```cangjie
+let lispValue = LispValue.Str("Hello")
+
+if (let Some(s) <- lispValue.asString()) {
+    println(s)  // "Hello"
+}
+```
+
+#### asBool()
+
+将 `LispValue` 转换为 `Bool`，仅支持 `Boolean` 类型。
+
+```cangjie
+let lispValue = Boolean(true)
+
+if (let Some(b) <- lispValue.asBool()) {
+    println(b)  // true
+}
+```
+
+#### asCjValue<T>()
+
+泛型转换方法，使用 `LispDeserializable` 接口转换任意类型。
+
+```cangjie
+let lispValue = LispValue.Int(42)
+
+// 转换为 Int64
+if (let Some(i) <- lispValue.asCjValue<Int64>()) {
+    println(i)  // 42
+}
+
+// 尝试转换为 String（返回 None）
+if (let Some(s) <- lispValue.asCjValue<String>()) {
+    println(s)
+} else {
+    println("Type mismatch")
+}
+```
+
+### 类型不匹配处理
+
+所有转换方法在类型不匹配时返回 `None`。
+
+```cangjie
+let lispValue = LispValue.Str("hello")
+
+// 尝试转换为 Int（类型不匹配）
+if (let Some(i) <- lispValue.asInt()) {
+    println(i)
+} else {
+    println("Not an integer")  // 输出: "Not an integer"
+}
+```
+
+---
+
 ## LispConvertible 接口
 
 ### 接口定义
@@ -278,76 +603,6 @@ let none: Option<Int64> = None
 
 some.toLisp()  // Number(42.0)
 none.toLisp()  // Nil
-```
-
----
-
-## TypeConverter 工具类
-
-### 静态方法
-
-#### from<T>()
-
-将任意 `LispConvertible` 类型转换为 `LispValue`。
-
-```cangjie
-public static func from<T>(value: T): LispValue where T <: LispConvertible
-```
-
-**示例**：
-
-```cangjie
-let num: Int64 = 42
-let lispNum = TypeConverter.from(num)  // 等同于 num.toLisp()
-```
-
-#### fromList<T>()
-
-将 `ArrayList` 转换为 Lisp 列表。
-
-```cangjie
-public static func fromList<T>(values: ArrayList<T>): LispValue
-    where T <: LispConvertible
-```
-
-**示例**：
-
-```cangjie
-let numbers = ArrayList<Int64>()
-numbers.add(1)
-numbers.add(2)
-numbers.add(3)
-
-let lispList = TypeConverter.fromList(numbers)  // (1.0 2.0 3.0)
-```
-
-#### 类型提取方法
-
-从 `LispValue` 中提取仓颉类型：
-
-```cangjie
-// 提取字符串
-public static func asString(value: LispValue): ?String
-
-// 提取浮点数
-public static func asFloat(value: LispValue): ?Float64
-
-// 提取整数
-public static func asInt64(value: LispValue): ?Int64
-
-// 提取布尔值
-public static func asBool(value: LispValue): ?Bool
-```
-
-**示例**：
-
-```cangjie
-let lispValue = Str("Hello")
-
-match (TypeConverter.asString(lispValue)) {
-    case Some(s) => println(s)  // "Hello"
-    case None => println("Not a string")
-}
 ```
 
 ---
@@ -669,5 +924,5 @@ Bridge.registerFuncWithNS(env, "myapi", "process-list", { args =>
 
 ---
 
-**最后更新**: 2026-01-21
+**最后更新**: 2026-01-28
 **版本**: 0.1.0
