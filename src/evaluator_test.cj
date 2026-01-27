@@ -414,7 +414,7 @@ class MacroTest {
         evalCode("(define x 2)", env)
         let result2 = evalCode("`(a ,x c)", env)
         match (result2) {
-            case Cons(cell) => @Assert(cell.toString().contains("2"))
+            case Cons(cell) => @Assert(cell.toString() == "(a 2 c)")
             case _ => @Fail("backquote with comma should evaluate x")
         }
 
@@ -422,7 +422,7 @@ class MacroTest {
         evalCode("(define y 3)", env)
         let result3 = evalCode("`(a ,x ,y)", env)
         match (result3) {
-            case Cons(cell) => @Assert(cell.toString().contains("2") || cell.toString().contains("3"))
+            case Cons(cell) => @Assert(cell.toString() == "(a 2 3)")
             case _ => @Fail("backquote with multiple commas should work")
         }
     }
@@ -438,7 +438,7 @@ class MacroTest {
 
         // 应该得到 (a b c d)
         match (result) {
-            case Cons(cell) => @Assert(cell.toString().contains("a") && cell.toString().contains("b"))
+            case Cons(cell) => @Assert(cell.toString() == "(a b c d)")
             case _ => @Fail("backquote with comma-at should splice list")
         }
     }

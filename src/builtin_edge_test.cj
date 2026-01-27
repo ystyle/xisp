@@ -295,7 +295,7 @@ class BuiltinEdgeTest {
         let expr2 = Parser.parseSingleFromString("(str \"Value: \" 42)")
         let result2 = evaluator.eval(expr2)
         match (result2) {
-            case Str(s) => @Assert(s.contains("42"))
+            case Str(s) => @Assert(s.contains("Value: 42"))
             case _ => @Fail("str should convert number to string")
         }
 
@@ -303,7 +303,7 @@ class BuiltinEdgeTest {
         let expr3 = Parser.parseSingleFromString("(str \"nil: \" nil)")
         let result3 = evaluator.eval(expr3)
         match (result3) {
-            case Str(s) => @Assert(s.contains("nil"))
+            case Str(s) => @Assert(s.contains("nil: nil"))
             case _ => @Fail("str should convert nil to string")
         }
     }
