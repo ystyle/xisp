@@ -1,5 +1,7 @@
 package ystyle::xisp
 
+import ystyle::xisp.core.*
+
 /**
  * 解释器选项类型
  * 所有配置选项都使用这个类型，便于组合和扩展
@@ -429,4 +431,48 @@ public func withModulePaths(paths: Array<String>): InterpreterOption {
             interpreter.addModuleSearchPath(path)
         }
     }
+}
+
+/**
+ * 设置自定义模块数据源
+ *
+ * 通过 ModuleSource 接口支持从任意数据源加载模块。
+ *
+ * 适用场景：
+ * - MemorySource：从内存加载模块（测试、动态生成）
+ * - FileSystemSource：从文件系统加载（默认行为）
+ * - 自定义实现：从数据库、网络等加载
+ *
+ * @param source ModuleSource 实例
+ *
+ * @example
+ * ```cangjie
+ * let source = MemorySource()
+ * source.registerModule("my::mod", "(module mod ...)", HashMap<String, String> {
+ *     ["core.lisp"] => "(export foo) (define foo 42)"
+ * })
+ *
+ * let interpreter = LispInterpreter([
+ *     withStdLib(),
+ *     withModuleSource(source)
+ * ])
+ * interpreter.eval("(import my::mod)")
+ * ```
+ */
+public func withModuleSource(source: ModuleSource): InterpreterOption {
+    { interpreter => interpreter.setModuleSource(source) }
+}
+
+/**
+ * 启用脚本模式（允许 (import "./xxx")）
+ */
+public func withScriptMode(): InterpreterOption {
+    { interpreter => interpreter.setScriptMode() }
+}
+
+/**
+ * 启用模块模式（禁止 (import "./xxx")，默认）
+ */
+public func withModuleMode(): InterpreterOption {
+    { interpreter => interpreter.setModuleMode() }
 }

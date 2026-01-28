@@ -1035,17 +1035,17 @@ class EnterpriseModuleSource <: ModuleSource {
 
 ## 9. 实现检查清单
 
-### 阶段 1：核心接口和基础实现
-- [ ] 定义 `ModuleSource` 接口
-- [ ] 实现 `MemorySource`
-- [ ] 实现 `FileSystemSource`
-- [ ] 单元测试
+### 阶段 1：核心接口和基础实现 ✅
+- [x] 定义 `ModuleSource` 接口
+- [x] 实现 `MemorySource`
+- [x] 实现 `FileSystemSource`
+- [x] 单元测试（12 个测试用例）
 
-### 阶段 2：集成到 Interpreter
-- [ ] `LispInterpreter.setModuleSource()`
-- [ ] `withModuleSource()` 选项函数
-- [ ] `ModuleLoader.setSource()` 和 `loadModule()`
-- [ ] 向后兼容测试
+### 阶段 2：集成到 Interpreter ✅
+- [x] `LispInterpreter.setModuleSource()`
+- [x] `withModuleSource()` 选项函数
+- [x] `ModuleLoader.setSource()` 和 `loadModule()`
+- [x] 向后兼容测试（240 测试全部通过）
 
 ### 阶段 3：文档和示例
 - [ ] API 文档
@@ -1069,6 +1069,6 @@ class EnterpriseModuleSource <: ModuleSource {
 
 ---
 
-**文档版本**: 0.1.0
-**最后更新**: 2026-01-28
+**文档版本**: 1.0.0
+**最后更新**: 2026-07-07
 **作者**: Xisp Team

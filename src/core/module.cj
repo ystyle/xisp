@@ -159,7 +159,7 @@ public class Module {
      * 导出一个符号
      * 将符号添加到导出列表
      */
-    public func exportSymbol(symbolName: String) {
+    public func exportSymbol(symbolName: String): Unit {
         if (!this.packageInfo.exports.contains(symbolName)) {
             this.packageInfo.exports.add(symbolName)
         }
@@ -168,7 +168,7 @@ public class Module {
     /**
      * 批量导出符号
      */
-    public func exportSymbols(symbolNames: ArrayList<String>) {
+    public func exportSymbols(symbolNames: ArrayList<String>): Unit {
         for (name in symbolNames) {
             this.exportSymbol(name)
         }
@@ -230,7 +230,7 @@ public class ModuleRegistry {
     /**
      * 全局模块目录
      */
-    public static let GLOBAL_MODULES_DIR = "~/.xisp/modules/"
+    public static let GLOBAL_MODULES_DIR: String = "~/.xisp/modules/"
 
     /**
      * 构造函数
@@ -285,7 +285,7 @@ public class ModuleRegistry {
     /**
      * 添加模块搜索路径
      */
-    public func addSearchPath(path: String) {
+    public func addSearchPath(path: String): Unit {
         if (!this.searchPaths.contains(path)) {
             this.searchPaths.add(path)
         }
@@ -295,14 +295,14 @@ public class ModuleRegistry {
      * 设置项目 module.lisp 路径
      * 用于解析项目依赖的版本
      */
-    public func setProjectPackagePath(path: String) {
+    public func setProjectPackagePath(path: String): Unit {
         this.projectPackagePath = Some(path)
     }
 
     /**
      * 注册模块
      */
-    public func registerModule(module: Module) {
+    public func registerModule(module: Module): Unit {
         this.modules[module.name] = module
     }
 
@@ -470,7 +470,7 @@ public class ModuleRegistry {
     /**
      * 清空所有已加载的模块
      */
-    public func clear() {
+    public func clear(): Unit {
         this.modules.clear()
     }
 

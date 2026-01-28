@@ -10,15 +10,162 @@ import std.sort.*
 /**
  * 模块文件加载器
  *
- * 负责从文件系统加载模块文件，处理文件忽略规则
+ * 负责加载模块文件，支持从自定义 ModuleSource 或文件系统加载
  */
-public class ModuleLoader {
+public class ModuleLoader <: Loader {
     private var evaluator: Evaluator
     private var loadedFiles: HashMap<String, Bool>  // 已加载的文件，防止重复加载
+    private var source: Option<ModuleSource> = None  // 自定义数据源
+    private var registry: Option<ModuleRegistry> = None
+    private var parser: Option<ModuleParser> = None
 
     public init(evaluator: Evaluator) {
         this.evaluator = evaluator
         this.loadedFiles = HashMap<String, Bool>()
+    }
+
+    /**
+     * 设置 ModuleRegistry 和 ModuleParser 引用
+     */
+    public func setModuleSystem(registry: ModuleRegistry, parser: ModuleParser): Unit {
+        this.registry = Some(registry)
+        this.parser = Some(parser)
+    }
+
+    /**
+     * 设置自定义模块数据源
+     * @param source ModuleSource 实例
+     */
+    public func setSource(source: ModuleSource): Unit {
+        this.source = Some(source)
+    }
+
+    /**
+     * 检查是否设置了自定义数据源
+     */
+    public func hasCustomSource(): Bool {
+        this.source.isSome()
+    }
+
+    /**
+     * Loader 接口：按模块名导入
+     *
+     * 加载模块并注册到 ModuleRegistry，但不绑定符号。
+     * 符号绑定由 evalImport/importModuleByName 处理（支持 :as/only）。
+     */
+    public func loadByName(moduleName: String): LispValue {
+        match (this.registry) {
+            case Some(reg) => match (this.parser) {
+                case Some(par) =>
+                    match (this.loadModule(moduleName, reg, par)) {
+                        case Some(_) => Nil
+                        case None =>
+                            LispValue.Error(XispError(ErrorType.ModuleError,
+                                "module '${moduleName}' not found"))
+                    }
+                case None =>
+                    LispValue.Error(XispError(ErrorType.ModuleError,
+                        "module system not initialized"))
+            }
+            case None =>
+                LispValue.Error(XispError(ErrorType.ModuleError,
+                    "module system not initialized"))
+        }
+    }
+
+    /**
+     * Loader 接口：按相对路径导入（ModuleLoader 不支持）
+     */
+    public func loadRelative(relativePath: String): LispValue {
+        LispValue.Error(XispError(ErrorType.ModuleError,
+            "模块上下文中不支持相对路径导入"))
+    }
+
+    /**
+     * 获取当前 ModuleSource（不存在时创建默认 FileSystemSource）
+     */
+    private func getOrCreateSource(): ModuleSource {
+        match (this.source) {
+            case Some(src) => src
+            case None =>
+                let defaultSource = FileSystemSource.fromPath(".")
+                this.source = Some(defaultSource)
+                defaultSource
+        }
+    }
+
+    /**
+     * 加载模块
+     *
+     * 统一入口：通过 ModuleSource 加载模块，返回完整的 Module 对象。
+     * 如果未设置自定义源，默认使用 FileSystemSource 搜索文件系统。
+     *
+     * @param moduleName 模块名（如："ystyle::log"）
+     * @param registry 模块注册表
+     * @param parser 模块解析器
+     * @return 加载的模块，失败返回 None
+     */
+    public func loadModule(moduleName: String, registry: ModuleRegistry, parser: ModuleParser): Option<Module> {
+        let src = this.getOrCreateSource()
+
+        // 1. 获取 module.lisp 元数据
+        let metadata = src.getMetadata(moduleName)
+
+        // 2. 解析模块信息
+        let packageInfo: Option<PackageInfo> = match (metadata) {
+            case Some(content) =>
+                parser.parseContent(content, moduleName, moduleName)
+            case None => None
+        }
+
+        // 3. 创建 PackageInfo（有元数据则使用解析结果，否则创建默认的）
+        let info = match (packageInfo) {
+            case Some(pi) => pi
+            case None =>
+                PackageInfo(moduleName, "", moduleName, "")
+        }
+
+        // 4. 创建模块环境
+        let moduleEnv = this.evaluator.env.createChild()
+
+        // 5. 创建模块对象（先创建，用于 export）
+        let module = Module(moduleName, info, moduleEnv)
+
+        // 6. 设置当前模块，以便 export 可以工作
+        let oldModule = this.evaluator.currentModule
+        this.evaluator.currentModule = Some(module)
+
+        // 7. 获取文件列表并加载
+        let files = src.listFiles(moduleName)
+        var hasError = false
+
+        if (!files.isEmpty()) {
+            sort(files)
+            for (filePath in files) {
+                match (src.readFile(moduleName, filePath)) {
+                    case Some(content) =>
+                        if (!this.evalContent(content, "${moduleName}/${filePath}", moduleEnv)) {
+                            hasError = true
+                            break
+                        }
+                    case None =>
+                        hasError = true
+                        break
+                }
+            }
+        }
+
+        // 8. 恢复之前的模块
+        this.evaluator.currentModule = oldModule
+
+        // 9. 注册或返回失败
+        if (!hasError) {
+            module.isInitialized = true
+            registry.registerModule(module)
+            Some(module)
+        } else {
+            None
+        }
     }
 
     /**
@@ -181,8 +328,7 @@ public class ModuleLoader {
      * 检查文件是否已加载
      */
     private func isLoaded(filePath: String): Bool {
-        let normalizedPath = canonicalize(filePath).toString()
-        if (this.loadedFiles.contains(normalizedPath)) {
+        if (this.loadedFiles.contains(filePath)) {
             return true
         } else {
             false
@@ -193,8 +339,7 @@ public class ModuleLoader {
      * 标记文件为已加载
      */
     private func markLoaded(filePath: String) {
-        let normalizedPath = canonicalize(filePath).toString()
-        this.loadedFiles[normalizedPath] = true
+        this.loadedFiles[filePath] = true
     }
 
     /**
@@ -267,7 +412,7 @@ public class ModuleLoader {
     /**
      * 清空已加载文件缓存
      */
-    public func clearCache() {
+    public func clearCache(): Unit {
         this.loadedFiles.clear()
     }
 

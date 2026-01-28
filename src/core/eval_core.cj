@@ -37,7 +37,7 @@ extend Evaluator {
      * 求值 Cons 类型的表达式
      * 先展开宏，然后求值
      */
-    func evalCons(expr: LispValue, cell: ConsCell): LispValue {
+    func evalCons(_: LispValue, cell: ConsCell): LispValue {
         // 检查是否是宏调用
         if (let Symbol(sym) <- cell.car) {
             let resolvedSym = this.env.lookupKeyword(sym)

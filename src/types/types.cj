@@ -58,7 +58,7 @@ public open class Environment {
     /**
      * 在当前环境中定义变量
      */
-    public func define(name: String, value: LispValue) {
+    public func define(name: String, value: LispValue): Unit {
         this.bindings[name] = value
     }
 
@@ -151,7 +151,7 @@ public open class Environment {
      * 添加导出符号
      * @param symbolName 符号名称
      */
-    public func addExportedSymbol(symbolName: String) {
+    public func addExportedSymbol(symbolName: String): Unit {
         this.exportedSymbols.add(symbolName)
     }
 
@@ -159,7 +159,7 @@ public open class Environment {
      * 批量添加导出符号
      * @param symbolNames 符号名称列表
      */
-    public func addExportedSymbols(symbolNames: ArrayList<String>) {
+    public func addExportedSymbols(symbolNames: ArrayList<String>): Unit {
         for (name in symbolNames) {
             this.exportedSymbols.add(name)
         }
@@ -223,7 +223,7 @@ public open class Environment {
      * @param alias 别名（如："定义"）
      * @param original 原始关键字（如："define"）
      */
-    public func registerKeywordAlias(alias: String, original: String) {
+    public func registerKeywordAlias(alias: String, original: String): Unit {
         this.keywordAliases[alias] = original
     }
 
@@ -451,7 +451,7 @@ public class XispError <: ToString {
     /**
      * 添加堆栈帧
      */
-    public func pushFrame(frame: String) {
+    public func pushFrame(frame: String): Unit {
         this.stack.add(frame)
     }
 

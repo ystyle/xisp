@@ -103,6 +103,67 @@ public func getEnvironment(): Environment
 public func reset(): Unit
 ```
 
+### 加载模式设置
+
+设置解释器的导入模式（v0.2.0+）。
+
+```cangjie
+public func setScriptMode(): Unit
+public func setModuleMode(): Unit
+```
+
+- **ScriptLoader**：REPL、CLI 脚本使用，支持 `(import "./xxx")` 文件导入
+- **ModuleLoader**：模块内部使用，禁止文件导入（默认）
+- 两种模式对 `(import module-name)` 的模块名导入行为一致
+
+**示例**：
+```cangjie
+// 嵌入场景默认 ModuleLoader
+let interpreter = LispInterpreter()
+
+// 切换到脚本模式（允许文件导入）
+interpreter.setScriptMode()
+interpreter.eval("(import \"./utils.lisp\")")
+```
+
+可通过 `withScriptMode()` / `withModuleMode()` 选项在构造时设置。
+
+### 模块数据源设置
+
+设置自定义模块数据源，支持从内存、文件系统或任意数据源加载模块。
+
+```cangjie
+public func setModuleSource(source: ModuleSource): Unit
+```
+
+**参数**：
+- `source`: ModuleSource 实例（MemorySource、FileSystemSource 或自定义实现）
+
+**示例**（从内存加载模块）：
+
+```cangjie
+import ystyle::xisp.*
+import ystyle::xisp.core.*
+
+let source = MemorySource()
+source.registerModule(
+    "myapp::utils",
+    "(module utils (version \"1.0\"))",
+    HashMap<String, String>([
+        ("core.lisp", "(export greet) (define (greet name) (str \"Hello, \" name \"!\"))")
+    ])
+)
+
+let interpreter = LispInterpreter([
+    withModuleSource(source)
+])
+interpreter.eval("(import myapp::utils)")
+let result = interpreter.eval("(utils.greet \"World\")")
+// result: Str("Hello, World!")
+```
+
+也可通过 `withModuleSource()` 选项在构造时配置（详见 [配置选项文档](./options_system.md)）。
+
 ### 桥接函数注册
 
 #### registerBridgeFunction()

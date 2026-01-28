@@ -537,7 +537,8 @@ class ModuleTest {
 
         match (evaluator.moduleRegistry) {
             case Some(registry) =>
-                // 现在应该可以找到组织了
+                registry.addSearchPath("./lisp-tests")
+
                 match (evaluator.moduleParser) {
                     case Some(parser) =>
                         let resolver = DependencyResolver(registry, parser)
@@ -566,6 +567,8 @@ class ModuleTest {
 
         match (evaluator.moduleRegistry) {
             case Some(registry) =>
+                registry.addSearchPath("./lisp-tests")
+
                 match (evaluator.moduleParser) {
                     case Some(parser) =>
                         let resolver = DependencyResolver(registry, parser)
@@ -595,6 +598,8 @@ class ModuleTest {
 
         match (evaluator.moduleRegistry) {
             case Some(registry) =>
+                registry.addSearchPath("./lisp-tests")
+
                 match (evaluator.moduleParser) {
                     case Some(parser) =>
                         let resolver = DependencyResolver(registry, parser)

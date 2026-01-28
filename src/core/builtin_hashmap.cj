@@ -30,7 +30,7 @@ extend BuiltinFunctions {
     /**
      * 注册 Redis 风格的哈希操作别名
      */
-    public static func registerRedisAliases(env: Environment) {
+    public static func registerRedisAliases(env: Environment): Unit {
         // hget - 获取哈希字段
         let hgetFunc = env.lookup("hashmap-get")
         env.define("hget", hgetFunc)
@@ -77,7 +77,7 @@ extend BuiltinFunctions {
     /**
      * 注册哈希映射相关的内置函数
      */
-    public static func registerHashMap(env: Environment) {
+    public static func registerHashMap(env: Environment): Unit {
         // (hashmap key1 val1 key2 val2 ...)
         // 创建哈希映射
         env.define("hashmap", NativeFunc({ args =>

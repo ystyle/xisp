@@ -32,7 +32,7 @@ extend Evaluator {
     /**
      * 设置最大宏展开深度
      */
-    public func setMaxMacroExpandDepth(depth: Int64) {
+    public func setMaxMacroExpandDepth(depth: Int64): Unit {
         this.maxMacroExpandDepth = depth
     }
 

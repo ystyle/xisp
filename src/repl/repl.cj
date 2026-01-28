@@ -29,14 +29,14 @@ public class Repl {
     /**
      * 设置是否显示 Banner
      */
-    public func setShowBanner(show: Bool) {
+    public func setShowBanner(show: Bool): Unit {
         this.showBanner = show
     }
 
     /**
      * 启动 REPL 主循环
      */
-    public func run() {
+    public func run(): Unit {
         if (this.showBanner) {
             this.printWelcome()
         }

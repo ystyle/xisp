@@ -70,10 +70,10 @@ func printHelp(): Unit {
  * 启动 REPL 交互式环境
  */
 func runRepl(): Unit {
-    // 默认配置：英文关键字，启用所有标准库
+    // REPL 使用脚本模式（允许文件导入）
     let interpreter = createInterpreter([
-        withStdLib()  // 启用标准库
-        // 可选：withChineseKeywords(), withQuietMode()
+        withStdLib(),
+        withScriptMode()
     ])
     interpreter.runREPL()
 }
@@ -85,7 +85,8 @@ func runCode(code: String): Unit {
     // 创建解释器
     let interpreter = createInterpreter([
         withStdLib(),
-        withQuietMode()
+        withQuietMode(),
+        withScriptMode()
     ])
 
     // 执行代码
@@ -112,10 +113,11 @@ func printResult(result: LispValue): Unit {
  * 执行脚本文件
  */
 func runScript(filePath: String): Unit {
-    // 创建解释器
+    // 创建解释器（脚本模式，允许文件导入）
     let interpreter = createInterpreter([
         withStdLib(),
-        withQuietMode()
+        withQuietMode(),
+        withScriptMode()
     ])
 
     // 使用 interpreter.evalFile() 执行文件

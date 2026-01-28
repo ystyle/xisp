@@ -88,7 +88,7 @@ extend Evaluator {
 
                     // 格式3: (import "./local") - 相对路径导入
                     case Str(relativePath) =>
-                        this.importRelativeModule(relativePath)
+                        this.importRelativeByLoader(relativePath)
 
                     case _ =>
                         LispValue.Error(XispError(ErrorType.SyntaxError, "invalid import syntax"))
@@ -119,7 +119,7 @@ extend Evaluator {
 
             // 格式：相对路径导入
             case Str(relativePath) =>
-                this.importRelativeModule(relativePath)
+                this.importRelativeByLoader(relativePath)
 
             // 默认：模块名
             case Symbol(moduleName) =>
@@ -159,8 +159,9 @@ extend Evaluator {
 
     /**
      * 解析别名导入：(module::name :as alias)
+     * @param specCell 规格单元格（未使用）
      */
-    private func parseAliasImport(specCell: ConsCell): LispValue {
+    private func parseAliasImport(_: ConsCell): LispValue {
         // 这个方法实际上不会独立调用，因为在 parseSimpleImport 中已经处理
         LispValue.Error(XispError(ErrorType.SyntaxError, ":as must follow module name"))
     }
@@ -537,6 +538,9 @@ extend Evaluator {
 
     /**
      * 按名称导入模块
+     *
+     * 通过匹配模块注册表加载或获取模块，然后绑定符号。
+     *
      * @param moduleName 模块名（如："ystyle::log.zlog"）
      * @param alias 可选的别名
      * @param symbols 要导入的符号列表（空表示全部）
@@ -550,15 +554,37 @@ extend Evaluator {
         // 检查模块是否已加载
         match (this.getModuleRegistry().findModule(moduleName)) {
             case Some(module) =>
-                // 模块已加载，直接使用
                 this.bindModuleSymbols(module, alias, symbols)
             case None =>
-                // 模块未加载，需要加载
-                match (this.loadModule(moduleName)) {
-                    case Some(module) =>
-                        this.bindModuleSymbols(module, alias, symbols)
+                // 通过 currentLoader 加载
+                match (this.currentLoader) {
+                    case Some(loader) =>
+                        // 保存当前环境，loadModule 内部 evalContent 可能临时修改 this.env
+                        let savedEnv = this.env
+                        let result = loader.loadByName(moduleName)
+                        // 恢复环境（bindModuleSymbols 需要绑定到原始环境）
+                        this.env = savedEnv
+                        match (result) {
+                            case Nil =>
+                                // 加载成功后绑定符号
+                                match (this.getModuleRegistry().findModule(moduleName)) {
+                                    case Some(module) =>
+                                        this.bindModuleSymbols(module, alias, symbols)
+                                    case None =>
+                                        LispValue.Error(XispError(ErrorType.ModuleError,
+                                            "module '${moduleName}' loaded but not found in registry"))
+                                }
+                            case err => err
+                        }
                     case None =>
-                        LispValue.Error(XispError(ErrorType.ModuleError, "module '${moduleName}' not found"))
+                        // 没有 Loader 时回退到旧文件系统路径
+                        match (this.loadModuleFromFileSystem(moduleName)) {
+                            case Some(module) =>
+                                this.bindModuleSymbols(module, alias, symbols)
+                            case None =>
+                                LispValue.Error(XispError(ErrorType.ModuleError,
+                                    "module '${moduleName}' not found"))
+                        }
                 }
         }
     }
@@ -612,39 +638,44 @@ extend Evaluator {
     }
 
     /**
+     * 通过 Loader 导入相对路径
+     */
+    private func importRelativeByLoader(relativePath: String): LispValue {
+        match (this.currentLoader) {
+            case Some(loader) => loader.loadRelative(relativePath)
+            case None =>
+                // 没有 Loader 时回退到旧文件导入路径
+                this.importRelativeModule(relativePath)
+        }
+    }
+
+    /**
      * 加载模块
+     *
      * @param moduleName 模块名
      * @return 加载的模块，如果失败返回 None
      */
     private func loadModule(moduleName: String): Option<Module> {
-        // 解析模块路径
+        this.getModuleLoader().loadModule(moduleName, this.getModuleRegistry(), this.getModuleParser())
+    }
+
+    /**
+     * 从文件系统加载模块（原有逻辑）
+     */
+    private func loadModuleFromFileSystem(moduleName: String): Option<Module> {
         match (this.getModuleRegistry().resolveModulePath(moduleName)) {
             case Some(packagePath) =>
-                // 解析 module.lisp
                 match (this.parseModuleFile(packagePath)) {
                     case Some(packageInfo) =>
-                        // 创建模块环境
                         let moduleEnv = this.env.createChild()
-
-                        // 创建模块（先创建，用于 export）
                         let module = Module(moduleName, packageInfo, moduleEnv)
-
-                        // 设置当前模块，以便 export 可以工作
                         let oldModule = this.currentModule
                         this.currentModule = Some(module)
-
-                        // 加载包目录下的所有 .lisp 文件
                         let loaded = this.loadPackageFiles(packagePath, moduleEnv)
-
-                        // 恢复之前的模块
                         this.currentModule = oldModule
-
                         if (loaded) {
                             module.isInitialized = true
-
-                            // 注册模块
                             this.getModuleRegistry().registerModule(module)
-
                             Some(module)
                         } else {
                             None

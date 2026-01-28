@@ -17,14 +17,14 @@ public class Bridge {
      * @param name 函数名
      * @param handler 仓颉函数，接收 LispValue 列表，返回 LispValue
      */
-    public static func registerFunc(env: Environment, name: String, handler: (ArrayList<LispValue>) -> LispValue) {
+    public static func registerFunc(env: Environment, name: String, handler: (ArrayList<LispValue>) -> LispValue): Unit {
         env.define(name, NativeFunc(handler))
     }
 
     /**
      * 注册仓颉函数（带命名空间前缀）
      */
-    public static func registerFuncWithNS(env: Environment, ns: String, name: String, handler: (ArrayList<LispValue>) -> LispValue) {
+    public static func registerFuncWithNS(env: Environment, ns: String, name: String, handler: (ArrayList<LispValue>) -> LispValue): Unit {
         // 验证命名空间不能包含 ::
         if (ns.contains("::")) {
             eprintln("错误：命名空间 '${ns}' 不能包含 '::'，命名空间本身应该是一个简单的标识符")
@@ -38,7 +38,7 @@ public class Bridge {
      * 批量注册 std.io 模块（无沙箱限制）
      * @param env Lisp 环境
      */
-    public static func registerStdIO(env: Environment) {
+    public static func registerStdIO(env: Environment): Unit {
         registerStdIO(env, None)
     }
 
@@ -47,7 +47,7 @@ public class Bridge {
      * @param env Lisp 环境
      * @param pathChecker 可选的路径权限检查回调函数，接收 (路径, 是否写入) 返回是否允许
      */
-    public static func registerStdIO(env: Environment, pathChecker: ?((String, Bool) -> Bool)) {
+    public static func registerStdIO(env: Environment, pathChecker: ?((String, Bool) -> Bool)): Unit {
         // 文件读取
         registerFuncWithNS(env, "cangjie", "read-file", { args =>
             // 沙箱检查
@@ -141,7 +141,7 @@ public class Bridge {
     /**
      * 批量注册 std.fs 模块
      */
-    public static func registerStdFS(env: Environment) {
+    public static func registerStdFS(env: Environment): Unit {
         // 检查文件或目录是否存在
         registerFuncWithNS(env, "cangjie", "exists?", { args =>
             if (args.size > 0 && let Str(path) <- args[0]) {
@@ -209,7 +209,7 @@ public class Bridge {
     /**
      * 批量注册 std.collection 模块（现代化语法支持）
      */
-    public static func registerStdCollection(env: Environment) {
+    public static func registerStdCollection(env: Environment): Unit {
         // 向量字面量 [1 2 3] → list
         registerFuncWithNS(env, "cangjie", "vector", { args =>
             // 直接返回列表形式的向量
@@ -272,7 +272,7 @@ public class Bridge {
     /**
      * 注册所有桥接函数
      */
-    public static func registerAll(env: Environment) {
+    public static func registerAll(env: Environment): Unit {
         registerStdIO(env)
         registerStdFS(env)
         registerStdCollection(env)  // 注册现代化语法支持

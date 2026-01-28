@@ -13,7 +13,7 @@ extend BuiltinFunctions {
     /**
      * 注册所有基础函数到环境
      */
-    public static func registerAll(env: Environment) {
+    public static func registerAll(env: Environment): Unit {
         // 注册基础字面量（nil 需要定义为符号，因为解析器不处理 nil）
         env.define("nil", Nil)
 

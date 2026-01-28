@@ -26,6 +26,9 @@ public class Evaluator {
     public var moduleParser: Option<ModuleParser> = None
     public var currentModule: Option<Module> = None  // 当前正在求值的模块
 
+    // 当前 Loader（模块上下文用 ModuleLoader，脚本/REPL 用 ScriptLoader）
+    public var currentLoader: Option<Loader> = None
+
     public init(env: Environment) {
         this.env = env
         // 不在构造函数中初始化模块系统，避免循环依赖
@@ -34,24 +37,33 @@ public class Evaluator {
     /**
      * 初始化模块系统（在构造对象后调用）
      */
-    public func initModuleSystem() {
+    public func initModuleSystem(): Unit {
         if (this.moduleRegistry.isNone()) {
             let registry = ModuleRegistry()
 
-            // 添加默认搜索路径
-            registry.addSearchPath("./lisp-tests")  // 添加 lisp-tests 目录用于单元测试
-            registry.addSearchPath("./examples")    // 添加 examples 目录用于示例
-
             this.moduleRegistry = Some(registry)
-            this.moduleLoader = Some(ModuleLoader(this))
-            this.moduleParser = Some(ModuleParser(this))
+
+            let parser = ModuleParser(this)
+            let loader = ModuleLoader(this)
+            loader.setModuleSystem(registry, parser)
+
+            // 用 registry 的搜索路径创建默认 FileSystemSource
+            let searchPaths = registry.getSearchPaths()
+            let fsSource = FileSystemSource(searchPaths)
+            loader.setSource(fsSource)
+
+            this.moduleLoader = Some(loader)
+            this.moduleParser = Some(parser)
+
+            // 默认使用 ModuleLoader（模块上下文）
+            this.currentLoader = Some(loader)
         }
     }
 
     /**
      * 设置最大栈深度
      */
-    public func setMaxStackDepth(depth: Int64) {
+    public func setMaxStackDepth(depth: Int64): Unit {
         this.maxStackDepth = depth
     }
 
@@ -59,7 +71,7 @@ public class Evaluator {
      * 设置函数权限检查回调
      * @param checker 检查函数，返回 true 表示允许调用，false 表示禁止
      */
-    public func setFuncChecker(checker: (String) -> Bool) {
+    public func setFuncChecker(checker: (String) -> Bool): Unit {
         this.funcChecker = Some(checker)
     }
 
@@ -67,7 +79,7 @@ public class Evaluator {
      * 设置路径权限检查回调
      * @param checker 检查函数，参数为 和 isWrite(是否写入)，返回 true 表示允许访问，false 表示禁止
      */
-    public func setPathChecker(checker: (String, Bool) -> Bool) {
+    public func setPathChecker(checker: (String, Bool) -> Bool): Unit {
         this.pathChecker = Some(checker)
     }
 
@@ -75,7 +87,7 @@ public class Evaluator {
      * 设置模块加载权限检查回调
      * @param checker 检查函数，返回 true 表示允许加载，false 表示禁止
      */
-    public func setModuleLoadChecker(checker: () -> Bool) {
+    public func setModuleLoadChecker(checker: () -> Bool): Unit {
         this.moduleLoadChecker = Some(checker)
     }
 }

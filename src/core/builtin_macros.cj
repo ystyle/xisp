@@ -13,7 +13,7 @@ extend BuiltinMacros {
     /**
      * 注册所有内置宏到环境
      */
-    public static func registerAll(env: Environment) {
+    public static func registerAll(env: Environment): Unit {
         // 使用 eval 来定义宏，避免复杂的嵌套构造
         defineWhenMacro(env)
         defineUnlessMacro(env)
