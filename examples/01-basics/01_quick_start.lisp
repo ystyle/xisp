@@ -15,7 +15,7 @@
 ;; 2. 变量定义
 (println "2. 变量定义:")
 (define name "Xisp")
-(define version 1.0)
+(define version "1.0")
 (println "  欢迎 " name " v" version)
 (newline)
 
