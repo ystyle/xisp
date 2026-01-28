@@ -44,6 +44,24 @@ cjpm build
 
 ## 示例代码
 
+```shell
+❯ ./target/release/bin/ystyle::xisp.cli
+╔═══════════════════════════════════════════════════════════╗
+║           星枢 - 仓颉嵌入式 Lisp 脚本语言                   ║
+║                   版本 0.1.0 - MVP                        ║
+╚═══════════════════════════════════════════════════════════╝
+xisp> (print "你好，仓颉")
+"你好，仓颉"
+nil
+xisp> (print "你好，星枢")
+"你好，星枢"
+nil
+xisp> (print "Hello, Xisp")
+"Hello, Xisp"
+nil
+xisp>
+```
+
 ### REPL 脚本示例（Lisp）
 
 Lisp 脚本示例位于 `examples/` 目录，按难度和学习路径组织：
