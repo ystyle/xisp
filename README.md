@@ -43,25 +43,28 @@ cjpm build
 
 ### REPL 脚本示例（Lisp）
 
-Lisp 脚本示例位于 `examples/` 目录，展示如何使用 REPL 进行交互式编程：
+Lisp 脚本示例位于 `examples/` 目录，按难度和学习路径组织：
 
-| 示例 | 说明 | 查看文档 |
-|------|------|----------|
-| [基础教程](examples/tutorial.lisp) | 12 个基础主题 | [examples/README.md](examples/README.md) |
-| [现代化语法](examples/modern_syntax.lisp) | 向量、哈希、插值、解构、管道 | [examples/README.md](examples/README.md) |
-| [模式匹配](examples/pattern_matching.lisp) | 模式匹配完整教程 | [examples/README.md](examples/README.md) |
-| [解构绑定](examples/destructuring.lisp) | 解构绑定深入展示 | [examples/README.md](examples/README.md) |
-| [管道操作符](examples/thread_macro.lisp) | 管道操作符深入展示 | [examples/README.md](examples/README.md) |
-| [守卫条件](examples/guard_clauses.lisp) | 守卫条件深入展示 | [examples/README.md](examples/README.md) |
-| [中文编程](examples/chinese_demo.lisp) | 中文变量名和关键字 | [examples/README.md](examples/README.md) |
-| [文件 I/O](examples/file_io_test.lisp) | 文件读写和目录操作 | [examples/README.md](examples/README.md) |
+| 目录 | 说明 | 学习时间 | 示例文件 |
+|------|------|----------|----------|
+| [01-basics](examples/01-basics/) | 基础教程 | 35分钟 | 快速开始、基础语法、文件I/O |
+| [02-intermediate](examples/02-intermediate/) | 中级特性 | 40分钟 | 高阶函数、作用域、闭包 |
+| [03-advanced](examples/03-advanced/) | 高级特性 | 30分钟 | 模式匹配、守卫条件、解构 |
+| [04-macros](examples/04-macros/) | 宏系统 | 15分钟 | 宏定义、宏展开、卫生宏 |
+| [05-modules](examples/05-modules/) | 模块系统 | 20分钟 | 模块导入、导出、管理 |
+| [06-interop](examples/06-interop/) | 互操作 | 20分钟 | 仓颉桥接、双向调用 |
+| [legacy](examples/legacy/) | 特色功能演示 | - | 中文编程、Unicode 支持 |
 
-**运行方式**:
+**快速开始**:
 ```bash
-./target/release/bin/ystyle::xisp.cli examples/tutorial.lisp
+# 5分钟快速体验
+./target/release/bin/ystyle::xisp.cli examples/01-basics/01_quick_start.lisp
+
+# 完整基础教程
+./target/release/bin/ystyle::xisp.cli examples/01-basics/02_tutorial.lisp
 ```
 
-**更多示例**: 查看 [examples/README.md](examples/README.md)
+**完整学习路径**: 查看 [examples/README.md](examples/README.md)
 
 ---
 
@@ -71,9 +74,9 @@ Lisp 脚本示例位于 `examples/` 目录，展示如何使用 REPL 进行交�
 
 | 示例 | 说明 | 运行方式 |
 |------|------|----------|
-| [扩展功能演示](src/examples/extension_demo/) | LispConvertible 接口使用 | `cjpm run --name extension_demo` |
 | [选项系统](src/examples/options_usage/) | 解释器选项配置 | `cjpm run --name options_usage` |
 | [沙箱系统](src/examples/sandbox_demo/) | 安全沙箱使用 | `cjpm run --name sandbox_demo` |
+| [扩展功能演示](src/examples/extension_demo/) | LispConvertible/LispDeserializable 接口和双向转换 | `cjpm run --name extension_demo` |
 | [模式匹配](src/examples/match_demo/) | 模式匹配测试 | `cjpm run --name match_demo` |
 | [现代化语法](src/examples/modern_syntax/) | 现代语法测试 | `cjpm run --name modern_syntax` |
 | [解构绑定](src/examples/test_destruct/) | 解构绑定测试 | `cjpm run --name test_destruct` |
@@ -88,15 +91,15 @@ Lisp 脚本示例位于 `examples/` 目录，展示如何使用 REPL 进行交�
 
 ### 特殊形式
 
-- [`define`](docs/syntax/core.md) - 定义变量和函数
-- [`lambda`](docs/syntax/core.md) - 匿名函数
-- [`if`](docs/syntax/core.md) - 条件判断
-- [`quote`](docs/syntax/core.md) / `'` - 引用
-- [`let`](docs/syntax/destructuring.md) - 局部绑定（支持解构）
-- [`begin`](docs/syntax/core.md) - 顺序执行
-- [`set!`](docs/syntax/core.md) - 变量赋值
-- [`match`](docs/syntax/core.md) - 模式匹配
-- [`->`](docs/syntax/pipeline.md) - 管道操作符（线程宏）
+- [`define`](docs/syntax/01-basics.md) - 定义变量和函数
+- [`lambda`](docs/syntax/01-basics.md) - 匿名函数
+- [`if`](docs/syntax/01-basics.md) - 条件判断
+- [`quote`](docs/syntax/01-basics.md) / `'` - 引用
+- [`let`](docs/syntax/02-modern.md) - 局部绑定（支持解构）
+- [`begin`](docs/syntax/01-basics.md) - 顺序执行
+- [`set!`](docs/syntax/01-basics.md) - 变量赋值
+- [`match`](docs/syntax/02-modern.md) - 模式匹配
+- [`->`](docs/syntax/02-modern.md) - 管道操作符（线程宏）
 
 ### 内置函数
 
@@ -107,7 +110,9 @@ Lisp 脚本示例位于 `examples/` 目录，展示如何使用 REPL 进行交�
 **谓词**: `number?` `string?` `symbol?` `list?` `null?` `procedure?`
 **打印**: `print` `println` `princ` `display` `newline`
 
-**完整语法参考**: [docs/syntax/core.md](docs/syntax/core.md)
+**完整语法参考**: [docs/syntax/01-basics.md](docs/syntax/01-basics.md)
+
+**标准符号参考**: [docs/appendix-std-symbols.md](docs/appendix-std-symbols.md) - 84 个标准库函数快速索引
 
 ### 现代化语法
 
@@ -118,7 +123,7 @@ Lisp 脚本示例位于 `examples/` 目录，展示如何使用 REPL 进行交�
 - **解构绑定**: `(let [(x y & rest) list] ...)`
 - **管道操作**: `(-> x (f) (g))`
 
-**现代化语法文档**: [docs/syntax/modern_syntax.md](docs/syntax/modern_syntax.md)
+**现代化语法文档**: [docs/syntax/02-modern.md](docs/syntax/02-modern.md)
 
 ## Unicode 和多语言支持
 
@@ -149,7 +154,7 @@ xisp> (定义 年龄 25)
 25.000000
 ```
 
-**示例文件**: [examples/chinese_demo.lisp](examples/chinese_demo.lisp)
+**示例文件**: [examples/03-advanced/03_unicode.lisp](examples/03-advanced/)
 **详细文档**: [docs/unicode/chinese_support.md](docs/unicode/chinese_support.md)
 
 ---
@@ -177,129 +182,113 @@ main() {
 
 ## 仓颉桥接
 
-通过桥接层，Lisp 可以调用仓颉标准库：
+Xisp 提供了完整的双向桥接能力，支持 Lisp 和仓颉之间的互操作。
 
-### 文件 I/O（std.io）
+### LispInterpreter 基本用法
+
+在仓颉代码中嵌入 Lisp 解释器：
+
+```cangjie
+import ystyle::xisp.*
+
+main() {
+    // 创建解释器
+    let interpreter = LispInterpreter()
+
+    // 求值表达式
+    let result = interpreter.eval("(+ 1 2 3)")
+    println(result)  // 输出: 6.000000
+
+    // 定义并调用函数
+    interpreter.eval("(define (add x y) (+ x y))")
+    let sum = interpreter.eval("(add 10 20)")
+    println(sum)  // 输出: 30.000000
+}
+```
+
+### Lisp 调用仓颉标准库
+
+通过桥接层，Lisp 可以直接调用仓颉标准库（std.io、std.fs 等）：
 
 ```lisp
-; 写入文件
-(cangjie:io:write-file "hello.txt" "Hello, World!")
+; 文件 I/O
+(cangjie::write-file "hello.txt" "Hello, World!")
+(cangjie::read-file "hello.txt")
 
-; 读取文件
-(cangjie:io:read-file "hello.txt")
-
-; 追加内容
-(cangjie:io:append-file "hello.txt" "\nNew line")
+; 文件系统
+(cangjie::exists? "hello.txt")
+(cangjie::file? "hello.txt")
+(cangjie::list-dir ".")
 ```
 
-### 文件系统（std.fs）
+### 仓颉调用 Lisp 函数（反向调用）
 
-```lisp
-; 检查存在
-(cangjie:fs:exists? "hello.txt")
+使用 `Interpreter.call()` 方法从仓颉调用已定义的 Lisp 函数：
 
-; 判断类型
-(cangjie:fs:file? "hello.txt")
-(cangjie:fs:directory? "docs")
+```cangjie
+import ystyle::xisp.*
 
-; 列出目录
-(cangjie:fs:list-dir ".")
+main() {
+    let interpreter = LispInterpreter()
+
+    // 定义 Lisp 函数
+    interpreter.eval("(define (add x y) (+ x y))")
+    interpreter.eval("(define (square x) (* x x))")
+
+    // 从仓颉调用 Lisp 函数
+    let sum = interpreter.call("add", [10, 20])
+    if (let Some(i) <- sum.asInt()) {
+        println("10 + 20 = ${i}")  // 输出: 10 + 20 = 30
+    }
+
+    let squared = interpreter.call("square", [5])
+    if (let Some(i) <- squared.asInt()) {
+        println("5² = ${i}")  // 输出: 5² = 25
+    }
+}
 ```
 
-**完整桥接 API**: [docs/integration/bridge.md](docs/integration/bridge.md)
+### 类型转换接口
 
-## 测试
+**LispConvertible**（仓颉 → Lisp）：让自定义类型可转换为 Lisp 值
 
-```bash
-# 运行所有测试
-cjpm test
-
-# 运行指定测试
-cjpm test --show-all-output --filter 'ParserTest.*'
+```cangjie
+class Point <: LispConvertible {
+    let x: Float64
+    let y: Float64
+    public func toLisp(): LispValue { ... }
+}
 ```
 
-当前测试覆盖：
-- ✅ 77+ 个单元测试全部通过
-- ✅ 核心数据类型
-- ✅ 词法和语法分析
-- ✅ 求值器
-- ✅ 内置函数
-- ✅ 特殊形式
-- ✅ 桥接层
+**LispDeserializable**（Lisp → 仓颉）：从 Lisp 值创建仓颉对象
 
-## REPL 命令
-
-| 命令 | 功能 |
-|------|------|
-| `,help` | 显示帮助信息 |
-| `,env` | 查看环境变量 |
-| `,lang zh` | 启用中文关键字 |
-| `,lang en` | 切换回英文关键字 |
-| `,exit` | 退出 REPL |
-| `,quit` | 退出 REPL |
-
-## 项目结构
-
-```
-xisp/
-├── src/                  # 源代码
-│   ├── core/            # 核心功能（类型、求值器、内置函数）
-│   ├── parser/          # 词法和语法分析
-│   ├── bridge/          # 仓颉互操作桥接层
-│   ├── repl/            # REPL 交互
-│   ├── cli/             # 命令行接口
-│   └── examples/        # 仓颉示例程序
-├── examples/            # Lisp 脚本示例
-├── docs/                # 文档
-├── tests/               # 测试
-├── cjpm.toml            # 项目配置
-├── task.md              # 任务追踪
-└── README.md            # 本文件
+```cangjie
+class Point <: LispDeserializable<Point> {
+    public static func fromLisp(value: LispValue): ?Point { ... }
+}
 ```
 
-## 开发路线图
-
-- [x] **M1: 核心 Lisp 解释器 (MVP)** ✅ 已完成
-  - [x] S-表达式解析和求值
-  - [x] 特殊形式（define, lambda, if, quote, let）
-  - [x] 闭包和词法作用域
-  - [x] REPL 交互
-  - [x] 77+ 个测试通过
-
-- [x] **M2: 仓颉互操作桥接** ✅ 已完成
-  - [x] 桥接层基础架构
-  - [x] LispConvertible 接口和扩展系统
-  - [x] std.io 和 std.fs 桥接函数
-  - [x] 实际文件 I/O 实现
-
-- [x] **M3: 现代化语法扩展** ✅ 已完成
-  - [x] 解构绑定、管道操作符
-  - [x] 向量/哈希字面量
-  - [x] 字符串插值
-  - [x] 高阶函数 lambda 支持
-
-- [x] **M4: 生产级特性** 🚧 部分完成
-  - [x] 安全沙箱机制
-  - [ ] 性能优化（字节码缓存）
-  - [ ] 完整的调试工具
-
-详细任务列表请查看 [task.md](task.md)。
+**完整桥接 API 文档**: [docs/integration/bridge.md](docs/integration/bridge.md)
 
 ## 文档
 
 **文档索引**: [docs/README.md](docs/README.md) - 完整文档导航
 
 ### 语法文档
-- [Lisp 核心功能](docs/syntax/core.md) - 数据类型、求值器、内置函数
-- [设计文档](docs/syntax/design.md) - 架构设计和技术选型
-- [现代化语法](docs/syntax/modern_syntax.md) - 向量、哈希、插值等
-- [解构绑定](docs/syntax/destructuring.md) - 模式匹配和解构
-- [管道操作符](docs/syntax/pipeline.md) -> 线程宏
+- [基础语法](docs/syntax/01-basics.md) - 数据类型、特殊形式、内置函数
+- [现代语法特性](docs/syntax/02-modern.md) - 向量、哈希、插值、解构、管道、模式匹配
+- [宏系统](docs/syntax/03-macros.md) - 宏定义、宏展开、卫生宏
+- [设计文档](docs/design.md) - 架构设计和技术选型
+- [模块系统](docs/modules.md) - 模块导入、导出、管理
 
 ### 集成文档
-- [桥接层 API](docs/integration/bridge.md) - Lisp 与仓颉互操作
+- [桥接层 API](docs/integration/bridge.md) - Lisp 与仓颉互操作（双向调用、类型转换）
 - [选项系统](docs/integration/options_system.md) - 解释器配置选项
 - [沙箱系统](docs/integration/sandbox.md) - 安全执行环境和权限控制
+
+### 参考文档
+- [标准符号附录](docs/appendix-std-symbols.md) - 84 个标准库符号分类参考
+- [模块来源设计](docs/module-source-design.md) - 模块系统扩展性设计
 
 ### Unicode 支持
 - [Unicode 支持概述](UNICODE_SUPPORT.md) - Unicode 和多语言支持
@@ -324,4 +313,4 @@ xisp/
 ---
 
 **版本**: 0.1.0 MVP
-**最后更新**: 2026-01-22
+**最后更新**: 2026-01-28
