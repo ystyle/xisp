@@ -42,6 +42,21 @@ public class ModuleParser {
     }
 
     /**
+     * 从内容字符串解析模块信息（不依赖文件系统）
+     *
+     * 与 parse() 不同，此方法直接从内容字符串解析，
+     * 适用于从 MemorySource 等非文件系统数据源加载的场景。
+     *
+     * @param content module.lisp 内容
+     * @param moduleName 完整模块名（如："ystyle::log"）
+     * @param modulePath 虚拟路径（仅用于标识，如模块名本身）
+     * @return 解析的模块信息，失败返回 None
+     */
+    public func parseContent(content: String, moduleName: String, modulePath: String): Option<PackageInfo> {
+        this.parseModuleContent(content, modulePath)
+    }
+
+    /**
      * 解析 module.lisp 内容
      */
     private func parseModuleContent(content: String, modulePath: String): Option<PackageInfo> {

@@ -11,6 +11,7 @@
 - ✅ M3: 现代化语法扩展
 - ✅ M3.5: 模块系统基础
 - 🚧 M4: 高级特性和完善
+- ✅ M4.9: ModuleSource 模块数据源抽象
 
 ---
 
@@ -132,6 +133,18 @@
 - [ ] 包管理器 (cjlpm)
 - [ ] 测试覆盖率报告
 - [ ] REPL 增强功能
+
+### 4.9 ModuleSource 模块数据源抽象 ✅
+- [x] `ModuleSource` 接口定义（getMetadata/listFiles/readFile）
+- [x] `MemorySource` 内存数据源实现
+- [x] `FileSystemSource` 文件系统数据源实现
+- [x] `ModuleData` 批量注册数据结构
+- [x] `ModuleLoader.setSource()` / `hasCustomSource()` / `loadModule()` 分发机制
+- [x] `LispInterpreter.setModuleSource()` 集成
+- [x] `withModuleSource()` 解释器选项
+- [x] 单元测试（12 个测试用例，240 测试全部通过）
+
+**完成时间**: 2026-07-07
 
 ---
 
@@ -357,6 +370,13 @@
   - 发现宏的纯可变参数 bug（待修复）
   - 更新 UNSUPPORTED_FEATURES.md（4 个不支持功能 + 1 个设计限制）
   - 记录命名参数和默认参数特性到项目记忆
+
+- 2026-07-07: **Git 工作流改为 Feature Branch + Squash Merge** ✅
+  - 新功能开发在 feat/ 分支进行
+  - 合并到 master 使用 squash merge
+  - 提交信息遵循 Conventional Commits
+  - CLAUDE.md 转换为 AGENTS.md（opencode 格式）
+  - 为函数添加 :Unit 返回类型注解以兼容新版仓颉编译器
 
 - 2026-01-24: 更新异步支持为 spawn + Future<T> 模型
 - 2026-01-24: 删除 std.collection 模块（Lisp Cons 已够用）

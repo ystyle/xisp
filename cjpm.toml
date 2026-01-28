@@ -10,6 +10,10 @@
   compile-option = "--static -Woff unused"
   override-compile-option = ""
   link-option = ""
+  include =["src"]
+  license = ["MIT"]
+  authors = ["ystyle"]
+  repository = ["https://gitcode.com/ystyle/xisp"]
 
 [dependencies]
 

@@ -14,17 +14,16 @@
 - 理解模块系统
 - 使用 import 导入模块
 - 使用 export 导出符号
-- 相对路径导入
-- 管理项目结构
+- 模块间依赖和符号绑定
 
 ## 🚀 运行示例
 
 ```bash
-# 基础演示
-./xisp examples/05-modules/01_basic_demo.lisp
+# 基础演示（需先设置搜索路径）
+XISP_PATH=./examples/05-modules/modules_demo ./target/release/bin/ystyle::xisp.cli examples/05-modules/01_basic_demo.lisp
 
 # 完整示例
-./xisp examples/05-modules/modules_demo/demo.lisp
+XISP_PATH=./examples/05-modules/modules_demo ./target/release/bin/ystyle::xisp.cli examples/05-modules/modules_demo/demo.lisp
 ```
 
 ## 📖 模块系统基础
@@ -32,7 +31,8 @@
 ### 导入模块
 
 ```lisp
-(import module-name)
+(import pkg1)             ; 按模块名导入（通过搜索路径查找）
+(import ystyle::log)      ; 带组织名的模块
 ```
 
 ### 导出符号
@@ -41,18 +41,29 @@
 (export symbol1 symbol2)
 ```
 
-### 相对导入
+### 模块间引用
+
+模块内部使用模块名引用其他模块，不支持文件路径导入：
 
 ```lisp
-(import "./pkg2")
-(import "../parent-pkg")
+;; pkg2/main.lisp
+(import pkg1)             ; ✅ 通过模块名导入
+(pkg1.add 1 2)
+
+(import "./utils.lisp")   ; ❌ 模块内部不支持文件路径导入
+```
+
+REPL 或 CLI 脚本中可以使用文件导入：
+
+```lisp
+(import "./utils.lisp")   ; ✅ 仅 REPL/CLI 脚本可用
 ```
 
 ## 💡 最佳实践
 
 1. **按功能组织模块**：每个模块一个文件
 2. **明确导出接口**：只导出必要的符号
-3. **使用相对导入**：便于项目重构
+3. **模块内引用用模块名**：不使用文件路径
 4. **避免循环依赖**：保持模块图清晰
 
 ---

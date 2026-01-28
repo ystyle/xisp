@@ -336,7 +336,7 @@ public class DependencyResolver {
     /**
      * 清空缓存
      */
-    public func clearCache() {
+    public func clearCache(): Unit {
         this.versionCache.clear()
         this.dependencyCache.clear()
     }

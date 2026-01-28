@@ -10,3 +10,4 @@ temp-test
 temp-docs
 *.gcda
 *.gcno
+log.txt

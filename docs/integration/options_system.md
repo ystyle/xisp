@@ -72,7 +72,47 @@ let interpreter = LispInterpreter([
 ])
 ```
 
-### 5. REPL 动态切换
+### 5. 模块数据源选项
+
+- `withModuleSource(source)` - 设置自定义模块数据源
+
+支持从任意数据源加载模块（内存、文件系统、数据库等）。
+
+```cangjie
+let source = MemorySource()
+source.registerModule("my::mod", "(module mod ...)", HashMap<String, String>([
+    ("core.lisp", "(export foo) (define foo 42)")
+]))
+
+let interpreter = LispInterpreter([
+    withStdLib(),
+    withModuleSource(source)
+])
+interpreter.eval("(import my::mod)")
+interpreter.eval("my.mod.foo")  // => 42
+```
+
+### 6. 加载模式选项
+
+- `withScriptMode()` - 脚本模式（允许 `(import "./xxx")` 文件导入）
+- `withModuleMode()` - 模块模式（禁止文件导入，默认）
+
+**CLI/REPL 默认使用 ScriptLoader**，嵌入式场景默认使用 ModuleLoader。
+
+```cangjie
+// REPL 或脚本执行（默认自动设置）
+let interpreter = LispInterpreter([
+    withStdLib(),
+    withScriptMode()
+])
+
+// 嵌入式/模块上下文
+let interpreter = LispInterpreter([
+    withModuleMode()  // 模块内不支持 (import "./xxx")
+])
+```
+
+### 7. REPL 动态切换
 
 在 REPL 中使用 `,lang` 命令动态切换语言：
 

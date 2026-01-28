@@ -144,6 +144,8 @@ public class LispInterpreter {
      */
     public init(opts: Array<InterpreterOption>) {
         this()
+        // 预初始化模块系统，确保 withModulePath 等选项能生效
+        this.evaluator.initModuleSystem()
         // 应用所有选项
         for (opt in opts) {
             opt(this)
@@ -157,7 +159,7 @@ public class LispInterpreter {
      * @param alias 别名（如："定义"）
      * @param original 原始关键字（如："define"）
      */
-    public func registerKeywordAlias(alias: String, original: String) {
+    public func registerKeywordAlias(alias: String, original: String): Unit {
         this.env.registerKeywordAlias(alias, original)
         if (this.verbose) {
             this.outputFn("注册关键字别名: ${alias} -> ${original}")
@@ -169,7 +171,7 @@ public class LispInterpreter {
     /**
      * 注册 std.io 模块
      */
-    public func registerStdIO() {
+    public func registerStdIO(): Unit {
         this.bridge.registerStdIO()
         if (this.verbose) {
             this.outputFn("启用 std.io 模块")
@@ -179,7 +181,7 @@ public class LispInterpreter {
     /**
      * 注册 std.fs 模块
      */
-    public func registerStdFS() {
+    public func registerStdFS(): Unit {
         this.bridge.registerStdFS()
         if (this.verbose) {
             this.outputFn("启用 std.fs 模块")
@@ -189,7 +191,7 @@ public class LispInterpreter {
     /**
      * 注册 std.collection 模块（预留）
      */
-    public func registerStdCollection() {
+    public func registerStdCollection(): Unit {
         // TODO: 实现 collection 模块注册
         if (this.verbose) {
             this.outputFn("std.collection 模块尚未实现")
@@ -201,28 +203,28 @@ public class LispInterpreter {
     /**
      * 设置是否显示 Banner
      */
-    public func setShowBanner(show: Bool) {
+    public func setShowBanner(show: Bool): Unit {
         this.showBanner = show
     }
 
     /**
      * 设置是否显示详细信息
      */
-    public func setVerbose(verbose: Bool) {
+    public func setVerbose(verbose: Bool): Unit {
         this.verbose = verbose
     }
 
     /**
      * 设置是否显示调试信息
      */
-    public func setDebug(debug: Bool) {
+    public func setDebug(debug: Bool): Unit {
         this.debug = debug
     }
 
     /**
      * 设置自定义输出函数
      */
-    public func setOutputFn(fn: (String) -> Unit) {
+    public func setOutputFn(fn: (String) -> Unit): Unit {
         this.outputFn = fn
     }
 
@@ -231,7 +233,7 @@ public class LispInterpreter {
     /**
      * 启用沙箱
      */
-    public func enableSandbox() {
+    public func enableSandbox(): Unit {
         this.sandboxEnabled = true
         if (this.verbose) {
             this.outputFn("沙箱已启用")
@@ -241,7 +243,7 @@ public class LispInterpreter {
     /**
      * 设置栈深度限制
      */
-    public func setMaxStackDepth(depth: Int64) {
+    public func setMaxStackDepth(depth: Int64): Unit {
         this.maxStackDepth = depth
         this.evaluator.setMaxStackDepth(depth)  // 同步到 Evaluator
         if (this.verbose) {
@@ -252,7 +254,7 @@ public class LispInterpreter {
     /**
      * 设置超时
      */
-    public func setTimeout(timeout: Option<Duration>) {
+    public func setTimeout(timeout: Option<Duration>): Unit {
         this.timeout = timeout
         match (timeout) {
             case Some(d) => this.outputFn("超时设置为: ${d}")
@@ -263,7 +265,7 @@ public class LispInterpreter {
     /**
      * 设置内存限制
      */
-    public func setMaxMemory(bytes: Option<Int64>) {
+    public func setMaxMemory(bytes: Option<Int64>): Unit {
         this.maxMemory = bytes
         match (bytes) {
             case Some(b) => this.outputFn("内存限制设置为: ${b} 字节")
@@ -274,7 +276,7 @@ public class LispInterpreter {
     /**
      * 禁止单个函数
      */
-    public func blockFunction(funcName: String) {
+    public func blockFunction(funcName: String): Unit {
         this.blockedFunctions.add(funcName)
         if (this.verbose) {
             this.outputFn("禁止函数: ${funcName}")
@@ -284,7 +286,7 @@ public class LispInterpreter {
     /**
      * 批量禁止函数
      */
-    public func blockFunctions(funcNames: Array<String>) {
+    public func blockFunctions(funcNames: Array<String>): Unit {
         for (funcName in funcNames) {
             this.blockedFunctions.add(funcName)
         }
@@ -296,7 +298,7 @@ public class LispInterpreter {
     /**
      * 设置函数白名单
      */
-    public func setAllowedFunctions(funcNames: Array<String>) {
+    public func setAllowedFunctions(funcNames: Array<String>): Unit {
         var list = ArrayList<String>()
         for (funcName in funcNames) {
             list.add(funcName)
@@ -310,7 +312,7 @@ public class LispInterpreter {
     /**
      * 禁止文件写入
      */
-    public func blockFileWrite() {
+    public func blockFileWrite(): Unit {
         this.allowFileWrite = false
         if (this.verbose) {
             this.outputFn("禁止文件写入")
@@ -320,7 +322,7 @@ public class LispInterpreter {
     /**
      * 允许文件写入
      */
-    public func setFileWriteAllowed(allowed: Bool) {
+    public func setFileWriteAllowed(allowed: Bool): Unit {
         this.allowFileWrite = allowed
         if (this.verbose) {
             if (allowed) {
@@ -334,7 +336,7 @@ public class LispInterpreter {
     /**
      * 禁止模块加载
      */
-    public func blockModuleLoad() {
+    public func blockModuleLoad(): Unit {
         this.allowModuleLoad = false
         if (this.verbose) {
             this.outputFn("禁止模块加载")
@@ -344,7 +346,7 @@ public class LispInterpreter {
     /**
      * 允许模块加载
      */
-    public func setModuleLoadAllowed(allowed: Bool) {
+    public func setModuleLoadAllowed(allowed: Bool): Unit {
         this.allowModuleLoad = allowed
         if (this.verbose) {
             if (allowed) {
@@ -358,7 +360,7 @@ public class LispInterpreter {
     /**
      * 设置允许的路径
      */
-    public func setAllowedPaths(paths: Array<String>) {
+    public func setAllowedPaths(paths: Array<String>): Unit {
         for (path in paths) {
             this.allowedPaths.add(path)
         }
@@ -368,16 +370,75 @@ public class LispInterpreter {
     }
 
     /**
-     * 添加模块搜索路径
+     * 设置脚本模式加载器（允许 (import "./xxx")）
+     *
+     * CLI 脚本执行和 REPL 应使用此模式。
      */
-    public func addModuleSearchPath(path: String) {
+    public func setScriptMode(): Unit {
+        if (let Some(moduleLoader) <- this.evaluator.moduleLoader) {
+            let scriptLoader = ScriptLoader(moduleLoader, this.evaluator)
+            this.evaluator.currentLoader = Some(scriptLoader)
+            if (this.verbose) {
+                this.outputFn("切换到脚本模式加载器")
+            }
+        }
+    }
+
+    /**
+     * 设置模块模式加载器（禁止 (import "./xxx")）
+     *
+     * 嵌入式场景或模块内部应使用此模式（默认）。
+     */
+    public func setModuleMode(): Unit {
+        if (let Some(moduleLoader) <- this.evaluator.moduleLoader) {
+            this.evaluator.currentLoader = Some(moduleLoader)
+            if (this.verbose) {
+                this.outputFn("切换到模块模式加载器")
+            }
+        }
+    }
+
+    /**
+     * 设置自定义模块数据源
+     *
+     * @param source ModuleSource 实例（MemorySource、FileSystemSource 或自定义）
+     *
+     * 设置后 import 会优先使用该数据源加载模块。
+     *
+     * @example
+     * ```
+     * let source = MemorySource()
+     * source.registerModule(...)
+     * interpreter.setModuleSource(source)
+     * ```
+     */
+    public func setModuleSource(source: ModuleSource): Unit {
+        if (this.verbose) {
+            this.outputFn("设置自定义模块数据源")
+        }
+        if (let Some(loader) <- this.evaluator.moduleLoader) {
+            loader.setSource(source)
+        }
+    }
+
+    /**
+     * 添加模块搜索路径
+     * 如果模块系统尚未初始化，缓存路径，初始化时自动添加
+     */
+    private var pendingSearchPaths: ArrayList<String> = ArrayList<String>()
+
+    public func addModuleSearchPath(path: String): Unit {
         match (this.evaluator.moduleRegistry) {
             case Some(registry) =>
                 registry.addSearchPath(path)
                 if (this.verbose) {
                     this.outputFn("添加模块搜索路径: ${path}")
                 }
-            case None => ()
+            case None =>
+                // 模块系统尚未初始化，缓存路径
+                if (!this.pendingSearchPaths.contains(path)) {
+                    this.pendingSearchPaths.add(path)
+                }
         }
     }
 
@@ -614,8 +675,16 @@ public class LispInterpreter {
             let bytes = File.readFrom(filePath)
             let content = String.fromUtf8(bytes)
 
+            // 设置当前文件路径（支持 (import "./xxx") 相对导入）
+            let oldFilePath = this.evaluator.currentFilePath
+            this.evaluator.currentFilePath = Some(Path(filePath).normalize().toString())
+
             // 执行多个表达式
-            this.evalMultiple(content)
+            let result = this.evalMultiple(content)
+
+            // 恢复文件路径
+            this.evaluator.currentFilePath = oldFilePath
+            result
         } catch (e: FSException) {
             let errMsg = "无法读取文件: ${e.message}"
             eprintln(errMsg)
@@ -649,7 +718,7 @@ public class LispInterpreter {
     public func registerBridgeFunction(
         name: String,
         handler: (ArrayList<LispValue>) -> LispValue
-    ) {
+    ): Unit {
         this.bridge.register(name, handler)
     }
 
@@ -663,7 +732,7 @@ public class LispInterpreter {
         ns: String,
         name: String,
         handler: (ArrayList<LispValue>) -> LispValue
-    ) {
+    ): Unit {
         this.bridge.registerWithNS(ns, name, handler)
     }
 
@@ -752,7 +821,7 @@ public class BridgeManager {
     public func register(
         name: String,
         handler: (ArrayList<LispValue>) -> LispValue
-    ) {
+    ): Unit {
         this.env.define(name, NativeFunc(handler))
     }
 
@@ -768,7 +837,7 @@ public class BridgeManager {
         ns: String,
         name: String,
         handler: (ArrayList<LispValue>) -> LispValue
-    ) {
+    ): Unit {
         let fullName = "${ns}:${name}"
         this.env.define(fullName, NativeFunc(handler))
     }

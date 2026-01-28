@@ -741,7 +741,7 @@ class AdvancedMacroTest {
         // 测试实际模块导入
         // 使用 LispInterpreter 配置搜索路径
         let interpreter = LispInterpreter([
-            withModulePath("examples")
+            withModulePath("./lisp-tests")
         ])
 
         // 测试导入 pkg1
@@ -787,7 +787,7 @@ class AdvancedMacroTest {
     func testModuleImportYstyleZlog() {
         // 测试导入 ystyle::zlog
         let interpreter = LispInterpreter([
-            withModulePath("examples")
+            withModulePath("./lisp-tests")
         ])
 
         println("Testing ystyle::zlog import...")
@@ -805,7 +805,7 @@ class AdvancedMacroTest {
     func testModuleImportYstyleUtilsString() {
         // 测试导入 ystyle::utils.string
         let interpreter = LispInterpreter([
-            withModulePath("examples")
+            withModulePath("./lisp-tests")
         ])
 
         println("Testing ystyle::utils.string import...")
@@ -871,7 +871,7 @@ class AdvancedMacroTest {
         // 测试相对路径导入功能
         // pkg2 导入了 pkg1，这是相对路径导入的实际案例
         let interpreter = LispInterpreter([
-            withModulePath("examples")
+            withModulePath("./lisp-tests")
         ])
 
         // 导入 pkg2（它会相对导入 pkg1）
@@ -897,7 +897,7 @@ class AdvancedMacroTest {
     func testModuleSymbolBinding() {
         // 测试模块符号绑定到环境
         let interpreter = LispInterpreter([
-            withModulePath("examples")
+            withModulePath("./lisp-tests")
         ])
 
         // 导入模块
@@ -927,7 +927,7 @@ class AdvancedMacroTest {
         // 测试相对路径导入的解析功能
         // pkg2 不使用相对路径导入，但我们可以测试解析是否正确
         let interpreter = LispInterpreter([
-            withModulePath("examples")
+            withModulePath("./lisp-tests")
         ])
 
         // 测试字符串形式的相对路径导入语法
