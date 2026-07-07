@@ -469,7 +469,15 @@ public class XispError <: ToString {
             case IOError => "IOError"
             case ModuleError => "ModuleError"
         }
-        "[${kindStr}] ${this.message}"
+        var result = "[${kindStr}] ${this.message}"
+        if (!this.stack.isEmpty()) {
+            result = "${result}\n  调用栈:"
+            for (i in 0..this.stack.size) {
+                let frame = this.stack[this.stack.size - 1 - i]
+                result = "${result}\n    ${i + 1}. ${frame}"
+            }
+        }
+        result
     }
 }
 
