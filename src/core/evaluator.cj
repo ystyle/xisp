@@ -29,6 +29,41 @@ public class Evaluator {
     // 当前 Loader（模块上下文用 ModuleLoader，脚本/REPL 用 ScriptLoader）
     public var currentLoader: Option<Loader> = None
 
+    // 调用栈追踪
+    public var callStack: ArrayList<String> = ArrayList<String>()
+
+    /**
+     * 压入调用栈帧
+     */
+    public func pushFrame(frame: String): Unit {
+        this.callStack.add(frame)
+    }
+
+    /**
+     * 弹出调用栈帧
+     */
+    public func popFrame(): Unit {
+        if (!this.callStack.isEmpty()) {
+            this.callStack.remove((this.callStack.size - 1)..this.callStack.size)
+        }
+    }
+
+    /**
+     * 将当前调用栈注入到错误中（如果错误栈为空）
+     */
+    public func injectStack(result: LispValue): LispValue {
+        match (result) {
+            case Error(err) =>
+                if (err.stack.isEmpty()) {
+                    for (frame in this.callStack) {
+                        err.pushFrame(frame)
+                    }
+                }
+                result
+            case _ => result
+        }
+    }
+
     public init(env: Environment) {
         this.env = env
         // 不在构造函数中初始化模块系统，避免循环依赖

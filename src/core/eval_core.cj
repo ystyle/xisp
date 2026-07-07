@@ -158,78 +158,97 @@ extend Evaluator {
     }
 
     /**
+     * 从函数调用表达式中提取函数名称（用于调用栈追踪）
+     */
+    private func extractFuncName(first: LispValue): String {
+        match (first) {
+            case Symbol(name) => name
+            case Procedure(_, _, _) => "<anonymous>"
+            case _ => "<expression>"
+        }
+    }
+
+    /**
      * 函数调用
      */
     func evalFunctionCall(first: LispValue, rest: LispValue): LispValue {
+        let funcName = this.extractFuncName(first)
+
+        // 权限检查
         match (first) {
-            case Symbol(funcName) =>
+            case Symbol(fn) =>
                 match (this.funcChecker) {
                     case Some(checker) =>
-                        if (!checker(funcName)) {
-                            return LispValue.Error(XispError(ErrorType.UndefinedFunction, "Function '${funcName}' is not allowed"))
+                        if (!checker(fn)) {
+                            return LispValue.Error(XispError(ErrorType.UndefinedFunction, "Function '${fn}' is not allowed"))
                         }
                     case None => ()
                 }
             case _ => ()
         }
 
+        // 压入调用栈帧
+        this.pushFrame(funcName)
+
         let funcValue = this.eval(first)
 
         // 检查 funcValue 是否是错误
         match (funcValue) {
             case Error(err) =>
-                // 如果是未定义变量错误，且在函数调用位置，转换为未定义函数错误
+                // 先注入栈，再 pop
                 match (err.kind) {
                     case UnboundVariable =>
-                        // 区分是变量还是函数：如果是函数调用位置，转换为函数错误
                         let name = if (let Symbol(sym) <- first) { sym } else { first.toString() }
-                        return LispValue.Error(XispError(ErrorType.UndefinedFunction, "Undefined function: '${name}'"))
-                    case _ => return funcValue  // 其他错误直接传播
+                        let result = this.injectStack(LispValue.Error(XispError(ErrorType.UndefinedFunction, "Undefined function: '${name}'")))
+                        this.popFrame()
+                        return result
+                    case _ =>
+                        let result = this.injectStack(funcValue)
+                        this.popFrame()
+                        return result
                 }
             case _ => ()
         }
 
-        match (funcValue) {
+        let result = match (funcValue) {
             case Macro(_, _, _) | MacroFromParams(_, _, _) =>
-                // 这是一个宏，展开它并递归求值
                 let expanded = this.expandMacro(funcValue, rest)
                 this.eval(expanded)
             case Procedure(_, _, _) | ProcedureFromParams(_, _, _) =>
                 let args = this.evalArguments(rest)
-                // 检查参数中是否有错误
                 for (arg in args) {
                     match (arg) {
-                        case Error(_) => return arg  // 传播第一个错误
+                        case Error(_) => return this.injectStack(arg)
                         case _ => ()
                     }
                 }
-                let result = this.applyProcedure(funcValue, args)
-                // 检查是否返回错误
-                match (result) {
-                    case Error(_) => result  // 传播错误
-                    case _ => result
+                let procResult = this.applyProcedure(funcValue, args)
+                match (procResult) {
+                    case Error(_) => this.injectStack(procResult)
+                    case _ => procResult
                 }
             case NativeFunc(f) =>
                 let args = this.evalArguments(rest)
-                // 检查参数中是否有错误
                 for (arg in args) {
                     match (arg) {
-                        case Error(_) => return arg  // 传播第一个错误
+                        case Error(_) => return this.injectStack(arg)
                         case _ => ()
                     }
                 }
                 f(args)
             case Nil =>
-                // 函数未定义（符号定义为 nil 后作为函数调用）
-                if (let Symbol(funcName) <- first) {
-                    LispValue.Error(XispError(ErrorType.UndefinedFunction, "Undefined function: '${funcName}'"))
+                if (let Symbol(fn) <- first) {
+                    this.injectStack(LispValue.Error(XispError(ErrorType.UndefinedFunction, "Undefined function: '${fn}'")))
                 } else {
-                    LispValue.Error(XispError(ErrorType.TypeError, "Attempt to call a non-function value: ${first.toString()}"))
+                    this.injectStack(LispValue.Error(XispError(ErrorType.TypeError, "Attempt to call a non-function value: ${first.toString()}")))
                 }
             case _ =>
-                // 不是可调用的类型
-                LispValue.Error(XispError(ErrorType.TypeError, "Attempt to call a non-function value: ${first.toString()}"))
+                this.injectStack(LispValue.Error(XispError(ErrorType.TypeError, "Attempt to call a non-function value: ${first.toString()}")))
         }
+
+        let finalResult = this.injectStack(result)
+        this.popFrame()
+        finalResult
     }
 
     /**
