@@ -912,11 +912,11 @@ Xisp 提供强大的模式匹配功能，通过 `match` 表达式实现复杂的
   _ "medium")
 ; => "large: 15"
 
-; 复杂守卫
+; 复杂守卫（多元素模式需要用括号包裹）
 (match '(5 10)
-  (x y) when (> x y) "x > y"
-  (x y) when (< x y) "x < y"
-  (x y) when (= x y) "x = y"
+  ((x y) when (> x y) "x > y")
+  ((x y) when (< x y) "x < y")
+  ((x y) when (= x y) "x = y")
   _ "other")
 ; => "x < y"
 ```
