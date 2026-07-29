@@ -24,6 +24,7 @@ extend BuiltinMacros {
         definePopMacro(env)
         defineNegateMacro(env)
         defineDoMacro(env)
+        defineDefunMacro(env)
     }
 
     /**
@@ -144,6 +145,18 @@ extend BuiltinMacros {
      */
     private static func defineDoMacro(env: Environment) {
         let code = "(defmacro do body (cons (quote begin) body))"
+        let exprs = Parser.parseFromString(code)
+        if (exprs.size > 0) {
+            let evaluator = Evaluator(env)
+            evaluator.eval(exprs[0])
+        }
+    }
+
+    /**
+     * 定义 defun 宏（Common Lisp 兼容的函数定义）
+     */
+    private static func defineDefunMacro(env: Environment) {
+        let code = "(defmacro defun (name args . body) (cons (quote define) (list (cons name args) (car body))))"
         let exprs = Parser.parseFromString(code)
         if (exprs.size > 0) {
             let evaluator = Evaluator(env)

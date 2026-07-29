@@ -47,6 +47,9 @@ extend BuiltinFunctions {
         let hexistsFunc = env.lookup("hashmap-contains?")
         env.define("hexists", hexistsFunc)
 
+        // contains? - hexists 的别名
+        env.define("contains?", hexistsFunc)
+
         // hkeys - 获取所有字段名
         let hkeysFunc = env.lookup("hashmap-keys")
         env.define("hkeys", hkeysFunc)
