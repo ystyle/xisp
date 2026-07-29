@@ -56,13 +56,36 @@
 ;; ======================================
 
 (println "4. 逗号-at 列表拼接演示")
+
+;;
+;; `,@`（comma-at）用于在反引号模板中展开列表。
+;; 例如 lst = (x y z)：`(a ,@lst b)` → (a x y z b)
+;;
+;; 注意：宏展开结果会被求值，所以直接用 (a x y z b)
+;; 会报错（a 被当作函数）。可用 macroexpand 查看展开结果：
+;;
+
 (println "代码: (defmacro wrap-list (lst) `(a ,@lst b))")
 
 (defmacro wrap-list (lst)
   `(a ,@lst b))
 
-(println "测试: (wrap-list '(x y z))")
-(define r2 (wrap-list '(x y z)))
+(println "测试: (macroexpand '(wrap-list (x y z)))")
+(println "展开: " (macroexpand '(wrap-list (x y z))))
+(println "期望: (a x y z b)")
+(println "")
+
+;;
+;; 要执行展开结果，需要在模板中使用可求值的函数做头：
+;;
+
+(println "代码: (defmacro show-list (lst) `(cons 'a (append ,lst '(b))))")
+
+(defmacro show-list (lst)
+  `(cons 'a (append ,lst '(b))))
+
+(println "测试: (show-list '(x y z))")
+(define r2 (show-list '(x y z)))
 (println "结果: " r2)
 (println "期望: (a x y z b)")
 (println "")
