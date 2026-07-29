@@ -1,6 +1,8 @@
 package ystyle::xisp.examples.test_pipeline
 
-import ystyle::xisp.core.*
+import ystyle::xisp.core.eval.*
+import ystyle::xisp.core.builtin.*
+import ystyle::xisp.core.module.*
 import ystyle::xisp.types.*
 import ystyle::xisp.parser.*
 

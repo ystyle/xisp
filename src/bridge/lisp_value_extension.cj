@@ -1,6 +1,8 @@
 package ystyle::xisp.bridge
 
-import ystyle::xisp.core.*
+import ystyle::xisp.core.eval.*
+import ystyle::xisp.core.builtin.*
+import ystyle::xisp.core.module.*
 import ystyle::xisp.types.*
 import std.collection.ArrayList
 import std.collection.HashMap

@@ -77,50 +77,66 @@ cli / examples → 使用根包 API
 
 | 当前 | 目标 | 包含文件 |
 |------|------|---------|
-| `ystyle::xisp.core` | `ystyle::xisp.core.eval` | evaluator.cj, eval_core.cj, eval_special_forms.cj, eval_macro.cj, eval_higher_order.cj, eval_pattern_match.cj, eval_helpers.cj |
-| `ystyle::xisp.core` | `ystyle::xisp.core.builtin` | builtin.cj, builtin_*.cj (arithmetic, comparison, logic, list, print, predicates, hashmap, higher_order, macros, aliases) |
-| `ystyle::xisp.core` | `ystyle::xisp.core.module` | module.cj, module_parser.cj, module_loader.cj, module_source.cj, loader.cj, script_loader.cj, dependency_resolver.cj |
-| `ystyle::xisp.types` | `ystyle::xisp.types` (不变) | types.cj, environment_test.cj, lispvalue_test.cj |
-| `ystyle::xisp.parser` | `ystyle::xisp.parser` (不变) | lexer.cj, parser.cj, token.cj, 测试文件 |
-| `ystyle::xisp.bridge` | `ystyle::xisp.bridge` (不变) | bridge.cj, lisp_deserializable.cj, lisp_value_extension.cj |
-| `ystyle::xisp.repl` | `ystyle::xisp.repl` (不变) | repl.cj, line_editor.cj, completer.cj, highlighter.cj, history.cj |
-| `ystyle::xisp.terminal` | `ystyle::xisp.terminal` (不变) | terminal.cj, types.cj, posix_impl.cj, win_impl.cj |
-| `ystyle::xisp.cli` | `ystyle::xisp.cli` (不变) | main.cj |
-| 根包 `ystyle::xisp` | 根包 `ystyle::xisp` (不变) | interpreter.cj, options.cj, 测试文件 |
+| `ystyle::xisp.core` | `ystyle::xisp.core.eval` | evaluator.cj, eval_*.cj, **module_loader.cj, script_loader.cj** |
+| `ystyle::xisp.core` | `ystyle::xisp.core.builtin` | builtin.cj, builtin_*.cj |
+| `ystyle::xisp.core` | `ystyle::xisp.core.module` | module.cj, module_parser.cj, module_source.cj, loader.cj, dependency_resolver.cj |
+| `ystyle::xisp.types` | 不变 | types.cj |
+| `ystyle::xisp.parser` | 不变 | lexer.cj, parser.cj, token.cj |
+| `ystyle::xisp.bridge` | 不变 | bridge.cj, lisp_deserializable.cj, lisp_value_extension.cj |
+| `ystyle::xisp.repl` | 不变 | repl.cj, line_editor.cj, completer.cj, highlighter.cj, history.cj |
+| `ystyle::xisp.terminal` | 不变 | terminal.cj, types.cj, posix_impl.cj, win_impl.cj |
+| `ystyle::xisp.cli` | 不变 | main.cj |
+| 根包 `ystyle::xisp` | 不变 | interpreter.cj, options.cj, 测试文件 |
 
 ### 目录结构
 
 ```
 src/
 ├── core/
-│   ├── eval/       → core.eval
+│   ├── eval/       → core.eval（含 ModuleLoader, ScriptLoader）
 │   ├── builtin/    → core.builtin
-│   └── module/     → core.module
-├── types/          → types（不变）
-├── parser/         → parser（不变）
-├── bridge/         → bridge（不变）
-├── repl/           → repl（不变）
-├── terminal/       → terminal（不变）
-├── cli/            → cli（不变）
-├── interpreter.cj  → ystyle::xisp（根包）
-├── options.cj      → ystyle::xisp（根包）
-└── *_test.cj       → ystyle::xisp（根包，测试文件）
+│   └── module/     → core.module（含 Loader 接口）
+├── types/
+├── parser/
+├── bridge/
+├── repl/
+├── terminal/
+├── cli/
+├── interpreter.cj
+├── options.cj
+└── *_test.cj
 ```
 
 ---
 
 ## 4. 循环依赖破解方案
 
-### 已知的潜在循环
-
-`core.builtin` 中的 `builtin_macros.cj` 需要 `Evaluator` 来定义宏（当前用 `(defmacro ...)` 字符串 + eval 的方式）。而 `core.eval` 不依赖 `core.builtin`。
+### 依赖方向
 
 ```
-core.builtin → core.eval  (builtin_macros 引用 Evaluator)
-core.eval → core.builtin  (❌ 不存在)
+core.module ← core.eval ← core.builtin
+      ↑                          ↑
+  (types, parser)           (types, core.eval)
 ```
 
-### 验证
+**全部单向，无循环。**
+
+### 三个关键决策
+
+**1. `ModuleLoader` 和 `ScriptLoader` 归入 `core.eval`**
+
+这两个类持有 `Evaluator` 引用（用于求值已加载的代码）。若放在 `core.module` 会导致 `core.module → core.eval` 反向引用。放入 `core.eval` 后：
+
+```
+core.eval → core.module  (ModuleLoader 引用 ModuleRegistry)
+core.module → core.eval  (❌ 前者的 ModuleParser 不需要 Evaluator)
+```
+
+**2. `ModuleParser` 去除未使用的 `evaluator` 字段**
+
+实际代码中 `evaluator` 字段在 `ModuleParser` 里只存不用（解析 `module.lisp` 直接用 `Lexer` + `Parser`）。去除后 `core.module` 不再依赖 `core.eval`。
+
+**3. `core.eval` 不依赖 `core.builtin`**
 
 当前 `evaluator.cj` 的 import 列表：
 ```
@@ -130,7 +146,21 @@ import std.collection.ArrayList
 
 不导入任何 builtin。`registerAll` 由 `interpreter.cj`（根包）编排调用，不在 `Evaluator` 内部触发。
 
-**结论：拆包后不会出现循环。**
+最终依赖图：
+
+```
+types          parser          terminal
+  ↓              ↓
+  └────→ core.module ←──┘       (无 eval 依赖)
+              ↓
+         core.eval               (含 ModuleLoader, ScriptLoader)
+          ↓       ↓
+    core.builtin  bridge/repl
+          ↓       ↓
+        interpreter.cj (根包编排初始化)
+              ↓
+             cli
+```
 
 ### 长期改进：直接构造 Macro 值
 
