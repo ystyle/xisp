@@ -6,44 +6,30 @@ import std.fs.*
 import std.io.*
 
 main(args: Array<String>): Int64 {
-    // 解析命令行参数
     if (args.size < 1) {
-        // 无参数：启动 REPL
-        runRepl()
+        runRepl(false)
     } else {
         let firstArg = args[0]
-
-        // 检查是否是 -h 参数
         if (firstArg == "-h" || firstArg == "--help") {
             printHelp()
             return 0
         }
-
-        // 检查是否是 -c 参数
         if (firstArg == "-c" && args.size >= 2) {
-            // -c 模式：直接执行代码
             let code = args[1]
             runCode(code)
+        } else if (firstArg == "--simple-repl") {
+            runRepl(true)
         } else {
-            // 有参数：执行脚本文件
             runScript(firstArg)
         }
     }
     0
 }
 
-/**
- * 创建解释器（公共方法）
- * @param options 解释器选项数组
- * @return 配置好的解释器
- */
 func createInterpreter(options: Array<InterpreterOption>): LispInterpreter {
     LispInterpreter(options)
 }
 
-/**
- * 打印帮助信息
- */
 func printHelp(): Unit {
     println("╔═══════════════════════════════════════════════════════════╗")
     println("║           星枢 - 仓颉嵌入式 Lisp 脚本语言                 ║")
@@ -52,6 +38,7 @@ func printHelp(): Unit {
     println("")
     println("用法:")
     println("  ystyle::xisp.cli                    启动 REPL 交互式环境")
+    println("  ystyle::xisp.cli --simple-repl      启动简单 REPL（非 TTY 回退）")
     println("  ystyle::xisp.cli <script.lisp>       执行 Lisp 脚本文件")
     println("  ystyle::xisp.cli -c \"<code>\"        直接执行 Lisp 代码")
     println("  ystyle::xisp.cli -h|--help          显示此帮助信息")
@@ -66,60 +53,44 @@ func printHelp(): Unit {
     println("")
 }
 
-/**
- * 启动 REPL 交互式环境
- */
-func runRepl(): Unit {
-    // REPL 使用脚本模式（允许文件导入）
+func runRepl(useSimple: Bool): Unit {
     let interpreter = createInterpreter([
         withStdLib(),
         withScriptMode()
     ])
-    interpreter.runREPL()
+    if (useSimple) {
+        interpreter.runSimpleREPL()
+    } else {
+        interpreter.runREPL()
+    }
 }
 
-/**
- * 执行代码字符串（-c 参数）
- */
 func runCode(code: String): Unit {
-    // 创建解释器
     let interpreter = createInterpreter([
         withStdLib(),
         withQuietMode(),
         withScriptMode()
     ])
-
-    // 执行代码
     try {
         let result = interpreter.eval(code)
-        // 如果有返回值，打印出来
         printResult(result)
     } catch (e: Exception) {
         eprintln("错误: ${e.message}")
     }
 }
 
-/**
- * 打印求值结果
- */
 func printResult(result: LispValue): Unit {
     match (result) {
-        case Nil => ()  // nil 不打印
+        case Nil => ()
         case _ => println(result.toString())
     }
 }
 
-/**
- * 执行脚本文件
- */
 func runScript(filePath: String): Unit {
-    // 创建解释器（脚本模式，允许文件导入）
     let interpreter = createInterpreter([
         withStdLib(),
         withQuietMode(),
         withScriptMode()
     ])
-
-    // 使用 interpreter.evalFile() 执行文件
     interpreter.evalFile(filePath)
 }
