@@ -104,13 +104,8 @@ nil          ; 空值
 (procedure? +)        ; true
 ```
 
-### 1.4 **环境与作用域**
+### 1.4 **闭包支持**
 ```lisp
-;; 环境操作
-(current-environment)   ; 获取当前环境
-(define-environment)    ; 创建新环境
-(set-environment! env)  ; 切换环境
-
 ;; 闭包支持（自动实现）
 (define (make-adder n)
   (lambda (x) (+ x n)))  ; 闭包捕获n
