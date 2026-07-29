@@ -8,12 +8,12 @@
 (import pkg2)
 
 ;; 直接引用符号看看是否存在
-(println "检查符号 pkg2.call-pkg1:")
-(println pkg2.call-pkg1)
+(println "检查符号 pkg2.greet:")
+(println pkg2.greet)
 
-;; 调用它
-(println "调用 pkg2.call-pkg1:")
-(pkg2.call-pkg1 "World")
+;; 调用 pkg2 函数
+(println "调用 pkg2.greet:")
+(pkg2.greet "World")
 
 ;; 导出符号
 (export demo-result)
