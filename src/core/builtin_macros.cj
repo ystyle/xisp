@@ -23,6 +23,7 @@ extend BuiltinMacros {
         definePushMacro(env)
         definePopMacro(env)
         defineNegateMacro(env)
+        defineDoMacro(env)
     }
 
     /**
@@ -130,9 +131,19 @@ extend BuiltinMacros {
      * 定义 negate 宏
      */
     private static func defineNegateMacro(env: Environment) {
-        // (defmacro negate (x)
-        //   (list (quote *) x (quote -1)))
         let code = "(defmacro negate (x) (list (quote *) x (quote -1)))"
+        let exprs = Parser.parseFromString(code)
+        if (exprs.size > 0) {
+            let evaluator = Evaluator(env)
+            evaluator.eval(exprs[0])
+        }
+    }
+
+    /**
+     * 定义 do 宏（begin 的别名）
+     */
+    private static func defineDoMacro(env: Environment) {
+        let code = "(defmacro do body (cons (quote begin) body))"
         let exprs = Parser.parseFromString(code)
         if (exprs.size > 0) {
             let evaluator = Evaluator(env)
