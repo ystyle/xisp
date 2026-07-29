@@ -7,7 +7,7 @@ import std.collection.ArrayList
  * 求值器 - Lisp 表达式求值
  */
 public class Evaluator {
-    var env: Environment
+    public var env: Environment
     var stackDepth: Int64 = 0
     var maxStackDepth: Int64 = 1000  // 默认栈深度限制
     var funcChecker: ?((String) -> Bool) = None  // 函数权限检查回调

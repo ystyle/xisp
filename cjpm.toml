@@ -16,7 +16,6 @@
   repository = ["https://gitcode.com/ystyle/xisp"]
 
 [dependencies]
-crossterm = "0.29.1"
 
 [test-dependencies]
 

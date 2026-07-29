@@ -700,8 +700,16 @@ public class LispInterpreter {
      * 运行 REPL（交互式解释器）
      */
     public func runREPL(): Int64 {
+        let repl = EnhancedRepl(this.env)
+        if (this.showBanner) {
+            repl.setShowBanner(true)
+        }
+        repl.run()
+        0
+    }
+
+    public func runSimpleREPL(): Int64 {
         let repl = Repl(this.env)
-        // 如果 Interpreter 已经打印了 Banner，REPL 就不再打印
         if (this.showBanner) {
             printBanner()
             repl.setShowBanner(false)
