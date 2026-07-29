@@ -3,7 +3,9 @@ package ystyle::xisp
 import std.unittest.*
 import std.unittest.testmacro.*
 import std.collection.ArrayList
-import ystyle::xisp.core.*
+import ystyle::xisp.core.eval.*
+import ystyle::xisp.core.builtin.*
+import ystyle::xisp.core.module.*
 import ystyle::xisp.types.*
 import ystyle::xisp.parser.*
 import ystyle::xisp.bridge.*

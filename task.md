@@ -118,13 +118,13 @@
 > - 参考 std.sync 和 std.core.Future<T> API
 
 ### 4.6 宏系统增强
-- [ ] 宏展开调试工具
+- [x] 宏展开调试工具 ✅ 已有（`macroexpand` / `macroexpand-all` 特殊形式）
 - [ ] 宏卫生性检查
 - [ ] compile-time 计算
 
 ### 4.7 错误处理和调试
 - [x] 错误类型系统 ✅ 已完成 (2026-01-27)
-- [ ] 调用栈追踪
+- [x] 调用栈追踪 ✅ 已完成
 - [ ] 调试器 (debugger)
 - [ ] 性能分析
 
@@ -132,7 +132,11 @@
 - [ ] API 文档生成
 - [ ] 包管理器 (cjlpm)
 - [ ] 测试覆盖率报告
-- [ ] REPL 增强功能
+- [x] REPL 补全（Completer）✅ 已完成 (2026-07-18)
+  - Completer 类：前缀匹配、大小写不敏感、环境符号 + 内置关键字
+  - getCommonPrefix 最长公共前缀计算
+  - cycleIndex Tab 循环索引支持
+  - 8 个单元测试全部通过
 
 ### 4.9 ModuleSource 模块数据源抽象 ✅
 - [x] `ModuleSource` 接口定义（getMetadata/listFiles/readFile）

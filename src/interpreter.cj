@@ -1,6 +1,8 @@
 package ystyle::xisp
 
-import ystyle::xisp.core.*
+import ystyle::xisp.core.eval.*
+import ystyle::xisp.core.builtin.*
+import ystyle::xisp.core.module.*
 import ystyle::xisp.types.*
 import ystyle::xisp.parser.*
 import ystyle::xisp.bridge.*
@@ -108,8 +110,8 @@ public class LispInterpreter {
         this.evaluator = Evaluator(this.env)
         this.bridge = BridgeManager(this.env)
 
-        // 设置 bridge 的 interpreter 引用
-        this.bridge.setInterpreter(this)
+        // 设置 path 检查回调（用于 std.io 的路径权限）
+        this.bridge.setPathChecker({ path, isWrite => this.isPathAllowed(path, isWrite) })
 
         // 设置函数权限检查回调
         this.evaluator.setFuncChecker({ funcName => this.isFunctionAllowed(funcName) })
@@ -790,87 +792,10 @@ public class LispInterpreter {
 
         // 重新注册标准桥接函数
         this.bridge = BridgeManager(this.env)
-        this.bridge.setInterpreter(this)
+        this.bridge.setPathChecker({ path, isWrite => this.isPathAllowed(path, isWrite) })
         this.bridge.registerStdIO()
         this.bridge.registerStdFS()
 
         // 注意：不重置配置字段（showBanner, verbose, debug, outputFn）
-    }
-}
-
-/**
- * 桥接管理器
- * 管理解释器的桥接函数注册
- */
-public class BridgeManager {
-    private var env: Environment
-    private var interpreter: ?LispInterpreter  // 改为可选，避免循环依赖
-
-    internal init(env: Environment) {
-        this.env = env
-        this.interpreter = None
-    }
-
-    internal init(env: Environment, interpreter: LispInterpreter) {
-        this.env = env
-        this.interpreter = Some(interpreter)
-    }
-
-    /**
-     * 设置解释器引用
-     */
-    internal func setInterpreter(interpreter: LispInterpreter) {
-        this.interpreter = Some(interpreter)
-    }
-
-    /**
-     * 注册桥接函数（不带命名空间）
-     */
-    public func register(
-        name: String,
-        handler: (ArrayList<LispValue>) -> LispValue
-    ): Unit {
-        this.env.define(name, NativeFunc(handler))
-    }
-
-    /**
-     * 注册带命名空间的桥接函数
-     * @param ns 命名空间（如 "mymodule"）
-     * @param name 函数名（如 "func"）
-     * @param handler 函数处理器
-     *
-     * 最终函数名将是 "mymodule:func"
-     */
-    public func registerWithNS(
-        ns: String,
-        name: String,
-        handler: (ArrayList<LispValue>) -> LispValue
-    ): Unit {
-        let fullName = "${ns}:${name}"
-        this.env.define(fullName, NativeFunc(handler))
-    }
-
-    /**
-     * 批量注册 std.io 模块
-     */
-    public func registerStdIO(): Unit {
-        // 创建路径权限检查回调
-        match (this.interpreter) {
-            case Some(interp) =>
-                let checker: (String, Bool) -> Bool = { path, isWrite =>
-                    interp.isPathAllowed(path, isWrite)
-                }
-                Bridge.registerStdIO(this.env, Some(checker))
-            case None =>
-                Bridge.registerStdIO(this.env)
-        }
-    }
-
-    /**
-     * 批量注册 std.fs 模块
-     */
-    public func registerStdFS(): Unit {
-        // FS 模块暂时不需要权限检查，如果需要可以类似处理
-        Bridge.registerStdFS(this.env)
     }
 }

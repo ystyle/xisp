@@ -1,0 +1,156 @@
+package ystyle::xisp.core.builtin
+import ystyle::xisp.types.*
+
+/**
+ * 现代化别名扩展
+ * 为传统 Lisp 函数提供现代化的别名
+ */
+extend BuiltinFunctions {
+    static func registerModernAliases(env: Environment) {
+        // (first lst) - car 的现代别名
+        let carFunc = env.lookup("car")
+        env.define("first", carFunc)
+
+        // (rest lst) - cdr 的现代别名
+        let cdrFunc = env.lookup("cdr")
+        env.define("rest", cdrFunc)
+
+        // (setq var value) - set! 的 Common Lisp 别名
+        // 注意：set! 是特殊形式，不能直接作为值引用
+        // 我们使用 keyword alias 机制
+        env.registerKeywordAlias("setq", "set!")
+
+        // (progn form1 form2 ...) - begin 的 Common Lisp 别名
+        env.registerKeywordAlias("progn", "begin")
+
+        // (second lst) - 获取第二个元素 (cadr 的现代别名)
+        env.define("second", NativeFunc({ args =>
+            if (args.size != 1) {
+                return Nil
+            }
+            if (let Cons(cell1) <- args[0]) {
+                if (let Cons(cell2) <- cell1.cdr) {
+                    cell2.car
+                } else {
+                    Nil
+                }
+            } else {
+                Nil
+            }
+        }))
+
+        // (third lst) - 获取第三个元素 (caddr 的现代别名)
+        env.define("third", NativeFunc({ args =>
+            if (args.size != 1) {
+                return Nil
+            }
+            if (let Cons(cell1) <- args[0]) {
+                if (let Cons(cell2) <- cell1.cdr) {
+                    if (let Cons(cell3) <- cell2.cdr) {
+                        cell3.car
+                    } else {
+                        Nil
+                    }
+                } else {
+                    Nil
+                }
+            } else {
+                Nil
+            }
+        }))
+
+        // (fourth lst) - 获取第四个元素 (cadddr 的现代别名)
+        env.define("fourth", NativeFunc({ args =>
+            if (args.size != 1) {
+                return Nil
+            }
+            if (let Cons(cell1) <- args[0]) {
+                if (let Cons(cell2) <- cell1.cdr) {
+                    if (let Cons(cell3) <- cell2.cdr) {
+                        if (let Cons(cell4) <- cell3.cdr) {
+                            cell4.car
+                        } else {
+                            Nil
+                        }
+                    } else {
+                        Nil
+                    }
+                } else {
+                    Nil
+                }
+            } else {
+                Nil
+            }
+        }))
+
+        // (prepend x lst) - cons 的现代别名
+        let consFunc = env.lookup("cons")
+        env.define("prepend", consFunc)
+
+        // (more lst) - rest 的另一个别名
+        env.define("more", cdrFunc)  // 复用上面的 cdrFunc
+
+        // ========== 传统 Lisp 组合函数 ==========
+
+        // (cadr lst) - (car (cdr lst)) - 第二个元素
+        env.define("cadr", env.lookup("second"))
+
+        // (caddr lst) - (car (cdr (cdr lst))) - 第三个元素
+        env.define("caddr", env.lookup("third"))
+
+        // (cadddr lst) - (car (cdr (cdr (cdr lst)))) - 第四个元素
+        env.define("cadddr", env.lookup("fourth"))
+
+        // (cddr lst) - (cdr (cdr lst)) - 除前两个外的剩余部分
+        env.define("cddr", NativeFunc({ args =>
+            if (args.size != 1) {
+                return Nil
+            }
+            if (let Cons(cell1) <- args[0]) {
+                if (let Cons(cell2) <- cell1.cdr) {
+                    cell2.cdr
+                } else {
+                    Nil
+                }
+            } else {
+                Nil
+            }
+        }))
+
+        // (cdar lst) - (cdr (car lst))
+        env.define("cdar", NativeFunc({ args =>
+            if (args.size != 1) {
+                return Nil
+            }
+            if (let Cons(cell1) <- args[0]) {
+                if (let Cons(carCell) <- cell1.car) {
+                    carCell.cdr
+                } else {
+                    Nil
+                }
+            } else {
+                Nil
+            }
+        }))
+
+        // (caar lst) - (car (car lst))
+        env.define("caar", NativeFunc({ args =>
+            if (args.size != 1) {
+                return Nil
+            }
+            if (let Cons(cell1) <- args[0]) {
+                if (let Cons(carCell) <- cell1.car) {
+                    carCell.car
+                } else {
+                    Nil
+                }
+            } else {
+                Nil
+            }
+        }))
+
+        // (string-append x1 x2 ...) - str 的 Common Lisp 风格别名
+        let strFunc = env.lookup("str")
+        env.define("string-append", strFunc)
+    }
+}

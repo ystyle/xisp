@@ -1,6 +1,8 @@
 package ystyle::xisp
 
-import ystyle::xisp.core.*
+import ystyle::xisp.core.eval.*
+import ystyle::xisp.core.builtin.*
+import ystyle::xisp.core.module.*
 
 /**
  * 解释器选项类型
