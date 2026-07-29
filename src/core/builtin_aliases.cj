@@ -59,6 +59,30 @@ extend BuiltinFunctions {
             }
         }))
 
+        // (fourth lst) - 获取第四个元素 (cadddr 的现代别名)
+        env.define("fourth", NativeFunc({ args =>
+            if (args.size != 1) {
+                return Nil
+            }
+            if (let Cons(cell1) <- args[0]) {
+                if (let Cons(cell2) <- cell1.cdr) {
+                    if (let Cons(cell3) <- cell2.cdr) {
+                        if (let Cons(cell4) <- cell3.cdr) {
+                            cell4.car
+                        } else {
+                            Nil
+                        }
+                    } else {
+                        Nil
+                    }
+                } else {
+                    Nil
+                }
+            } else {
+                Nil
+            }
+        }))
+
         // (prepend x lst) - cons 的现代别名
         let consFunc = env.lookup("cons")
         env.define("prepend", consFunc)
@@ -73,6 +97,9 @@ extend BuiltinFunctions {
 
         // (caddr lst) - (car (cdr (cdr lst))) - 第三个元素
         env.define("caddr", env.lookup("third"))
+
+        // (cadddr lst) - (car (cdr (cdr (cdr lst)))) - 第四个元素
+        env.define("cadddr", env.lookup("fourth"))
 
         // (cddr lst) - (cdr (cdr lst)) - 除前两个外的剩余部分
         env.define("cddr", NativeFunc({ args =>

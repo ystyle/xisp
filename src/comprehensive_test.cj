@@ -470,4 +470,55 @@ class ComprehensiveTest {
             case _ => @Fail("apply append should return a list")
         }
     }
+
+    @TestCase
+    func testNotEqual() {
+        let env = Environment()
+        BuiltinFunctions.registerAll(env)
+        let evaluator = Evaluator(env)
+
+        let t1 = evaluator.eval(Parser.parseSingleFromString("(!= 1 2)"))
+        match (t1) { case LispValue.Boolean(b) => @Assert(b); case _ => @Fail("expected bool") }
+
+        let t2 = evaluator.eval(Parser.parseSingleFromString("(!= 3 3)"))
+        match (t2) { case LispValue.Boolean(b) => @Assert(!b); case _ => @Fail("expected bool") }
+
+        let t3 = evaluator.eval(Parser.parseSingleFromString("(!= 1.5 2.5)"))
+        match (t3) { case LispValue.Boolean(b) => @Assert(b); case _ => @Fail("expected bool") }
+
+        let t4 = evaluator.eval(Parser.parseSingleFromString("(!= 1 1.0)"))
+        match (t4) { case LispValue.Boolean(b) => @Assert(!b); case _ => @Fail("expected bool") }
+    }
+
+    @TestCase
+    func testFourth() {
+        let env = Environment()
+        BuiltinFunctions.registerAll(env)
+        let evaluator = Evaluator(env)
+
+        let t1 = evaluator.eval(Parser.parseSingleFromString("(fourth (quote (1 2 3 4)))"))
+        match (t1) { case LispValue.Int(i) => @Assert(i == 4); case _ => @Fail("expected int 4") }
+
+        let t2 = evaluator.eval(Parser.parseSingleFromString("(fourth (quote (1 2 3)))"))
+        @Assert(t2.isNil())
+
+        let t3 = evaluator.eval(Parser.parseSingleFromString("(cadddr (quote (1 2 3 4)))"))
+        match (t3) { case LispValue.Int(i) => @Assert(i == 4); case _ => @Fail("expected int 4") }
+
+        let t4 = evaluator.eval(Parser.parseSingleFromString("(fourth (quote ()))"))
+        @Assert(t4.isNil())
+    }
+
+    @TestCase
+    func testDoMacro() {
+        let env = Environment()
+        BuiltinFunctions.registerAll(env)
+        let evaluator = Evaluator(env)
+
+        let t1 = evaluator.eval(Parser.parseSingleFromString("(do 1 2 3)"))
+        match (t1) { case LispValue.Int(i) => @Assert(i == 3); case _ => @Fail("expected int 3") }
+
+        let t2 = evaluator.eval(Parser.parseSingleFromString("(do)"))
+        @Assert(t2.isNil())
+    }
 }

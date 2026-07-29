@@ -228,5 +228,22 @@ extend BuiltinFunctions {
 
             LispValue.Boolean(result)
         }))
+
+        // (!= n1 n2) - 不等于
+        env.define("!=", NativeFunc({ args =>
+            if (args.size < 2) {
+                return LispValue.Boolean(false)
+            }
+            let eqFunc = env.lookup("=")
+            match (eqFunc) {
+                case NativeFunc(f) =>
+                    let eqResult = f(args)
+                    match (eqResult) {
+                        case LispValue.Boolean(b) => LispValue.Boolean(!b)
+                        case _ => LispValue.Boolean(true)
+                    }
+                case _ => LispValue.Boolean(true)
+            }
+        }))
     }
 }
