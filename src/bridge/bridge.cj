@@ -62,6 +62,9 @@ public class Bridge {
             }
 
             if (args.size > 0 && let Str(path) <- args[0]) {
+                if (!exists(Path(path))) {
+                    return Nil
+                }
                 try {
                     let bytes = File.readFrom(path)
                     let content = String.fromUtf8(bytes)
