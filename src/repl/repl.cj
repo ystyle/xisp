@@ -422,6 +422,28 @@ public class EnhancedRepl {
                 rl("请指定语言")
             }
             rl("支持的语言: zh/chinese/中文, en/english/英文")
+        } else if (cmd.startsWith(",load ")) {
+            let parts = cmd.split(" ")
+            if (parts.size >= 2) {
+                let filePath = parts[1]
+                try {
+                    let bytes = File.readFrom(filePath)
+                    let content = String.fromUtf8(bytes)
+                    rl("加载文件: ${filePath}")
+                    let exprs = Parser.parseFromString(content)
+                    for (i in 0..exprs.size) {
+                        let result = this.evaluator.eval(exprs[i])
+                        match (result) {
+                            case Error(err) => rl(this.highlighter.highlightError(err))
+                            case _ => ()
+                        }
+                    }
+                } catch (_: Exception) {
+                    rl("无法加载文件: ${filePath}")
+                }
+            } else {
+                rl("用法: ,load <文件路径>")
+            }
         } else {
             rl("未知命令: ${cmd}")
             rl("输入 ,help 查看可用命令")
@@ -462,6 +484,7 @@ public class EnhancedRepl {
         rl("  ,help              - 显示此帮助信息")
         rl("  ,env               - 查看当前环境中的所有变量")
         rl("  ,history           - 查看历史记录")
+        rl("  ,load <文件>        - 加载并执行 Lisp 文件")
         rl("  ,lang zh           - 启用中文关键字")
         rl("  ,lang en           - 切换回英文关键字")
         rl("")

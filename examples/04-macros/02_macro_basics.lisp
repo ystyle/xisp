@@ -109,13 +109,13 @@
 
 (println "7. 宏展开测试")
 (println "代码: (macroexpand '(when (> x 10) (println \"large\")))")
-(define expanded (macroexpand '(when (> x 10) (println "large")))
+(define expanded (macroexpand '(when (> x 10) (println "large"))))
 (println "展开结果:")
 (println expanded)
 (println "")
 
 (println "代码: (macroexpand-all '(when (> x 10) (println \"large\")))")
-(define expanded-all (macroexpand-all '(when (> x 10) (println "large")))
+(define expanded-all (macroexpand-all '(when (> x 10) (println "large"))))
 (println "完全展开结果:")
 (println expanded-all)
 (println "")

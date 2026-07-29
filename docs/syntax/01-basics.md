@@ -549,16 +549,16 @@ Xisp 支持可变参数、命名参数和默认值，让函数定义更加灵活
 
 ```lisp
 ; 使用 (param default-value) 语法
-(define (connect &key (host "localhost") (port 8080) (ssl false))
+(define (connect &key (host "localhost") (port 8080) (ssl #f))
   (list "host:" host "port:" port "ssl:" ssl))
 
 ; 使用默认值
 (connect)
-; => ("host:" "localhost" "port:" 8080 "ssl:" false)
+; => ("host:" "localhost" "port:" 8080 "ssl:" #f)
 
 ; 覆盖部分默认值
 (connect :port 9000)
-; => ("host:" "localhost" "port:" 9000 "ssl:" false)
+; => ("host:" "localhost" "port:" 9000 "ssl:" #f)
 
 ; 覆盖所有默认值
 (connect :host "example.com" :port 443 :ssl true)
