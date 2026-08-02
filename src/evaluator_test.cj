@@ -404,9 +404,8 @@ class MacroTest {
 
         let result2 = evalCode("(when 0 200)", env)
         match (result2) {
-            case LispValue.Int(i) => @Assert(i == 0)
-            case LispValue.Float(f) => @Assert(f == 0.0)
-            case _ => @Fail("builtin when macro should return 0")
+            case Nil => ()  // 条件为假返回 nil
+            case _ => @Fail("builtin when macro should return nil on false condition")
         }
 
         // 测试 incf 宏
