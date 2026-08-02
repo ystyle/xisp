@@ -3,7 +3,7 @@
 > 仓颉嵌入式 Lisp 脚本语言
 
 [![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
-[![Version](https://img.shields.io/badge/version-0.1.0--MVP-green.svg)](https://github.com/ystyle/xisp)
+[![Version](https://img.shields.io/badge/version-0.2.0-green.svg)](https://github.com/ystyle/xisp)
 [![Cangjie](https://img.shields.io/badge/Cangjie-1.1.0-orange.svg)](https://cangjie-lang.cn/)
 ![star](https://atomgit.com/ystyle/xisp/star/badge.svg)
 
@@ -125,25 +125,25 @@ Lisp 脚本示例位于 `examples/` 目录，按难度和学习路径组织：
 
 ### 内置函数
 
-**算术**: `+` `-` `*` `/` `mod`
-**比较**: `=` `<` `>` `<=` `>=`
+**算术**: `+` `-` `*` `/` `mod` `round` `sum` `product`
+**比较**: `=` `!=` `<` `>` `<=` `>=` `eq?`
 **逻辑**: `and` `or` `not`
-**列表**: `list` `cons` `first` `rest` `map` `filter` `reduce` `length` `range`
+**列表**: `list` `prepend` `first` `rest` `map` `filter` `reduce` `length` `range`
 **谓词**: `number?` `string?` `symbol?` `list?` `null?` `procedure?`
 **打印**: `print` `println` `princ` `display` `newline`
 
 **完整语法参考**: [docs-site/guide/02-basics.md](docs-site/guide/02-basics.md)
 
-**标准符号参考**: [docs-site/api/index.md](docs-site/api/index.md) - 84 个标准库函数快速索引
+**标准符号参考**: [docs-site/api/index.md](docs-site/api/index.md) - 109 个标准库函数快速索引
 
 ### 现代化语法
 
 - **向量字面量**: `[1 2 3]` → 列表
-- **哈希映射**: `{:key value}` → 关联列表
-- **哈希集合**: `#{1 2 3}` → 集合列表
-- **字符串插值**: `#"Value: {x}"` → 动态字符串
-- **解构绑定**: `(let [(x y & rest) list] ...)`
+- **哈希映射**: `{:key value}` → 哈希映射
+- **字符串插值**: `#"Value: #{x}"` → 动态字符串
+- **解构绑定**: `(let [[x y & rest] list] ...)`
 - **管道操作**: `(-> x (f) (g))`
+- **模式匹配**: `(match x (pattern) result ...)`
 
 **现代化语法文档**: [docs-site/guide/03-modern.md](docs-site/guide/03-modern.md)
 
@@ -347,5 +347,5 @@ class Point <: LispDeserializable<Point> {
 
 ---
 
-**版本**: 0.1.0 MVP
-**最后更新**: 2026-01-28
+**版本**: 0.2.0
+**最后更新**: 2026-08-02
