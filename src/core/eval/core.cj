@@ -32,37 +32,8 @@ extend Evaluator {
                         case _ => value
                     }
                 }
-            case Cons(cell) => this.evalCons(expr, cell)
+            case Cons(cell) => this.doEvalList(cell)
             case _ => expr
-        }
-    }
-
-    /**
-     * 求值 Cons 类型的表达式
-     * 先展开宏，然后求值
-     */
-    func evalCons(_: LispValue, cell: ConsCell): LispValue {
-        // 检查是否是宏调用
-        if (let Symbol(sym) <- cell.car) {
-            let resolvedSym = this.env.lookupKeyword(sym)
-            let value = this.env.lookup(resolvedSym)
-            // 检查是否是宏（忽略错误，当作不是宏处理）
-            match (value) {
-                case Macro(_, _, _) | MacroFromParams(_, _, _) =>
-                    // 这是一个宏，展开并重新求值
-                    let expanded = this.expandMacro(value, cell.cdr)
-                    // 对展开后的表达式求值
-                    this.eval(expanded)
-                case Error(_) =>
-                    // lookup 返回错误，说明符号未定义，继续正常求值流程
-                    this.doEvalList(cell)
-                case _ =>
-                    // 不是宏，正常求值（会先求值参数）
-                    this.doEvalList(cell)
-            }
-        } else {
-            // car 不是符号，正常求值
-            this.doEvalList(cell)
         }
     }
 
@@ -96,65 +67,55 @@ extend Evaluator {
             case Symbol(sym) =>
                 let actualSym = this.env.lookupKeyword(sym)
 
-                if (actualSym == "quote") {
-                    return this.evalQuote(rest)
-                } else if (actualSym == "backquote") {
-                    return this.evalBackquote(rest)
-                } else if (actualSym == "comma") {
-                    return this.evalComma(rest)
-                } else if (actualSym == "comma-at") {
-                    return this.evalCommaAt(rest)
-                } else if (actualSym == "define") {
-                    return this.evalDefine(rest)
-                } else if (actualSym == "defmacro") {
-                    return this.evalDefmacro(rest)
-                } else if (actualSym == "set!") {
-                    return this.evalSet(rest)
-                } else if (actualSym == "if") {
-                    return this.evalIf(rest)
-                } else if (actualSym == "lambda") {
-                    return this.evalLambda(rest)
-                } else if (actualSym == "begin") {
-                    return this.evalBegin(rest)
-                } else if (actualSym == "let") {
-                    return this.evalLet(rest)
-                } else if (actualSym == "let*") {
-                    return this.evalLetStar(rest)
-                } else if (actualSym == "when-let*") {
-                    return this.evalWhenLetStar(rest)
-                } else if (actualSym == "if-let") {
-                    return this.evalIfLet(rest)
-                } else if (actualSym == "condb") {
-                    return this.evalCondb(rest)
-                } else if (actualSym == "apply") {
-                    return this.evalApply(rest)
-                } else if (actualSym == "eval") {
-                    return this.evalEval(rest)
-                } else if (actualSym == "->") {
-                    return this.evalThreadFirst(rest)
-                } else if (actualSym == "map") {
-                    return this.evalMap(rest)
-                } else if (actualSym == "filter") {
-                    return this.evalFilter(rest)
-                } else if (actualSym == "reduce") {
-                    return this.evalReduce(rest)
-                } else if (actualSym == "match") {
-                    return this.evalMatch(rest)
-                } else if (actualSym == "macroexpand") {
-                    return this.evalMacroexpand(rest)
-                } else if (actualSym == "macroexpand-all") {
-                    return this.evalMacroexpandAll(rest)
-                } else if (actualSym == "import") {
-                    return this.evalImport(rest)
-                } else if (actualSym == "export") {
-                    return this.evalExport(rest)
-                } else {
-                    let actualFirst = if (sym != actualSym) {
-                        LispValue.Symbol(actualSym)
-                    } else {
-                        first
-                    }
-                    return this.evalFunctionCall(actualFirst, rest)
+                match (actualSym) {
+                    case "+" => return this.evalAdd(rest)
+                    case "-" => return this.evalSub(rest)
+                    case "*" => return this.evalMul(rest)
+                    case "/" => return this.evalDiv(rest)
+                    case "<" => return this.evalLt(rest)
+                    case ">" => return this.evalGt(rest)
+                    case "=" => return this.evalEq(rest)
+                    case "if" => return this.evalIf(rest)
+                    case "quote" => return this.evalQuote(rest)
+                    case "backquote" => return this.evalBackquote(rest)
+                    case "comma" => return this.evalComma(rest)
+                    case "comma-at" => return this.evalCommaAt(rest)
+                    case "define" => return this.evalDefine(rest)
+                    case "defmacro" => return this.evalDefmacro(rest)
+                    case "set!" => return this.evalSet(rest)
+                    case "lambda" => return this.evalLambda(rest)
+                    case "begin" => return this.evalBegin(rest)
+                    case "let" => return this.evalLet(rest)
+                    case "let*" => return this.evalLetStar(rest)
+                    case "when-let*" => return this.evalWhenLetStar(rest)
+                    case "if-let" => return this.evalIfLet(rest)
+                    case "condb" => return this.evalCondb(rest)
+                    case "apply" => return this.evalApply(rest)
+                    case "eval" => return this.evalEval(rest)
+                    case "->" => return this.evalThreadFirst(rest)
+                    case "map" => return this.evalMap(rest)
+                    case "filter" => return this.evalFilter(rest)
+                    case "reduce" => return this.evalReduce(rest)
+                    case "match" => return this.evalMatch(rest)
+                    case "macroexpand" => return this.evalMacroexpand(rest)
+                    case "macroexpand-all" => return this.evalMacroexpandAll(rest)
+                    case "import" => return this.evalImport(rest)
+                    case "export" => return this.evalExport(rest)
+                    case _ =>
+                        // 非特殊形式：先查是否为宏
+                        let value = this.env.lookup(actualSym)
+                        let actualFirst = if (sym != actualSym) {
+                            LispValue.Symbol(actualSym)
+                        } else {
+                            first
+                        }
+                        match (value) {
+                            case Macro(_, _, _) | MacroFromParams(_, _, _) =>
+                                let expanded = this.expandMacro(value, rest)
+                                this.eval(expanded)
+                            case _ =>
+                                this.evalFunctionCallWithValue(actualFirst, rest, value)
+                        }
                 }
             case _ =>
                 this.evalFunctionCall(first, rest)
@@ -173,9 +134,17 @@ extend Evaluator {
     }
 
     /**
-     * 函数调用
+     * 函数调用（先求值函数位置）
      */
     func evalFunctionCall(first: LispValue, rest: LispValue): LispValue {
+        let funcValue = this.eval(first)
+        this.evalFunctionCallWithValue(first, rest, funcValue)
+    }
+
+    /**
+     * 函数调用（使用已解析的函数值，避免重复 lookup）
+     */
+    func evalFunctionCallWithValue(first: LispValue, rest: LispValue, funcValue: LispValue): LispValue {
         let funcName = this.extractFuncName(first)
 
         // 权限检查
@@ -193,8 +162,6 @@ extend Evaluator {
 
         // 压入调用栈帧
         this.pushFrame(funcName)
-
-        let funcValue = this.eval(first)
 
         // 检查 funcValue 是否是错误
         match (funcValue) {

@@ -466,6 +466,11 @@ extend Evaluator {
      */
     func evalBegin(expr: LispValue): LispValue {
         if (let Cons(cell) <- expr) {
+            // 单表达式快速路径
+            match (cell.cdr) {
+                case Nil => return this.eval(cell.car)
+                case _ => ()
+            }
             var result: LispValue = Nil
             var current: LispValue = Cons(cell)
 
