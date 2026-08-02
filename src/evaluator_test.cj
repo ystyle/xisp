@@ -291,6 +291,48 @@ class MacroTest {
     }
 
     @TestCase
+    func testBuiltinWhenMacro() {
+        let env = Environment()
+        BuiltinFunctions.registerAll(env)
+
+        // 内置 when：条件真时返回最后表达式值，条件假返回 nil
+        let result1 = evalCode("(when 1 100)", env)
+        match (result1) {
+            case LispValue.Int(i) => @Assert(i == 100)
+            case LispValue.Float(f) => @Assert(f == 100.0)
+            case _ => @Fail("builtin when true should return 100")
+        }
+
+        let result2 = evalCode("(when 0 100)", env)
+        match (result2) {
+            case Nil => ()
+            case _ => @Fail("builtin when false should return nil")
+        }
+
+        // 多表达式：返回最后一个表达式的值
+        let result3 = evalCode("(when 1 1 2 3)", env)
+        match (result3) {
+            case LispValue.Int(i) => @Assert(i == 3)
+            case LispValue.Float(f) => @Assert(f == 3.0)
+            case _ => @Fail("builtin when multi-expr should return last value")
+        }
+
+        // unless：条件假时执行，条件真返回 nil
+        let result4 = evalCode("(unless 0 42)", env)
+        match (result4) {
+            case LispValue.Int(i) => @Assert(i == 42)
+            case LispValue.Float(f) => @Assert(f == 42.0)
+            case _ => @Fail("builtin unless false should return 42")
+        }
+
+        let result5 = evalCode("(unless 1 42)", env)
+        match (result5) {
+            case Nil => ()
+            case _ => @Fail("builtin unless true should return nil")
+        }
+    }
+
+    @TestCase
     func testIncfMacro() {
         let env = Environment()
         BuiltinFunctions.registerAll(env)

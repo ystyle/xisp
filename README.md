@@ -105,7 +105,7 @@ Lisp 脚本示例位于 `examples/` 目录，按难度和学习路径组织：
 | [管道操作符](src/examples/test_pipeline/) | 管道操作符测试 | `cjpm run --name test_pipeline` |
 | [守卫条件](src/examples/guard_test/) | 守卫条件测试 | `cjpm run --name guard_test` |
 
-**更多详情**: 查看 [docs/integration/bridge.md](docs/integration/bridge.md) - 桥接层 API 文档
+**更多详情**: 查看 [docs-site/integration/bridge.md](docs-site/integration/bridge.md) - 桥接层 API 文档
 
 ---
 
@@ -113,15 +113,15 @@ Lisp 脚本示例位于 `examples/` 目录，按难度和学习路径组织：
 
 ### 特殊形式
 
-- [`define`](docs/syntax/01-basics.md) - 定义变量和函数
-- [`lambda`](docs/syntax/01-basics.md) - 匿名函数
-- [`if`](docs/syntax/01-basics.md) - 条件判断
-- [`quote`](docs/syntax/01-basics.md) / `'` - 引用
-- [`let`](docs/syntax/02-modern.md) - 局部绑定（支持解构）
-- [`begin`](docs/syntax/01-basics.md) - 顺序执行
-- [`set!`](docs/syntax/01-basics.md) - 变量赋值
-- [`match`](docs/syntax/02-modern.md) - 模式匹配
-- [`->`](docs/syntax/02-modern.md) - 管道操作符（线程宏）
+- [`define`](docs-site/guide/02-basics.md) - 定义变量和函数
+- [`lambda`](docs-site/guide/02-basics.md) - 匿名函数
+- [`if`](docs-site/guide/02-basics.md) - 条件判断
+- [`quote`](docs-site/guide/02-basics.md) / `'` - 引用
+- [`let`](docs-site/guide/03-modern.md) - 局部绑定（支持解构）
+- [`begin`](docs-site/guide/02-basics.md) - 顺序执行
+- [`set!`](docs-site/guide/02-basics.md) - 变量赋值
+- [`match`](docs-site/guide/03-modern.md) - 模式匹配
+- [`->`](docs-site/guide/03-modern.md) - 管道操作符（线程宏）
 
 ### 内置函数
 
@@ -132,9 +132,9 @@ Lisp 脚本示例位于 `examples/` 目录，按难度和学习路径组织：
 **谓词**: `number?` `string?` `symbol?` `list?` `null?` `procedure?`
 **打印**: `print` `println` `princ` `display` `newline`
 
-**完整语法参考**: [docs/syntax/01-basics.md](docs/syntax/01-basics.md)
+**完整语法参考**: [docs-site/guide/02-basics.md](docs-site/guide/02-basics.md)
 
-**标准符号参考**: [docs/appendix-std-symbols.md](docs/appendix-std-symbols.md) - 84 个标准库函数快速索引
+**标准符号参考**: [docs-site/api/index.md](docs-site/api/index.md) - 84 个标准库函数快速索引
 
 ### 现代化语法
 
@@ -145,7 +145,7 @@ Lisp 脚本示例位于 `examples/` 目录，按难度和学习路径组织：
 - **解构绑定**: `(let [(x y & rest) list] ...)`
 - **管道操作**: `(-> x (f) (g))`
 
-**现代化语法文档**: [docs/syntax/02-modern.md](docs/syntax/02-modern.md)
+**现代化语法文档**: [docs-site/guide/03-modern.md](docs-site/guide/03-modern.md)
 
 ## Unicode 和多语言支持
 
@@ -177,7 +177,7 @@ xisp> (定义 年龄 25)
 ```
 
 **示例文件**: [examples/03-advanced/03_unicode.lisp](examples/03-advanced/)
-**详细文档**: [docs/unicode/chinese_support.md](docs/unicode/chinese_support.md)
+**详细文档**: [docs-site/guide/06-unicode.md](docs-site/guide/06-unicode.md)
 
 ---
 
@@ -198,7 +198,7 @@ main() {
 ```
 
 **示例代码**: [src/examples/options_usage/main.cj](src/examples/options_usage/)
-**详细文档**: [docs/integration/options_system.md](docs/integration/options_system.md)
+**详细文档**: [docs-site/integration/options.md](docs-site/integration/options.md)
 
 ---
 
@@ -303,32 +303,32 @@ class Point <: LispDeserializable<Point> {
 }
 ```
 
-**完整桥接 API 文档**: [docs/integration/bridge.md](docs/integration/bridge.md)
+**完整桥接 API 文档**: [docs-site/integration/bridge.md](docs-site/integration/bridge.md)
 
 ## 文档
 
 **文档索引**: [docs/README.md](docs/README.md) - 完整文档导航
 
 ### 语法文档
-- [基础语法](docs/syntax/01-basics.md) - 数据类型、特殊形式、内置函数
-- [现代语法特性](docs/syntax/02-modern.md) - 向量、哈希、插值、解构、管道、模式匹配
-- [宏系统](docs/syntax/03-macros.md) - 宏定义、宏展开、卫生宏
+- [基础语法](docs-site/guide/02-basics.md) - 数据类型、特殊形式、内置函数
+- [现代语法特性](docs-site/guide/03-modern.md) - 向量、哈希、插值、解构、管道、模式匹配
+- [宏系统](docs-site/guide/04-macros.md) - 宏定义、宏展开、卫生宏
 - [设计文档](docs/design.md) - 架构设计和技术选型
-- [模块系统](docs/modules.md) - 模块导入、导出、管理
+- [模块系统](docs-site/guide/05-modules.md) - 模块导入、导出、管理
 
 ### 集成文档
-- [桥接层 API](docs/integration/bridge.md) - Lisp 与仓颉互操作（双向调用、类型转换）
-- [选项系统](docs/integration/options_system.md) - 解释器配置选项
-- [沙箱系统](docs/integration/sandbox.md) - 安全执行环境和权限控制
+- [桥接层 API](docs-site/integration/bridge.md) - Lisp 与仓颉互操作（双向调用、类型转换）
+- [选项系统](docs-site/integration/options.md) - 解释器配置选项
+- [沙箱系统](docs-site/integration/sandbox.md) - 安全执行环境和权限控制
 
 ### 参考文档
-- [标准符号附录](docs/appendix-std-symbols.md) - 84 个标准库符号分类参考
+- [标准符号附录](docs-site/api/index.md) - 84 个标准库符号分类参考
 - [模块来源设计](docs/module-source-design.md) - 模块系统扩展性设计
 
 ### Unicode 支持
-- [Unicode 支持概述](UNICODE_SUPPORT.md) - Unicode 和多语言支持
-- [中文支持详细文档](docs/unicode/chinese_support.md) - 完整的中文关键字说明
-- [中文快速开始](docs/unicode/chinese_quickstart.md) - 中文编程入门
+- [Unicode 支持](docs-site/guide/06-unicode.md) - Unicode 和多语言支持
+- [中文支持详细文档](docs-site/guide/06-unicode.md) - 完整的中文关键字说明
+- [中文快速开始](docs-site/guide/06-unicode.md) - 中文编程入门
 
 ## 贡献
 

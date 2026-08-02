@@ -109,13 +109,13 @@
 ;; 传统：繁琐拼接
 (string-append "Hello " name "!")
 ;; 现代：插值语法
-#"Hello {name}, you are {age} years old."
+#"Hello #{name}, you are #{age} years old."
 ```
 
-**实现**: Reader层将插值展开为`string-append`调用。
+**实现**: Reader层将插值展开为`cangjie::interpolate`调用。
 
 #### **5. 异步支持 (spawn + Future<T>)**
->尚未实现
+> 尚未实现（设计预留）
 ```lisp
 ;; 创建异步任务
 (let [future (spawn (http-get url))]
@@ -213,7 +213,7 @@ Xisp 提供了完整的模块系统，支持代码组织、命名空间隔离和
     (ystyle::log "0.2.0")))    ; 依赖声明
 ```
 
-**详细文档**：完整的模块系统说明请参见 **[docs/modules.md](modules.md)**，包括：
+**详细文档**：完整的模块系统说明请参见 **[模块系统指南](../docs-site/guide/05-modules.md)**，包括：
 - 目录结构设计
 - 符号导出与导入
 - 版本管理
@@ -334,7 +334,7 @@ Xisp 已实现 std.io 和 std.fs 的桥接函数：
 (cangjie::list-dir ".")              ; => ("file1.txt" "file2.cj" ...)
 ```
 
-**详细文档**：完整的桥接 API 文档请参见 **[docs/integration/bridge.md](integration/bridge.md)**，包括：
+**详细文档**：完整的桥接 API 文档请参见 **[桥接指南](../docs-site/integration/bridge.md)**，包括：
 - LispInterpreter 完整 API
 - LispConvertible 接口
 - LispDeserializable<T> 接口
@@ -386,7 +386,7 @@ let interpreter = LispInterpreter([
 ])
 ```
 
-**详细文档**：完整的沙箱系统文档请参见 **[docs/integration/sandbox.md](integration/sandbox.md)**，包括：
+**详细文档**：完整的沙箱系统文档请参见 **[沙箱指南](../docs-site/integration/sandbox.md)**，包括：
 - 完整的选项列表
 - 栈深度限制
 - 执行超时控制
@@ -414,11 +414,14 @@ let interpreter = LispInterpreter([
 - [x] 向量/哈希字面量`[]`/`{}`
 - [x] 字符串插值`#"..."`
 - [x] 模式匹配`match`
+- [x] 宏系统（defmacro + 反引号）
+- [x] 沙箱系统（白名单/黑名单/超时/栈深）
 - [ ] `spawn`异步语法（Future<T>）
 
-### **阶段4：生产级（待实现）**
-- [ ] 性能优化（字节码缓存、Token复用、字符串切片）
-- [ ] 完整调试工具（断点调试、AST查看、宏展开）
+### **阶段4：生产级（部分完成）**
+- [x] 性能优化（算术特殊形式化、Int 快速路径、守卫缓存，benchmark 22.3s → 1.9s）
+- [x] CLI 栈深配置（`--stack-depth` / `XISP_MAX_STACK_DEPTH`）
+- [ ] 完整调试工具（断点调试、AST查看）
 - [ ] 安全加固（网络访问控制、资源配额）
 - [ ] 示例项目（HTTP Server）
 

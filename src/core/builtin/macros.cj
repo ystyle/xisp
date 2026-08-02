@@ -30,11 +30,12 @@ extend BuiltinMacros {
 
     /**
      * 定义 when 宏
+     * (when test body...) → (if test (begin body...) nil)
      */
     private static func defineWhenMacro(env: Environment) {
-        // (defmacro when (test then)
-        //   (list (quote if) test then (quote 0)))
-        let code = "(defmacro when (test then) (list (quote if) test then (quote 0)))"
+        // (defmacro when (test . body)
+        //   (if test (cons (quote begin) body) (quote 0)))
+        let code = "(defmacro when (test . body) (list (quote if) test (cons (quote begin) body) (quote nil)))"
         let exprs = Parser.parseFromString(code)
         if (exprs.size > 0) {
             let evaluator = Evaluator(env)
@@ -44,11 +45,12 @@ extend BuiltinMacros {
 
     /**
      * 定义 unless 宏
+     * (unless test body...) → (if test nil (begin body...))
      */
     private static func defineUnlessMacro(env: Environment) {
-        // (defmacro unless (test then)
-        //   (list (quote if) test (quote 0) then))
-        let code = "(defmacro unless (test then) (list (quote if) test (quote 0) then))"
+        // (defmacro unless (test . body)
+        //   (if test (quote nil) (cons (quote begin) body)))
+        let code = "(defmacro unless (test . body) (list (quote if) test (quote nil) (cons (quote begin) body)))"
         let exprs = Parser.parseFromString(code)
         if (exprs.size > 0) {
             let evaluator = Evaluator(env)
