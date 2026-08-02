@@ -80,7 +80,6 @@ nil          ; 空值
 ;; 查询
 (length '(a b c))      ; 3
 (null? '())            ; true
-(member 2 '(1 2 3))    ; (2 3)
 
 ;; 高阶操作
 (map (lambda (x) (* x x)) '(1 2 3))   ; (1 4 9)
@@ -232,11 +231,6 @@ fn eval_if(&mut self, args: LispValue, env: &Environment) {
 (error "Something went wrong")
 (raise "Error message")
 
-;; 错误处理（可以基于lambda实现）
-(try
-  (dangerous-operation)
-  (catch (lambda (err) (println "Error:" err))))
-
 ;; 断言
 (assert (= 2 (+ 1 1)))
 ```
@@ -258,24 +252,26 @@ fn eval_if(&mut self, args: LispValue, env: &Environment) {
 (macroexpand '(when test (do-something)))
 ```
 
-### 3.3 **尾递归优化**
+### 3.3 **尾递归优化**（尚未实现）
 ```lisp
-;; 自动优化尾递归，不消耗栈空间
+;; 目标：自动优化尾递归，不消耗栈空间
 (define (sum n acc)
   (if (= n 0)
       acc
-      (sum (- n 1) (+ acc n))))  ; 尾调用，自动优化
+      (sum (- n 1) (+ acc n))))  ; 尾调用，待优化
 ```
 
-### 3.4 **简单I/O（纯内存）**
-```lisp
-;; 仅字符串操作，不依赖系统
-(read-string "input")  ; 从字符串读取S表达式
-(write-to-string expr) ; 将表达式转为字符串
+> 当前递归受栈深度限制（默认 1000，可用 `--stack-depth` 调整）。
 
-;; 标准输入输出（简单实现）
+### 3.4 **简单I/O（设计预留）**
+```lisp
+;; 目标：仅字符串操作，不依赖系统
+;; (read-string "input")   ; 从字符串读取S表达式（尚未实现）
+;; (write-to-string expr)  ; 将表达式转为字符串（尚未实现）
+
+;; 标准输出（已实现）
 (print "Hello")
-(read-line)  ; 从预定义输入流读取
+(println "Hello")
 ```
 
 ## 四、**MVP实现路线图（仅核心）**

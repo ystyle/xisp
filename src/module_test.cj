@@ -6,6 +6,7 @@ import ystyle::xisp.types.*
 import ystyle::xisp.core.eval.*
 import ystyle::xisp.core.builtin.*
 import ystyle::xisp.core.module.*
+import ystyle::xisp.parser.*
 import std.collection.ArrayList
 import std.collection.*
 import std.fs.*
@@ -747,6 +748,37 @@ class ModuleTest {
         match (evaluator.currentFilePath) {
             case Some(_) => @Fail("currentFilePath should be None in REPL")
             case None => ()  // 正确：REPL 环境没有当前文件
+        }
+    }
+
+    /**
+     * 测试导入不存在的模块应报错
+     * 修复：模块无 module.lisp 元数据时 loadModule 直接返回 None，
+     * import 应返回 ModuleError 而非静默成功
+     */
+    @TestCase
+    func testImportNonexistentModule() {
+        let env = Environment()
+        BuiltinFunctions.registerAll(env)
+        let evaluator = Evaluator(env)
+        evaluator.initModuleSystem()
+
+        // 导入不存在的模块应返回 Error
+        let result = evaluator.eval(Parser.parseSingleFromString("(import nonexistent::foo)"))
+        match (result) {
+            case Error(err) =>
+                @Assert(err.message.contains("not found"))
+            case _ =>
+                @Fail("import of nonexistent module should return Error, got: ${result.toString()}")
+        }
+
+        // 导入不存在的无组织模块也应报错
+        let result2 = evaluator.eval(Parser.parseSingleFromString("(import no_such_module)"))
+        match (result2) {
+            case Error(err) =>
+                @Assert(err.message.contains("not found"))
+            case _ =>
+                @Fail("import of nonexistent bare module should return Error")
         }
     }
 }

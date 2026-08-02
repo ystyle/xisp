@@ -112,6 +112,12 @@ public class ModuleLoader <: Loader {
         // 1. 获取 module.lisp 元数据
         let metadata = src.getMetadata(moduleName)
 
+        // 模块不存在：无元数据即认为模块未找到，直接返回 None
+        match (metadata) {
+            case Some(_) => ()
+            case None => return None
+        }
+
         // 2. 解析模块信息
         let packageInfo: Option<PackageInfo> = match (metadata) {
             case Some(content) =>

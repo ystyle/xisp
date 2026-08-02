@@ -71,6 +71,7 @@ cjpm clean
 ├── docs/            # 设计文档、语法手册、集成指南
 ├── examples/        # Lisp 示例文件
 ├── lisp-tests/      # Lisp 集成测试
+├── temp-*/          # Lisp 临时测试文件
 ├── src/             # 仓颉源码
 │   ├── bridge/      # 仓颉互操作桥接
 │   ├── cli/         # 命令行入口
