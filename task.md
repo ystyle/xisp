@@ -390,3 +390,21 @@
 - 2026-01-23: 模块系统测试全部通过
 - 2026-01-22: 现代化语法和桥接层完成
 - 2026-01-21: 核心 MVP 完成
+
+## M7: AST 求值器性能优化（拆箱快速路径） ✅
+
+- [x] 算术特殊形式化：`+ - * / < > =` 从函数调用提升为特殊形式
+  - 跳过 env.lookup / funcChecker / pushFrame / NativeFunc 分派 / evalArguments
+- [x] 二元 Int 快速路径：`(+ a b)` 两参均为 Int 时直接 Int64 计算，零中间分配
+- [x] `isNativeArith` 守卫：用户重定义操作符时回退普通函数调用
+- [x] 特殊形式分派重排：算术操作符移到 match 最前，减少字符串比较
+- [x] evalCons 去冗余：宏检查移到特殊形式分派之后（特殊形式零 env.lookup）
+- [x] eval 直接调 doEvalList（去掉中间层）
+- [x] 消除重复函数 lookup（evalFunctionCallWithValue 复用已解析值）
+- [x] evalBegin 单表达式快速路径
+- [x] Environment 惰性初始化 keywordAliases/exportedSymbols（减少 createChild 分配）
+
+**性能**: fib(30)+fact(20)+sum-to(500000) 22.3s → ~10.6s (~52%)
+**测试**: 314 单元测试 + 全部 Lisp 集成测试通过
+**分支**: feat/unboxed-stack（从 master 切出）
+**待合并**: master

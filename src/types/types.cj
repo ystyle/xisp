@@ -26,14 +26,16 @@ public open class Environment {
     /**
      * 关键字别名映射表
      * 用于支持多语言关键字（如：定义 -> define）
+     * 惰性初始化：大多数环境不使用别名，避免每次 createChild 都分配
      */
-    private var keywordAliases: HashMap<String, String>
+    private var keywordAliases: ?HashMap<String, String> = None
 
     /**
      * 导出符号集合
      * 用于跟踪哪些符号被导出（用于包导入）
+     * 惰性初始化：大多数环境不使用导出，避免每次 createChild 都分配
      */
-    private var exportedSymbols: HashSet<String>
+    private var exportedSymbols: ?HashSet<String> = None
 
     /**
      * 默认构造函数
@@ -41,8 +43,6 @@ public open class Environment {
     public init() {
         this.parent = None
         this.bindings = HashMap<String, LispValue>()
-        this.keywordAliases = HashMap<String, String>()
-        this.exportedSymbols = HashSet<String>()
     }
 
     /**
@@ -51,8 +51,6 @@ public open class Environment {
     public init(parent: Environment) {
         this.parent = Some(parent)
         this.bindings = HashMap<String, LispValue>()
-        this.keywordAliases = HashMap<String, String>()
-        this.exportedSymbols = HashSet<String>()
     }
 
     /**
@@ -152,7 +150,11 @@ public open class Environment {
      * @param symbolName 符号名称
      */
     public func addExportedSymbol(symbolName: String): Unit {
-        this.exportedSymbols.add(symbolName)
+        if (this.exportedSymbols.isNone()) {
+            this.exportedSymbols = Some(HashSet<String>())
+        }
+        let set = this.exportedSymbols.getOrThrow()
+        set.add(symbolName)
     }
 
     /**
@@ -161,7 +163,7 @@ public open class Environment {
      */
     public func addExportedSymbols(symbolNames: ArrayList<String>): Unit {
         for (name in symbolNames) {
-            this.exportedSymbols.add(name)
+            this.addExportedSymbol(name)
         }
     }
 
@@ -171,7 +173,10 @@ public open class Environment {
      * @return 如果符号已导出返回 true，否则返回 false
      */
     public func isExported(symbolName: String): Bool {
-        this.exportedSymbols.contains(symbolName)
+        match (this.exportedSymbols) {
+            case Some(set) => set.contains(symbolName)
+            case None => false
+        }
     }
 
     /**
@@ -180,8 +185,12 @@ public open class Environment {
      */
     public func getExportedSymbols(): ArrayList<String> {
         let symbols = ArrayList<String>()
-        for (sym in this.exportedSymbols) {
-            symbols.add(sym)
+        match (this.exportedSymbols) {
+            case Some(set) =>
+                for (sym in set) {
+                    symbols.add(sym)
+                }
+            case None => ()
         }
         symbols
     }
@@ -193,7 +202,7 @@ public open class Environment {
     public func getExportedBindings(): ArrayList<(String, LispValue)> {
         let bindings = ArrayList<(String, LispValue)>()
         for ((key, value) in this.bindings) {
-            if (this.exportedSymbols.contains(key)) {
+            if (this.isExported(key)) {
                 bindings.add((key, value))
             }
         }
@@ -210,8 +219,14 @@ public open class Environment {
             env.bindings[key] = value
         }
         // 也复制关键字别名
-        for ((alias, original) in this.keywordAliases) {
-            env.keywordAliases[alias] = original
+        match (this.keywordAliases) {
+            case Some(aliases) =>
+                let newAliases = HashMap<String, String>()
+                for ((alias, original) in aliases) {
+                    newAliases[alias] = original
+                }
+                env.keywordAliases = Some(newAliases)
+            case None => ()
         }
         env
     }
@@ -224,7 +239,11 @@ public open class Environment {
      * @param original 原始关键字（如："define"）
      */
     public func registerKeywordAlias(alias: String, original: String): Unit {
-        this.keywordAliases[alias] = original
+        if (this.keywordAliases.isNone()) {
+            this.keywordAliases = Some(HashMap<String, String>())
+        }
+        let aliases = this.keywordAliases.getOrThrow()
+        aliases[alias] = original
     }
 
     /**
@@ -236,11 +255,15 @@ public open class Environment {
      */
     public func lookupKeyword(sym: String): String {
         // 先检查当前环境的别名映射
-        if (this.keywordAliases.contains(sym)) {
-            match (this.keywordAliases.get(sym)) {
-                case Some(original) => return original
-                case None => ()
-            }
+        match (this.keywordAliases) {
+            case Some(aliases) =>
+                if (aliases.contains(sym)) {
+                    match (aliases.get(sym)) {
+                        case Some(original) => return original
+                        case None => ()
+                    }
+                }
+            case None => ()
         }
 
         // 如果是父环境的别名，也要查找

@@ -18,6 +18,7 @@ public class Evaluator {
     var maxMacroExpandDepth: Int64 = 100  // 最大宏展开深度
     var inMacroExpandCall: Bool = false  // 是否在 macroexpand/macroexpand-all 调用中（不执行展开后的结果）
 
+    // 性能探针（调试用）
     // 当前执行的文件路径（用于相对路径导入）
     public var currentFilePath: Option<String> = None
 
@@ -33,6 +34,8 @@ public class Evaluator {
     // 编译器和虚拟机（预留）
     var compiler: Compiler = Compiler()
     var vm: VM = VM()
+
+    // 性能探针（调试用）
 
     /**
      * 设置编译器

@@ -7,7 +7,7 @@
   target-dir = ""
   script-dir = ""
   output-type = "static"
-  compile-option = "--static -Woff unused"
+  compile-option = "-O2 --static -Woff unused"
   override-compile-option = ""
   link-option = ""
   include =["src"]
