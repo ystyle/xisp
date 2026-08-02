@@ -266,12 +266,16 @@ extend Evaluator {
     }
 
     /**
-     * 检查操作符是否仍绑定到原生函数
+     * 检查操作符是否仍绑定到原生函数且未被权限禁止
      * 用户重定义操作符（如 (define + ...)）时应回退到普通函数调用
      *
      * 使用版本缓存：Environment 对 + - * / < > = 的 define/set 递增
      * arithVersion，版本未变时直接返回缓存结果（O(1)），
      * 避免每次算术都递归遍历环境链。
+     *
+     * 权限检查（funcChecker）实时执行，不参与缓存：
+     * 沙箱白名单/黑名单禁止的操作符回退到普通调用，
+     * 由普通调用路径返回权限错误。
      */
     private func isNativeArith(opName: String): Bool {
         if (this.arithGuardVersion != this.env.arithVersion.value) {
@@ -284,7 +288,7 @@ extend Evaluator {
             this.arithGuardCache[5] = this.checkNative(">")
             this.arithGuardCache[6] = this.checkNative("=")
         }
-        match (opName) {
+        let isNative = match (opName) {
             case "+" => this.arithGuardCache[0]
             case "-" => this.arithGuardCache[1]
             case "*" => this.arithGuardCache[2]
@@ -293,6 +297,15 @@ extend Evaluator {
             case ">" => this.arithGuardCache[5]
             case _ => this.arithGuardCache[6]
         }
+        // 沙箱权限检查：被禁止的操作符回退普通调用（返回权限错误）
+        if (isNative) {
+            if (let Some(checker) <- this.funcChecker) {
+                if (!checker(opName)) {
+                    return false
+                }
+            }
+        }
+        isNative
     }
 
     /**
