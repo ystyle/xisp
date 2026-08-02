@@ -724,6 +724,161 @@ class ModernTest {
     }
 
     @TestCase
+    func testMatchClauseSkip() {
+        let env = Environment()
+        BuiltinFunctions.registerAll(env)
+        let evaluator = Evaluator(env)
+
+        println("\n=== 测试 match 子句跳过（getNextAndSkip 路径）===")
+
+        // 测试1: 常量子句失败后匹配后续子句
+        println("\n测试1: 常量子句失败后匹配")
+        let result1 = evaluator.eval(Parser.parseSingleFromString("(match 2 3 \"three\" 2 \"two\")"))
+        @Assert(result1.toString() == "\"two\"")
+
+        // 测试2: 多个常量子句全部失败走通配
+        println("\n测试2: 多个常量失败走通配")
+        let result2 = evaluator.eval(Parser.parseSingleFromString("(match 99 3 \"three\" 4 \"four\" _ \"fallback\")"))
+        @Assert(result2.toString() == "\"fallback\"")
+
+        // 测试3: 列表模式失败后跳过
+        println("\n测试3: 列表模式失败后跳过")
+        let result3 = evaluator.eval(Parser.parseSingleFromString("(match (list 1 2 3 4) (a b) \"two\" (a b c d) (list a b c d) _ \"none\")"))
+        @Assert(result3.toString() == "(1 2 3 4)")
+
+        // 测试4: 守卫失败跳过结果表达式继续
+        println("\n测试4: 守卫失败跳过")
+        let result4 = evaluator.eval(Parser.parseSingleFromString("(match 7 (x when (> x 20)) \"very large\" (x when (> x 5)) \"medium\" _ \"small\")"))
+        @Assert(result4.toString() == "\"medium\"")
+
+        // 测试5: 守卫失败多次跳过走通配
+        println("\n测试5: 守卫多次失败走通配")
+        let result5 = evaluator.eval(Parser.parseSingleFromString("(match 3 (x when (> x 20)) \"very large\" (x when (> x 10)) \"large\" _ \"small\")"))
+        @Assert(result5.toString() == "\"small\"")
+
+        // 测试6: 简单符号模式（非列表）失败跳过
+        println("\n测试6: 简单值模式失败跳过")
+        let result6 = evaluator.eval(Parser.parseSingleFromString("(match 5 1 \"one\" 2 \"two\" 3 \"three\" _ \"other\")"))
+        @Assert(result6.toString() == "\"other\"")
+
+        // 测试7: 多行守卫格式 - 结果在下一个元素
+        println("\n测试7: 多行守卫格式跳过")
+        let result7 = evaluator.eval(Parser.parseSingleFromString("(match 3 (x when (> x 10)) \"large\" (x when (< x 5)) \"small\" _ \"medium\")"))
+        @Assert(result7.toString() == "\"small\"")
+    }
+
+    @TestCase
+    func testMatchBindingIsolation() {
+        let env = Environment()
+        BuiltinFunctions.registerAll(env)
+        let evaluator = Evaluator(env)
+
+        println("\n=== 测试 match 变量绑定隔离（不污染外层作用域）===")
+
+        // 测试1: 单符号模式绑定不泄漏
+        println("\n测试1: 单符号模式不泄漏")
+        evaluator.eval(Parser.parseSingleFromString("(define outer 100)"))
+        let result1 = evaluator.eval(Parser.parseSingleFromString("(match 42 v (list \"bound\" v) _ \"none\")"))
+        @Assert(result1.toString() == "(\"bound\" 42)")
+        let outer1 = evaluator.eval(Parser.parseSingleFromString("outer"))
+        @Assert(outer1.toString() == "100")
+
+        // 测试2: 列表模式绑定不泄漏
+        println("\n测试2: 列表模式不泄漏")
+        evaluator.eval(Parser.parseSingleFromString("(define m 5)"))
+        let result2 = evaluator.eval(Parser.parseSingleFromString("(match (list 10 20) (m n) (list \"sum\" (+ m n)) _ \"none\")"))
+        @Assert(result2.toString() == "(\"sum\" 30)")
+        let outerM = evaluator.eval(Parser.parseSingleFromString("m"))
+        @Assert(outerM.toString() == "5")
+        // n 不应泄漏：在全新 match 中 n 绑定应来自新值，而非全局残留
+        let outerN = evaluator.eval(Parser.parseSingleFromString("(match 99 n (list n) _ \"none\")"))
+        @Assert(outerN.toString() == "(99)")
+
+        // 测试3: 嵌套模式绑定在分支内可见
+        println("\n测试3: 嵌套模式绑定分支内可见")
+        let result3 = evaluator.eval(Parser.parseSingleFromString("(match (list 1 (list 2 3)) (a (b c)) (list a b c) _ \"none\")"))
+        @Assert(result3.toString() == "(1 2 3)")
+
+        // 测试4: HashMap 模式绑定不泄漏
+        println("\n测试4: HashMap 模式不泄漏")
+        evaluator.eval(Parser.parseSingleFromString("(define age 99)"))
+        let result4 = evaluator.eval(Parser.parseSingleFromString("(match {:name \"Alice\" :age 30} {:name n :age a} (list n a) _ \"none\")"))
+        @Assert(result4.toString() == "(\"Alice\" 30)")
+        let outerAge = evaluator.eval(Parser.parseSingleFromString("age"))
+        @Assert(outerAge.toString() == "99")
+
+        // 测试5: 匹配失败分支不泄漏已解析的变量
+        println("\n测试5: 失败分支不泄漏")
+        evaluator.eval(Parser.parseSingleFromString("(define p 7)"))
+        let result5 = evaluator.eval(Parser.parseSingleFromString("(match 5 (p q) \"two\" _ \"fallback\")"))
+        @Assert(result5.toString() == "\"fallback\"")
+        let outerP = evaluator.eval(Parser.parseSingleFromString("p"))
+        @Assert(outerP.toString() == "7")
+    }
+
+    @TestCase
+    func testArithGuardCache() {
+        let env = Environment()
+        BuiltinFunctions.registerAll(env)
+        let evaluator = Evaluator(env)
+
+        println("\n=== 测试算术操作符守卫缓存 ===")
+
+        // 测试1: 正常算术走快速路径
+        println("\n测试1: 正常算术")
+        let result1 = evaluator.eval(Parser.parseSingleFromString("(+ 1 2)"))
+        @Assert(result1.toString() == "3")
+
+        // 测试2: 重定义 + 后守卫回退
+        println("\n测试2: 重定义 + 回退")
+        evaluator.eval(Parser.parseSingleFromString("(define orig-plus +)"))
+        evaluator.eval(Parser.parseSingleFromString("(define + (lambda (a b) (* a b 10)))"))
+        let result2 = evaluator.eval(Parser.parseSingleFromString("(+ 2 3)"))
+        @Assert(result2.toString() == "60")
+
+        // 测试3: 恢复 + 后守卫缓存失效重查
+        println("\n测试3: 恢复 +")
+        evaluator.eval(Parser.parseSingleFromString("(define + orig-plus)"))
+        let result3 = evaluator.eval(Parser.parseSingleFromString("(+ 2 3)"))
+        @Assert(result3.toString() == "5")
+
+        // 测试4: set! 修改操作符
+        println("\n测试4: set! 修改")
+        evaluator.eval(Parser.parseSingleFromString("(define orig-minus -)"))
+        evaluator.eval(Parser.parseSingleFromString("(set! - (lambda (a b) 50))"))
+        let result4 = evaluator.eval(Parser.parseSingleFromString("(- 10 3)"))
+        @Assert(result4.toString() == "50")
+        evaluator.eval(Parser.parseSingleFromString("(set! - orig-minus)"))
+
+        // 测试5: 局部 let 作用域重定义，退出后恢复
+        println("\n测试5: 局部重定义")
+        let result5 = evaluator.eval(Parser.parseSingleFromString("(let ((* (lambda (x y) 999))) (* 1 1))"))
+        @Assert(result5.toString() == "999")
+        let result5b = evaluator.eval(Parser.parseSingleFromString("(* 2 3)"))
+        @Assert(result5b.toString() == "6")
+
+        // 测试6: 比较操作符重定义
+        println("\n测试6: 比较操作符")
+        evaluator.eval(Parser.parseSingleFromString("(define orig-eq =)"))
+        let result6 = evaluator.eval(Parser.parseSingleFromString("(= 1 1)"))
+        @Assert(result6.toString() == "true")
+        evaluator.eval(Parser.parseSingleFromString("(define = (lambda (a b) #f))"))
+        let result6b = evaluator.eval(Parser.parseSingleFromString("(if (= 1 2) \"y\" \"n\")"))
+        @Assert(result6b.toString() == "\"n\"")
+        evaluator.eval(Parser.parseSingleFromString("(define = orig-eq)"))
+        let result6c = evaluator.eval(Parser.parseSingleFromString("(= 1 1)"))
+        @Assert(result6c.toString() == "true")
+
+        // 测试7: 版本号递增
+        println("\n测试7: 版本号递增")
+        let v0 = env.arithVersion.value
+        env.define("+", env.lookup("+"))
+        @Assert(env.arithVersion.value == v0 + 1)
+        env.define("other", LispValue.Int(1))
+        @Assert(env.arithVersion.value == v0 + 1)  // 非算术操作符不递增
+    }
+
+    @TestCase
     func testParseMultilineGuard() {
         println("\n=== 测试多行守卫条件解析 ===")
 

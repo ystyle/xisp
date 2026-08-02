@@ -57,6 +57,52 @@ extend Evaluator {
     }
 
     /**
+     * 特殊形式分派
+     * @return 如果符号是特殊形式，返回 Some(结果)；否则返回 None
+     *
+     * 先以原始符号匹配（不查别名链），命中则直接分派。
+     * 避免对每个特殊形式符号（如 + < if 等）都遍历环境链查询关键字别名。
+     */
+    private func trySpecialForm(sym: String, rest: LispValue): Option<LispValue> {
+        match (sym) {
+            case "+" => Some(this.evalAdd(rest))
+            case "-" => Some(this.evalSub(rest))
+            case "*" => Some(this.evalMul(rest))
+            case "/" => Some(this.evalDiv(rest))
+            case "<" => Some(this.evalLt(rest))
+            case ">" => Some(this.evalGt(rest))
+            case "=" => Some(this.evalEq(rest))
+            case "if" => Some(this.evalIf(rest))
+            case "quote" => Some(this.evalQuote(rest))
+            case "backquote" => Some(this.evalBackquote(rest))
+            case "comma" => Some(this.evalComma(rest))
+            case "comma-at" => Some(this.evalCommaAt(rest))
+            case "define" => Some(this.evalDefine(rest))
+            case "defmacro" => Some(this.evalDefmacro(rest))
+            case "set!" => Some(this.evalSet(rest))
+            case "lambda" => Some(this.evalLambda(rest))
+            case "begin" => Some(this.evalBegin(rest))
+            case "let" => Some(this.evalLet(rest))
+            case "let*" => Some(this.evalLetStar(rest))
+            case "when-let*" => Some(this.evalWhenLetStar(rest))
+            case "if-let" => Some(this.evalIfLet(rest))
+            case "condb" => Some(this.evalCondb(rest))
+            case "apply" => Some(this.evalApply(rest))
+            case "eval" => Some(this.evalEval(rest))
+            case "->" => Some(this.evalThreadFirst(rest))
+            case "map" => Some(this.evalMap(rest))
+            case "filter" => Some(this.evalFilter(rest))
+            case "reduce" => Some(this.evalReduce(rest))
+            case "match" => Some(this.evalMatch(rest))
+            case "macroexpand" => Some(this.evalMacroexpand(rest))
+            case "macroexpand-all" => Some(this.evalMacroexpandAll(rest))
+            case "import" => Some(this.evalImport(rest))
+            case "export" => Some(this.evalExport(rest))
+            case _ => None
+        }
+    }
+
+    /**
      * evalList 的内部实现（分发到各个特殊形式）
      */
     func evalListInternal(cell: ConsCell): LispValue {
@@ -65,57 +111,37 @@ extend Evaluator {
 
         match (first) {
             case Symbol(sym) =>
+                // 快速路径：以原始符号直接匹配特殊形式，不查别名链
+                if (let Some(result) <- this.trySpecialForm(sym, rest)) {
+                    return result
+                }
+                // 慢路径：符号可能是关键字别名，查链
                 let actualSym = this.env.lookupKeyword(sym)
-
-                match (actualSym) {
-                    case "+" => return this.evalAdd(rest)
-                    case "-" => return this.evalSub(rest)
-                    case "*" => return this.evalMul(rest)
-                    case "/" => return this.evalDiv(rest)
-                    case "<" => return this.evalLt(rest)
-                    case ">" => return this.evalGt(rest)
-                    case "=" => return this.evalEq(rest)
-                    case "if" => return this.evalIf(rest)
-                    case "quote" => return this.evalQuote(rest)
-                    case "backquote" => return this.evalBackquote(rest)
-                    case "comma" => return this.evalComma(rest)
-                    case "comma-at" => return this.evalCommaAt(rest)
-                    case "define" => return this.evalDefine(rest)
-                    case "defmacro" => return this.evalDefmacro(rest)
-                    case "set!" => return this.evalSet(rest)
-                    case "lambda" => return this.evalLambda(rest)
-                    case "begin" => return this.evalBegin(rest)
-                    case "let" => return this.evalLet(rest)
-                    case "let*" => return this.evalLetStar(rest)
-                    case "when-let*" => return this.evalWhenLetStar(rest)
-                    case "if-let" => return this.evalIfLet(rest)
-                    case "condb" => return this.evalCondb(rest)
-                    case "apply" => return this.evalApply(rest)
-                    case "eval" => return this.evalEval(rest)
-                    case "->" => return this.evalThreadFirst(rest)
-                    case "map" => return this.evalMap(rest)
-                    case "filter" => return this.evalFilter(rest)
-                    case "reduce" => return this.evalReduce(rest)
-                    case "match" => return this.evalMatch(rest)
-                    case "macroexpand" => return this.evalMacroexpand(rest)
-                    case "macroexpand-all" => return this.evalMacroexpandAll(rest)
-                    case "import" => return this.evalImport(rest)
-                    case "export" => return this.evalExport(rest)
-                    case _ =>
-                        // 非特殊形式：先查是否为宏
-                        let value = this.env.lookup(actualSym)
-                        let actualFirst = if (sym != actualSym) {
-                            LispValue.Symbol(actualSym)
-                        } else {
-                            first
-                        }
-                        match (value) {
-                            case Macro(_, _, _) | MacroFromParams(_, _, _) =>
-                                let expanded = this.expandMacro(value, rest)
-                                this.eval(expanded)
-                            case _ =>
-                                this.evalFunctionCallWithValue(actualFirst, rest, value)
-                        }
+                if (actualSym != sym) {
+                    // 是别名，按实际符号再次分派
+                    if (let Some(result) <- this.trySpecialForm(actualSym, rest)) {
+                        return result
+                    }
+                    // 别名映射到非特殊形式，走普通调用
+                    let actualFirst = LispValue.Symbol(actualSym)
+                    let value = this.env.lookup(actualSym)
+                    match (value) {
+                        case Macro(_, _, _) | MacroFromParams(_, _, _) =>
+                            let expanded = this.expandMacro(value, rest)
+                            this.eval(expanded)
+                        case _ =>
+                            this.evalFunctionCallWithValue(actualFirst, rest, value)
+                    }
+                } else {
+                    // 非特殊形式：先查是否为宏
+                    let value = this.env.lookup(actualSym)
+                    match (value) {
+                        case Macro(_, _, _) | MacroFromParams(_, _, _) =>
+                            let expanded = this.expandMacro(value, rest)
+                            this.eval(expanded)
+                        case _ =>
+                            this.evalFunctionCallWithValue(first, rest, value)
+                    }
                 }
             case _ =>
                 this.evalFunctionCall(first, rest)

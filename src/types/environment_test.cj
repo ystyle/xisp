@@ -162,4 +162,40 @@ class EnvironmentTest {
         let keys = env.getKeys()
         @Assert(keys.size == 3)
     }
+
+    /**
+     * 测试关键字别名链短路
+     * 无别名时 lookupKeyword 直接返回原符号（O(1)），
+     * 有别名时子环境能查到父环境注册的别名
+     */
+    @TestCase
+    func testKeywordAliasChain() {
+        // 无别名环境：lookupKeyword 应直接返回原符号
+        let plainEnv = Environment()
+        @Assert(plainEnv.lookupKeyword("define") == "define")
+        @Assert(plainEnv.lookupKeyword("if") == "if")
+
+        // 子环境继承无别名状态，仍应短路
+        let plainChild = plainEnv.createChild()
+        @Assert(plainChild.lookupKeyword("define") == "define")
+
+        // 注册别名后：本环境能解析
+        let env = Environment()
+        env.registerKeywordAlias("定义", "define")
+        @Assert(env.lookupKeyword("定义") == "define")
+        @Assert(env.lookupKeyword("define") == "define")
+
+        // 子环境继承别名状态，能解析父环境别名
+        let child = env.createChild()
+        @Assert(child.lookupKeyword("定义") == "define")
+        // 孙环境也能解析（多层链）
+        let grandChild = child.createChild()
+        @Assert(grandChild.lookupKeyword("定义") == "define")
+
+        // 克隆环境保留别名状态
+        let cloned = env.clone()
+        @Assert(cloned.lookupKeyword("定义") == "define")
+        let clonedChild = cloned.createChild()
+        @Assert(clonedChild.lookupKeyword("定义") == "define")
+    }
 }

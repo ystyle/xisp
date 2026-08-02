@@ -7,6 +7,18 @@ import std.collection.HashSet
 
 
 /**
+ * 算术操作符守卫版本号容器
+ *
+ * 所有子环境共享同一个容器引用。任何环境对算术操作符
+ * （+ - * / < > =）进行 define/set 时递增版本号，
+ * 用于让求值器判断守卫缓存是否失效。
+ */
+public class ArithVersionCell {
+    public var value: Int64 = 0
+    public init() {}
+}
+
+/**
  * 环境（作用域）
  *
  * 用于存储变量绑定，支持词法作用域
@@ -19,6 +31,12 @@ public open class Environment {
     public var parent: Option<Environment>
 
     /**
+     * 算术操作符守卫版本号（与子环境共享）
+     * 对 + - * / < > = 的 define/set 会递增
+     */
+    public var arithVersion: ArithVersionCell = ArithVersionCell()
+
+    /**
      * 变量绑定表
      */
     private var bindings: HashMap<String, LispValue>
@@ -29,6 +47,13 @@ public open class Environment {
      * 惰性初始化：大多数环境不使用别名，避免每次 createChild 都分配
      */
     private var keywordAliases: ?HashMap<String, String> = None
+
+    /**
+     * 本环境及祖先链上是否存在关键字别名
+     * 用于 lookupKeyword 快速短路：链上无别名时直接返回原符号，
+     * 避免每次列表求值都递归遍历完整环境链
+     */
+    private var hasKeywordAliasInChain: Bool = false
 
     /**
      * 导出符号集合
@@ -54,10 +79,29 @@ public open class Environment {
     }
 
     /**
+     * 判断名称是否为算术操作符（守卫缓存跟踪的对象）
+     */
+    private static func isArithOp(name: String): Bool {
+        match (name) {
+            case "+" => true
+            case "-" => true
+            case "*" => true
+            case "/" => true
+            case "<" => true
+            case ">" => true
+            case "=" => true
+            case _ => false
+        }
+    }
+
+    /**
      * 在当前环境中定义变量
      */
     public func define(name: String, value: LispValue): Unit {
         this.bindings[name] = value
+        if (Environment.isArithOp(name)) {
+            this.arithVersion.value = this.arithVersion.value + 1
+        }
     }
 
     /**
@@ -100,6 +144,9 @@ public open class Environment {
     public func set(name: String, value: LispValue): Bool {
         if (this.bindings.contains(name)) {
             this.bindings[name] = value
+            if (Environment.isArithOp(name)) {
+                this.arithVersion.value = this.arithVersion.value + 1
+            }
             true
         } else {
             match (this.parent) {
@@ -129,6 +176,8 @@ public open class Environment {
     public func createChild(): Environment {
         let env = Environment()
         env.parent = Some(this)
+        env.hasKeywordAliasInChain = this.hasKeywordAliasInChain
+        env.arithVersion = this.arithVersion
         env
     }
 
@@ -218,6 +267,8 @@ public open class Environment {
         for ((key, value) in this.bindings) {
             env.bindings[key] = value
         }
+        env.hasKeywordAliasInChain = this.hasKeywordAliasInChain
+        env.arithVersion = this.arithVersion
         // 也复制关键字别名
         match (this.keywordAliases) {
             case Some(aliases) =>
@@ -239,6 +290,7 @@ public open class Environment {
      * @param original 原始关键字（如："define"）
      */
     public func registerKeywordAlias(alias: String, original: String): Unit {
+        this.hasKeywordAliasInChain = true
         if (this.keywordAliases.isNone()) {
             this.keywordAliases = Some(HashMap<String, String>())
         }
@@ -252,8 +304,14 @@ public open class Environment {
      * @return 如果有别名映射，返回原始关键字；否则返回原符号
      *
      * 支持在父环境中查找别名
+     *
+     * 快速路径：环境链上没有任何别名时直接返回原符号（O(1)），
+     * 避免对每个列表求值都递归遍历环境链。
      */
     public func lookupKeyword(sym: String): String {
+        if (!this.hasKeywordAliasInChain) {
+            return sym
+        }
         // 先检查当前环境的别名映射
         match (this.keywordAliases) {
             case Some(aliases) =>
