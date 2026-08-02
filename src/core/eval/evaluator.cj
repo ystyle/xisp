@@ -35,6 +35,11 @@ public class Evaluator {
     var compiler: Compiler = Compiler()
     var vm: VM = VM()
 
+    // 算术操作符守卫缓存（+ - * / < > =）
+    // arithGuardVersion 匹配 env.arithVersion.value 时缓存有效
+    var arithGuardVersion: Int64 = -1
+    var arithGuardCache: Array<Bool> = Array<Bool>(7) { _ => false }
+
     // 性能探针（调试用）
 
     /**

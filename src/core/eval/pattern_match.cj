@@ -54,11 +54,14 @@ extend Evaluator {
     /**
      * 获取下一个子句的表达式并跳过
      * @return (剩余子句, 获取的表达式或None)
+     *
+     * 复用原链表（只读遍历），避免对剩余子句做深克隆。
+     * 结构保持与旧版一致：返回从下一个元素开始的子句列表。
      */
     private func getNextAndSkip(clauses: LispValue): (LispValue, ?LispValue) {
         if (let Cons(restClauses) <- clauses) {
             if (let Cons(nextClauses) <- restClauses.cdr) {
-                (Cons(nextClauses.clone()), Some(nextClauses.car))
+                (Cons(nextClauses), Some(nextClauses.car))
             } else {
                 (Nil, None)
             }
@@ -103,6 +106,10 @@ extend Evaluator {
                 var skipped = false  // 标记是否已经跳过了子句
                 if (let Cons(clauseCell) <- clauses) {
                     let clause = clauseCell.car
+
+                    // 每个分支一个隔离环境：变量绑定 define 到它，
+                    // 匹配失败即丢弃，不污染外层作用域
+                    let clauseEnv = this.env.createChild()
 
                     // 检查 clause 是否是列表形式
                     match (clause) {
@@ -189,7 +196,7 @@ extend Evaluator {
 
                             if (needNextResult) {
                                 // 列表模式在 clause，结果在下一个元素
-                                let matchEnv = this.matchPattern(value, pattern, this.env)
+                                let matchEnv = this.matchPattern(value, pattern, clauseEnv)
                                 match (matchEnv) {
                                     case Some(matchedEnv) =>
                                         // 匹配成功，获取并求值下一个元素
@@ -207,7 +214,7 @@ extend Evaluator {
                                 // 检查是否有守卫条件 when
                                 let (hasGuard, guard, actualBody) = this.extractGuard(rest)
 
-                                let matchEnv = this.matchPattern(value, pattern, this.env)
+                                let matchEnv = this.matchPattern(value, pattern, clauseEnv)
                                 match (matchEnv) {
                                     case Some(matchedEnv) =>
                                         if (hasGuard) {
@@ -276,11 +283,10 @@ extend Evaluator {
                                         return value
                                     }
                                 } else {
-                                    // 变量绑定：创建新环境并执行下一个表达式
+                                    // 变量绑定：在分支环境中绑定并执行下一个表达式
                                     if (let Cons(resultCell) <- clauseCell.cdr) {
-                                        let newEnv = this.env.createChild()
-                                        newEnv.define(s, value)
-                                        return this.evalInEnv(resultCell.car, newEnv)
+                                        clauseEnv.define(s, value)
+                                        return this.evalInEnv(resultCell.car, clauseEnv)
                                     } else {
                                         return value
                                     }
@@ -347,9 +353,10 @@ extend Evaluator {
 
             // 变量绑定
             case Symbol(sym) =>
-                let newEnv = env.createChild()
-                newEnv.define(sym, value)
-                Some(newEnv)
+                // 直接在当前环境绑定，不再嵌套 createChild
+                // 隔离由调用方（evalMatch 的分支环境）保证
+                env.define(sym, value)
+                Some(env)
 
             // 列表模式 (x y z) 或 (x . y)
             case Cons(patternCell) =>
@@ -493,10 +500,9 @@ extend Evaluator {
     private func matchHashMapKeyValue(valueMap: HashMap<String, LispValue>, key: String, patternValue: LispValue, currentEnv: Environment): (Bool, ?Environment) {
         match ((valueMap.get(key), patternValue)) {
             case (Some(v), Symbol(varName)) =>
-                // 变量：创建子环境并绑定
-                let newEnv = currentEnv.createChild()
-                newEnv.define(varName, v)
-                (true, Some(newEnv))
+                // 变量：直接绑定到当前环境
+                currentEnv.define(varName, v)
+                (true, Some(currentEnv))
             case (Some(v), Str(s)) =>
                 // 字符串常量：需要精确匹配
                 if (let Str(vs) <- v && vs == s) {

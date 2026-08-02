@@ -408,3 +408,28 @@
 **测试**: 314 单元测试 + 全部 Lisp 集成测试通过
 **分支**: feat/unboxed-stack（从 master 切出）
 **待合并**: master
+
+## M8: 求值器细节优化（match/别名/守卫） ✅
+
+- [x] CLI 支持 `--stack-depth <N>` 参数 + `XISP_MAX_STACK_DEPTH` 环境变量
+  - 栈深优先级: 命令行 > 环境变量 > 默认 1000
+- [x] evalMatch 子句跳过去深克隆（getNextAndSkip）
+  - 复用原链表只读遍历，避免 O(N²) 深克隆
+- [x] evalListInternal 特殊形式免查别名链（trySpecialForm）
+  - 先以原始符号匹配特殊形式，非特殊形式才 lookupKeyword
+- [x] Environment 关键字别名链短路标志（hasKeywordAliasInChain）
+- [x] evalMatch 变量绑定隔离到分支环境，消除泄漏 bug
+  - 列表模式/HashMap 模式绑定不再污染外层作用域
+- [x] 算术操作符守卫缓存（ArithVersionCell 共享版本号）
+  - 对 + - * / < > = 的 define/set 递增版本，守卫 O(1) 缓存
+
+**性能**:
+- match 常量基准: 4.56s → ~3.0s (~34%)
+- match symbol 专项: 6.57s → ~2.7s (~58%)
+- fib(30): 1.98s → ~1.85s (~6%)
+- benchmark 综合: ~1.92-1.96s → ~1.82-1.87s (~5%)
+
+**修复 bug**: match 列表模式/HashMap 模式变量绑定泄漏到外层作用域
+**测试**: 318 单元测试（+4 新增）+ 全部 Lisp 集成测试通过
+**分支**: feat/perf-detail-opt（从 master 切出）
+**待合并**: master

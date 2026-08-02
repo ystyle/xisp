@@ -268,8 +268,37 @@ extend Evaluator {
     /**
      * 检查操作符是否仍绑定到原生函数
      * 用户重定义操作符（如 (define + ...)）时应回退到普通函数调用
+     *
+     * 使用版本缓存：Environment 对 + - * / < > = 的 define/set 递增
+     * arithVersion，版本未变时直接返回缓存结果（O(1)），
+     * 避免每次算术都递归遍历环境链。
      */
     private func isNativeArith(opName: String): Bool {
+        if (this.arithGuardVersion != this.env.arithVersion.value) {
+            this.arithGuardVersion = this.env.arithVersion.value
+            this.arithGuardCache[0] = this.checkNative("+")
+            this.arithGuardCache[1] = this.checkNative("-")
+            this.arithGuardCache[2] = this.checkNative("*")
+            this.arithGuardCache[3] = this.checkNative("/")
+            this.arithGuardCache[4] = this.checkNative("<")
+            this.arithGuardCache[5] = this.checkNative(">")
+            this.arithGuardCache[6] = this.checkNative("=")
+        }
+        match (opName) {
+            case "+" => this.arithGuardCache[0]
+            case "-" => this.arithGuardCache[1]
+            case "*" => this.arithGuardCache[2]
+            case "/" => this.arithGuardCache[3]
+            case "<" => this.arithGuardCache[4]
+            case ">" => this.arithGuardCache[5]
+            case _ => this.arithGuardCache[6]
+        }
+    }
+
+    /**
+     * 检查单个操作符是否绑定到原生函数
+     */
+    private func checkNative(opName: String): Bool {
         match (this.env.lookup(opName)) {
             case NativeFunc(_) => true
             case _ => false
