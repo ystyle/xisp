@@ -3,7 +3,7 @@
   name = "xisp"
   organization = "ystyle"
   description = "星枢 - 仓颉嵌入式 Lisp 脚本语言"
-  version = "0.1.0"
+  version = "0.2.0"
   target-dir = ""
   script-dir = ""
   output-type = "static"
@@ -13,7 +13,7 @@
   include =["src"]
   license = ["MIT"]
   authors = ["ystyle"]
-  repository = ["https://gitcode.com/ystyle/xisp"]
+  repository = "https://gitcode.com/ystyle/xisp"
 
 [dependencies]
 
