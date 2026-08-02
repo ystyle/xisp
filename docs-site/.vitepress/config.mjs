@@ -29,6 +29,7 @@ export default defineConfig({
             { text: '宏系统', link: '/guide/04-macros' },
             { text: '模块系统', link: '/guide/05-modules' },
             { text: 'Unicode 支持', link: '/guide/06-unicode' },
+            { text: 'REPL 指南', link: '/guide/07-repl' },
           ],
         },
       ],
