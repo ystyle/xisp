@@ -16,6 +16,7 @@
   repository = "https://gitcode.com/ystyle/xisp"
 
 [dependencies]
+"cjpminfo" = "1.2.0"
 
 [test-dependencies]
 
