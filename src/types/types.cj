@@ -4,6 +4,14 @@ import std.collection.ArrayList
 import std.collection.HashMap
 import std.io.*
 import std.collection.HashSet
+import cjpminfo.*
+
+/**
+ * Xisp 版本号
+ * 用于 REPL/CLI banner 显示
+ * 编译时从 cjpm.toml 读取，无需手动维护
+ */
+public const XISP_VERSION: String = @ModuleVer("0.2.0")
 
 
 /**

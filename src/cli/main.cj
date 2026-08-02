@@ -132,7 +132,7 @@ func buildOptions(config: CliConfig): Array<InterpreterOption> {
 func printHelp(): Unit {
     println("╔═══════════════════════════════════════════════════════════╗")
     println("║           星枢 - 仓颉嵌入式 Lisp 脚本语言                 ║")
-    println("║                   版本 0.1.0 - MVP                        ║")
+    println("║                  版本 ${XISP_VERSION}                           ║")
     println("╚═══════════════════════════════════════════════════════════╝")
     println("")
     println("用法:")

@@ -1,3 +1,4 @@
 version = 0
 
 [requires]
+  cjpminfo = {version = "1.2.0"}

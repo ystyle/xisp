@@ -525,7 +525,7 @@ public class LispInterpreter {
     private func printBanner() {
         this.outputFn("╔═══════════════════════════════════════════════════════════╗")
         this.outputFn("║           星枢 - 仓颉嵌入式 Lisp 脚本语言                 ║")
-        this.outputFn("║                   版本 0.1.0 - MVP                        ║")
+        this.outputFn("║                  版本 ${XISP_VERSION}                           ║")
         this.outputFn("╚═══════════════════════════════════════════════════════════╝")
     }
 
