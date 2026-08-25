@@ -507,7 +507,7 @@ public class JitCodegen {
         em.movRegRmDisp(R_RAX, R_RSP, 16 * k + 8)         // func payload
         em.movRmImm32(R_RCX, this.selfClosureId)
         em.cmpRmReg(R_RAX, R_RCX)
-        // J2（本次仅自调用）：非自 → deopt 回退（跨函数 JIT 基建 r9/入口表就绪；互递归时序 bug 下轮修）
+        // 非自调用 → deopt 回退（跨函数 JIT：单程已验证正确；互递归深层层级仍异常，暂保正确性回退）
         let slowId = this.slowJcc()
         this.emitFrameAndCall(k, localSlots, false)
         // 3b. 结果为空（下层 deopt）→ 本帧级联退栈
