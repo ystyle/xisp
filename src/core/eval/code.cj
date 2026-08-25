@@ -57,6 +57,13 @@ let OP_DIV_LC: Int64 = 55
 // cmpKind, localIdx, constIdx, target — 比较为假则跳
 let OP_CMP_LC_JF: Int64 = 56
 
+// and/or 短跳（不动栈：假/真时值留栈作为结果，跳转目标为表达式结束）
+let OP_AND_JF: Int64 = 57    // target — 栈顶为假则跳（值保留为结果）；真则继续（值在栈）
+let OP_OR_JF: Int64 = 58     // target — 栈顶为真则跳（值保留为结果）；假则继续
+// match 字面量匹配保留值版（成功时值留栈，替代 DUP+MATCH_LIT+POP 序列的前两条）
+let OP_MATCH_LIT_KEEP: Int64 = 59  // litIdx, target — 不匹配跳转（值留栈供下一子句）；匹配成功值留栈
+let OP_NORM_FALSE: Int64 = 60     // 栈顶假值（nil/0/0.0/false）规范化为 Boolean(false)（or 全假语义）
+
 let OP_HALT: Int64 = 99
 
 public class CompiledFunction {

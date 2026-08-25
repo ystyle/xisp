@@ -23,8 +23,9 @@ public class BytecodeVM <: VM {
     var savedFrames: ArrayList<(CompiledFunction, Int64, Int64, Environment, Int64)> = ArrayList<(CompiledFunction, Int64, Int64, Environment, Int64)>()
     // 字节码编译器（供回退 AST 的子求值器使用，让 AST 边缘的子表达式仍可再编译进 VM）
     var compiler: Option<Compiler> = None
-    // globalRefs 解析缓存：编译函数 identity → (解析环境, 环境版本, 值列表)
-    static var globalRefCache: HashMap<Int64, (Environment, Int64, ArrayList<LispValue>)> = HashMap<Int64, (Environment, Int64, ArrayList<LispValue>)>()
+    // globalRefs 解析缓存：按编译函数 identity（从 0 连续）索引的数组缓存——
+    // 免哈希查找；条目为 (解析环境, 环境版本, 值列表)
+    static var globalRefCache: ArrayList<(Environment, Int64, ArrayList<LispValue>)> = ArrayList<(Environment, Int64, ArrayList<LispValue>)>()
     // 编译函数 identity → 全局闭包 id（同一函数只注册一次，避免 functionTable 膨胀）
     static var funcIds: HashMap<Int64, Int64> = HashMap<Int64, Int64>()
 
@@ -489,6 +490,58 @@ public class BytecodeVM <: VM {
                     }
                 
 
+                    case 57 =>
+
+                    if (ip < currentFunc.code.size) {
+                        let target = currentFunc.code[ip]; ip++
+                        if (this.sp >= 0) {
+                            let v = this.registers[this.sp]
+                            if (!v.isTruthy()) {
+                                // and 假值语义：规范化为 Boolean(false)（与 AST NativeFunc 一致）
+                                this.registers[this.sp] = LispValue.Boolean(false)
+                                ip = target
+                            }
+                        }
+                    }
+                
+
+                    case 58 =>
+
+                    if (ip < currentFunc.code.size) {
+                        let target = currentFunc.code[ip]; ip++
+                        if (this.sp >= 0) {
+                            let v = this.registers[this.sp]
+                            if (v.isTruthy()) {
+                                ip = target
+                            }
+                        }
+                    }
+                
+
+                    case 59 =>
+
+                    if (ip + 1 < currentFunc.code.size) {
+                        let idx = currentFunc.code[ip]; ip++
+                        let target = currentFunc.code[ip]; ip++
+                        if (this.sp >= 0) {
+                            // 不匹配：值留栈（供下一子句匹配），仅跳转；匹配：继续（值在栈，后续 POP）
+                            if (!this.equalValue(this.registers[this.sp], currentFunc.constants[idx])) {
+                                ip = target
+                            }
+                        }
+                    }
+                
+
+                    case 60 =>
+
+                    if (this.sp >= 0) {
+                        let v = this.registers[this.sp]
+                        if (!v.isTruthy()) {
+                            this.registers[this.sp] = LispValue.Boolean(false)
+                        }
+                    }
+                
+
                     case 99 =>
 
                     running = false
@@ -833,19 +886,15 @@ public class BytecodeVM <: VM {
                 // defineVersion（共享 cell）与解析环境引用（refEq）双重保证）
                 if (nextFunc.globalRefs.size > 0) {
                     let cacheKey = nextFunc.identity
-                    var cached: Option<(Environment, Int64, ArrayList<LispValue>)> = None
-                    if (BytecodeVM.globalRefCache.contains(cacheKey)) {
+                    var cached: (Environment, Int64, ArrayList<LispValue>) = (this.currentEnv, -1, ArrayList<LispValue>())
+                    if (cacheKey < BytecodeVM.globalRefCache.size) {
                         cached = BytecodeVM.globalRefCache[cacheKey]
                     }
                     var values: ArrayList<LispValue> = ArrayList<LispValue>()
                     var cacheHit = false
-                    match (cached) {
-                        case Some((cenv, cver, cvals)) =>
-                            if (refEq(cenv, this.currentEnv) && cver == Environment.defineVersion.value) {
-                                values = cvals
-                                cacheHit = true
-                            }
-                        case None => ()
+                    if (cached[1] >= 0 && refEq(cached[0], this.currentEnv) && cached[1] == Environment.defineVersion.value) {
+                        values = cached[2]
+                        cacheHit = true
                     }
                     if (!cacheHit) {
                         let resolved = ArrayList<LispValue>()
@@ -858,6 +907,9 @@ public class BytecodeVM <: VM {
                                 case _ => val
                             }
                             resolved.add(slotVal)
+                        }
+                        while (cacheKey >= BytecodeVM.globalRefCache.size) {
+                            BytecodeVM.globalRefCache.add((this.currentEnv, -1, ArrayList<LispValue>()))
                         }
                         BytecodeVM.globalRefCache[cacheKey] = (this.currentEnv, Environment.defineVersion.value, resolved)
                         values = resolved

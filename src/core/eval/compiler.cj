@@ -1106,9 +1106,9 @@ public class BytecodeCompiler <: Compiler {
             if (!this.compileExpr(cell.car)) { return false }
             idx++
             if (idx < argCount) {
-                this.emit(OP_DUP)
+                // 短跳：假则跳到 end（值留栈为结果）；真继续（值在栈，POP 后求值下一项）
                 patches.add(this.code.size)
-                this.emitWithArg(OP_JUMP_IF_FALSE, 0)
+                this.emitWithArg(OP_AND_JF, 0)
                 this.emit(OP_POP)
             }
             current = cell.cdr
@@ -1133,15 +1133,15 @@ public class BytecodeCompiler <: Compiler {
             if (!this.compileExpr(cell.car)) { return false }
             idx++
             if (idx < argCount) {
-                this.emit(OP_DUP)
-                let elsePatch = this.code.size
-                this.emitWithArg(OP_JUMP_IF_FALSE, 0)
-                // 直接跳转到 end（值为真，DUP 已被 JUMP_IF_FALSE 消耗）
+                // 中间项：真则跳到 end（真值留栈为结果）；假继续（值在栈，POP 后求值下一项）
                 jumpPatches.add(this.code.size)
-                this.emitWithArg(OP_JUMP, 0)
-                // else: 值为假，POP 掉 DUP 副本
-                this.code[elsePatch + 1] = this.code.size
+                this.emitWithArg(OP_OR_JF, 0)
                 this.emit(OP_POP)
+            } else {
+                // 最后一项：真则跳到 end；假则规范化为 false（AST 全假语义）
+                jumpPatches.add(this.code.size)
+                this.emitWithArg(OP_OR_JF, 0)
+                this.emit(OP_NORM_FALSE)
             }
             current = cell.cdr
         }
@@ -1256,8 +1256,8 @@ public class BytecodeCompiler <: Compiler {
                                     if (this.isGuardClause(patternCell.cdr)) {
                                         return false
                                     }
-                                    this.emit(OP_DUP)
-                                    let nextClause = this.compilePattern(pattern)
+                                    // MATCH_LIT_KEEP：不匹配弹出跳转下一子句；匹配成功值留栈（POP 后取体）
+                                    let nextClause = this.compilePatternKEEP(pattern)
                                     if (nextClause == -1) { return false }
                                     // 匹配成功，POP 值
                                     this.emit(OP_POP)
@@ -1313,6 +1313,25 @@ public class BytecodeCompiler <: Compiler {
             false  // 多表达式 body：由形状检查拦截（应不会走到）
         } else {
             this.compileBegin(rest)
+        }
+    }
+
+    /// 编译模式（字面量保留值版：不匹配弹值跳转；匹配成功值留栈）
+    func compilePatternKEEP(pattern: LispValue): Int64 {
+        match (pattern) {
+            case LispValue.Int(_) | LispValue.Float(_) | Str(_) | Boolean(_) | Nil =>
+                let litIdx = this.addConst(pattern)
+                this.emitWithArg(OP_MATCH_LIT_KEEP, litIdx)
+                let targetIdx = this.code.size
+                this.code.add(0)
+                targetIdx
+            case Symbol(s) =>
+                if (s == "else") {
+                    -2
+                } else {
+                    -1
+                }
+            case _ => -1
         }
     }
 
