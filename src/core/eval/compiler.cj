@@ -1,6 +1,7 @@
 package ystyle::xisp.core.eval
 import ystyle::xisp.types.*
 import std.collection.ArrayList
+import std.collection.HashSet
 import std.collection.HashMap
 
 /**
@@ -27,6 +28,8 @@ public class BytecodeCompiler <: Compiler {
     var compilingFuncBody: Bool = false
     // 闭包捕获：当前函数编译期间登记的（外层变量名, 外层帧槽号）
     var captures: ArrayList<(String, Int64)> = ArrayList<(String, Int64)>()
+    // 共享捕获变量（let 环境化）：符号用 → LOAD_GLOBAL/STORE_GLOBAL（走环境而非槽/捕获复制）
+    var envVars: HashSet<String> = HashSet<String>()
     // 父帧槽表（编译子函数时快照的外层 locals/globalToLocal，用于识别闭包捕获）
     var parentSlots: HashMap<String, Int64> = HashMap<String, Int64>()
     // 祖先帧槽表（祖父及更外层）：跨层捕获不支持编译（运行时槽号不可达），回退 AST 保语义
@@ -106,7 +109,10 @@ public class BytecodeCompiler <: Compiler {
                 this.emit(OP_PUSH_NIL)
                 true
             case Symbol(s) =>
-                if (this.locals.contains(s)) {
+                if (this.envVars.contains(s)) {
+                    this.emitWithArg(OP_LOAD_GLOBAL, this.addConst(Str(s)))
+                    true
+                } else if (this.locals.contains(s)) {
                     let idx = this.locals[s]
                     this.emitWithArg(OP_LOAD_LOCAL, idx)
                     true
@@ -283,6 +289,7 @@ public class BytecodeCompiler <: Compiler {
         let savedConsts = this.constants
         let savedFuncs = this.functions
         let savedCaptures = this.captures
+        let savedEnvVars = this.envVars
         let savedParentSlots = this.parentSlots
         let savedAncestorSlots = this.ancestorSlots
 
@@ -325,6 +332,7 @@ public class BytecodeCompiler <: Compiler {
         } finally {
             this.locals = savedLocals
             this.localCount = savedCount
+            this.envVars = savedEnvVars
             this.globalNames = savedGlobalNames
             this.globalSlots = savedGlobalSlots
             this.globalToLocal = savedGlobalToLocal
@@ -373,7 +381,9 @@ public class BytecodeCompiler <: Compiler {
                         case Cons(valCell) =>
                             if (valCell.cdr.isNil()) {
                                 if (!this.compileExpr(valCell.car)) { return false }
-                                if (this.locals.contains(name)) {
+                                if (this.envVars.contains(name)) {
+                                    this.emitWithArg(OP_SET_GLOBAL, this.addConst(Str(name)))
+                                } else if (this.locals.contains(name)) {
                                     // 表达式值保留在栈（set! 返回值语义）
                                     this.emit(OP_DUP)
                                     this.emitWithArg(OP_STORE_LOCAL, this.locals[name])
@@ -1387,7 +1397,27 @@ public class BytecodeCompiler <: Compiler {
                 }
                 // 保存当前局部变量表（不保存 localCount，let 槽位在函数体内持续占用）
                 let savedLocals = this.locals.clone()
-                // 编译绑定并分配局部变量索引
+                // 共享捕获预扫描：body 内 lambda 自由引用到的绑定名 → 环境化（闭包间共享可变捕获）
+                var sharedNames = HashSet<String>()
+                let scanLambdaFree = SharedCaptureScanner()
+                let freeNames = scanLambdaFree.scan(body)
+                var initial = bindings
+                while (let Cons(ic) <- initial) {
+                    match (ic.car) {
+                        case Cons(pair) =>
+                            if (let Symbol(pname) <- pair.car) {
+                                if (freeNames.contains(pname)) {
+                                    sharedNames.add(pname)
+                                }
+                            }
+                        case _ => ()
+                    }
+                    initial = ic.cdr
+                }
+                if (sharedNames.size > 0) {
+                    this.emit(OP_ENV_SCOPE_BEGIN)
+                }
+                // 编译绑定：共享名 → 环境（STORE_GLOBAL 到 child-env）；否则局部槽
                 var current = bindings
                 while (let Cons(bindCell) <- current) {
                     match (bindCell.car) {
@@ -1400,10 +1430,16 @@ public class BytecodeCompiler <: Compiler {
                                                 this.locals = savedLocals
                                                 return false
                                             }
-                                            // 分配局部变量索引
-                                            this.locals[name] = this.localCount
-                                            this.emitWithArg(OP_STORE_LOCAL, this.localCount)
-                                            this.localCount++
+                                            if (sharedNames.contains(name)) {
+                                                // 共享捕获：值入当前环境（child），不留槽
+                                                this.envVars.add(name)
+                                                this.emitWithArg(OP_STORE_GLOBAL, this.addConst(Str(name)))
+                                            } else {
+                                                // 分配局部变量索引
+                                                this.locals[name] = this.localCount
+                                                this.emitWithArg(OP_STORE_LOCAL, this.localCount)
+                                                this.localCount++
+                                            }
                                         case _ => return false
                                     }
                                 case _ => return false
@@ -1412,12 +1448,90 @@ public class BytecodeCompiler <: Compiler {
                     }
                     current = bindCell.cdr
                 }
+                // 环境作用域包裹：共享变量时 child-env（非共享时仍需创建？——只有共享需要）
+                // 为简单与正确：begin 放在绑定前、end 放 body 后——但绑定在 begin 之前已发射……
+                // 修正：begin/end 包裹整个 binding+body（重新调整：先 begin）
+
                 // 编译 body
                 let result = this.compileBegin(body)
+                if (sharedNames.size > 0) {
+                    this.emit(OP_ENV_SCOPE_END)
+                }
                 // 恢复局部变量表（不恢复 localCount）
                 this.locals = savedLocals
                 result
             case _ => false
+        }
+    }
+}
+
+/**
+ * 共享捕获扫描：找出 body 中被 lambda 自由引用的符号名（用于 let 环境化）
+ */
+class SharedCaptureScanner {
+    func scan(expr: LispValue): HashSet<String> {
+        let result = HashSet<String>()
+        let bound = HashSet<String>()
+        this.walk(expr, false, bound, result)
+        result
+    }
+
+    // inLambda：是否处于某 lambda 体内（只有 lambda 体内的自由符号才算共享捕获候选）
+    func walk(expr: LispValue, inLambda: Bool, bound: HashSet<String>, result: HashSet<String>): Unit {
+        match (expr) {
+            case Symbol(s) =>
+                if (inLambda && !bound.contains(s)) {
+                    result.add(s)
+                }
+            case Cons(cell) => this.walkList(cell, inLambda, bound, result)
+            case _ => ()
+        }
+    }
+
+    func walkList(cell: ConsCell, inLambda: Bool, bound: HashSet<String>, result: HashSet<String>): Unit {
+        if (cell.isNil()) { return }
+        match (cell.car) {
+            case Symbol("lambda") =>
+                match (cell.cdr) {
+                    case Cons(paramsCell) =>
+                        let nb = bound.clone()
+                        var pc = paramsCell.car
+                        while (let Cons(pc2) <- pc) {
+                            if (let Symbol(pname) <- pc2.car) {
+                                nb.add(pname)
+                            }
+                            pc = pc2.cdr
+                        }
+                        this.walk(paramsCell.cdr, true, nb, result)   // lambda 体内：inLambda=true
+                        return
+                    case _ => return
+                }
+            case Symbol("let") | Symbol("let*") =>
+                match (cell.cdr) {
+                    case Cons(bindingsCell) =>
+                        let nb = bound.clone()
+                        var bc = bindingsCell.car
+                        while (let Cons(bc2) <- bc) {
+                            match (bc2.car) {
+                                case Cons(pair) =>
+                                    if (let Symbol(bname) <- pair.car) {
+                                        match (pair.cdr) {
+                                            case Cons(valCell) => this.walk(valCell.car, inLambda, bound, result)
+                                            case _ => ()
+                                        }
+                                        nb.add(bname)
+                                    }
+                                case _ => ()
+                            }
+                            bc = bc2.cdr
+                        }
+                        this.walk(bindingsCell.cdr, inLambda, nb, result)
+                        return
+                    case _ => return
+                }
+            case _ =>
+                this.walk(cell.car, inLambda, bound, result)
+                this.walk(cell.cdr, inLambda, bound, result)
         }
     }
 }

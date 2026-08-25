@@ -312,6 +312,34 @@ class BytecodeTest {
     }
 
     @TestCase
+    func testSharedMutableCapture() {
+        // 闭包共享可变捕获：三 lambda 共享 count（let 环境化）
+        let result = this.evalWithBytecode(
+            "(define (make-counter n) (let ((count n)) (list (lambda () (set! count (+ count 1)) count) (lambda () count) (lambda (x) (set! count x))))) " +
+            "(define c (make-counter 100)) (define n0 (first c)) (define g (second c)) (define r (third c)) " +
+            "(n0) (n0) (r 500) (g)")
+        match (result) {
+            case LispValue.Int(i) => @Assert(i == 500)
+            case _ => @Fail("expected 500, got ${result}")
+        }
+    }
+
+    @TestCase
+    func testSharedCaptureIndependent() {
+        // 各自独立的计数器（不同实例不共享）
+        let result = this.evalWithBytecode(
+            "(define (make-counter) (let ((count 0)) (lambda () (set! count (+ count 1)) count))) " +
+            "(define c1 (make-counter)) (define c2 (make-counter)) " +
+            "(c1) (c1) (c2) (list (c1) (c2))")
+        match (result) {
+            case Cons(cell) =>
+                let (vals, ok) = this.listAsStrings(cell)
+                @Assert(ok && vals.size == 2 && vals[0] == "3" && vals[1] == "2")
+            case _ => @Fail("expected (3 2), got ${result}")
+        }
+    }
+
+    @TestCase
     func testRestParamsSemantics() {
         // 回退后 &rest 语义正确（经 AST）：(f 1 2 3 4) → a=1, r=(2 3 4)
         let result = this.evalWithBytecode(

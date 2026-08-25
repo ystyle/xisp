@@ -24,6 +24,8 @@ public class BytecodeVM <: VM {
     static var functionTable: ArrayList<CompiledFunction> = ArrayList<CompiledFunction>()
     var curFunc: Option<CompiledFunction> = None
     var savedFrames: ArrayList<(CompiledFunction, Int64, Int64, Environment, Int64)> = ArrayList<(CompiledFunction, Int64, Int64, Environment, Int64)>()
+    // 环境作用域栈（OP_ENV_SCOPE_BEGIN/END）
+    var envStack: ArrayList<Environment> = ArrayList<Environment>()
     // 字节码编译器（供回退 AST 的子求值器使用，让 AST 边缘的子表达式仍可再编译进 VM）
     var compiler: Option<Compiler> = None
     // globalRefs 解析缓存：按编译函数 identity（从 0 连续）索引的数组缓存——
@@ -444,7 +446,7 @@ public class BytecodeVM <: VM {
                         let nameIdx = currentFunc.code[ip]; ip++
                         match (currentFunc.constants[nameIdx]) {
                             case Str(name) =>
-                                let val = env.lookup(name)
+                                let val = this.currentEnv.lookup(name)
                                 this.push(val)
                             case _ => return LispValue.Error(XispError(ErrorType.RuntimeError, "Bytecode: LOAD_GLOBAL expected string"))
                         }
@@ -671,11 +673,30 @@ public class BytecodeVM <: VM {
 
                     case 60 =>
 
+
                     if (this.sp >= 0) {
                         let v = this.registers[this.sp]
                         if (!v.isTruthy()) {
                             this.registers[this.sp] = LispValue.Boolean(false)
                         }
+                    }
+                
+
+                    case 61 =>
+
+                    // 环境作用域开始：压栈 currentEnv，创建 child（闭包共享捕获的宿主）
+                    this.envStack.add(this.currentEnv)
+                    let child = Environment()
+                    child.parent = Some(this.currentEnv)
+                    this.currentEnv = child
+                
+
+                    case 62 =>
+
+                    if (this.envStack.size > 0) {
+                        let restored = this.envStack[this.envStack.size - 1]
+                        this.envStack.remove((this.envStack.size - 1)..this.envStack.size)
+                        this.currentEnv = restored
                     }
                 
 

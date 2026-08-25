@@ -228,3 +228,14 @@ time ./target/release/bin/ystyle::xisp.cli --with-bytecode-compiler lisp-tests/p
 
 - 慢场景（closure-factory 0.2x 等）= 已知边界（高阶/闭包/deopt 锤击），语义一致 ✓
 - 357/357 单测；examples 26 JIT vs BC 0 differ
+
+## 15. J3 闭包共享可变捕获（2026-08-26）
+
+- **问题**：`(make-counter 100)` 三 lambda 共享 `count`——BC 的 MAKE_CLOSURE 按值复制捕获 → set! 不共享（AST 500 vs BC 100）
+- **方案（env-scope 路线）**：
+  - 新算子 OP_ENV_SCOPE_BEGIN=61 / OP_ENV_SCOPE_END=62（case 数 42→44 ≤ 45 ✓）：currentEnv 压栈 + child 环境
+  - `SharedCaptureScanner`：预扫描 body 内 **lambda 自由引用**的绑定名（仅统计 lambda 体内符号——初版把整个 body 的符号都算上导致 let 体自身也环境化 → 修复）
+  - compileLet：共享绑定 → 存环境（STORE_GLOBAL 到 child，不占槽）+ ENV_SCOPE 包裹；符号解析/compileSet 对 envVars 走环境路径；闭包体 LOAD_GLOBAL 经 capEnv.parent → child → 共享 ✓
+  - 附带修复：VM case-6 LOAD_GLOBAL 用 `this.currentEnv`（此前用参数 env，switchFrame 后环境已切换）；case-7 JIT 调用传闭包环境 `clsEnv`（此前传 currentEnv）
+- **验证**：三模式 500 ✓；独立计数器互不共享 ✓；359/359 单测（+2）；examples 三模式 8→7（剩=宏 member-access/模块导出等改前已知差异）
+- 边界：let 体自身对共享变量的直接读写仍走槽（与 env 不同步）——canonical 场景（闭包间共享）正确

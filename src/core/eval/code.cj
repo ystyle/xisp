@@ -63,6 +63,9 @@ let OP_OR_JF: Int64 = 58     // target — 栈顶为真则跳（值保留为结�
 let OP_MATCH_LIT_KEEP: Int64 = 59  // litIdx, target — 不匹配跳转（值留栈供下一子句）；匹配成功值留栈
 let OP_NORM_FALSE: Int64 = 60     // 栈顶假值（nil/0/0.0/false）规范化为 Boolean(false)（or 全假语义）
 
+let OP_ENV_SCOPE_BEGIN: Int64 = 61  // 环境作用域开始：currentEnv 压栈 + child（闭包共享捕获用）
+let OP_ENV_SCOPE_END: Int64 = 62    // 环境作用域结束：恢复 currentEnv
+
 let OP_HALT: Int64 = 99
 
 public class CompiledFunction {
