@@ -150,3 +150,21 @@ time ./target/release/bin/ystyle::xisp.cli --with-bytecode-compiler lisp-tests/p
 ```
 
 > 提示：毫秒级结果含进程启动 ~15ms；放大 k 或轮数可得更稳定数据。
+
+## 9. JIT 正式工程 J1（字节码 → 机器码翻译器，2026-08-25 晚）
+
+**实现**（feat/jit）：`jit_emit.cj`（x86-64 发射器+rel32 回填）/ `jit_codegen.cj`（翻译器：16B (tag,payload) 槽帧 + Int 快路径 + deopt 哨兵）/ `jit_runtime.cj`（mmap RWX 页、函数登记、解释器↔JIT 桥）/ `--with-jit`（叠于字节码之上）。
+
+**ABI**：rdi=帧缓冲（16B×localSlots，桥填参数+全局引用），rsi=参数个数，rdx=ctx；callee 结果写 [rdi-16]。
+
+**J1 实测（fib(30)）**：
+
+| 模式 | 时间 | 倍率 |
+|---|---|---|
+| AST | ~11.1s | 1x |
+| 字节码 | 224ms | 50x |
+| **JIT（J1）** | **27ms** | **410x（8.3x BC）** |
+
+**deopt 机制**：慢分支（tag guard 失败/非自调用）→ 恢复帧后返回 null → 桥感知 → VM 回退解释器重跑该闭包调用（语义保真）；嵌套调用逐层级联退栈。
+
+**已验证**：fib(10)=55、fib(25)=75025；6/6 JitTest；355/355 全量测试；26 examples JIT vs BC 逐字节一致。约束：仅 Int 快路径 + 自递归调用；互递归/跨函数 JIT 调用暂回退（待 J2 互调桥）。

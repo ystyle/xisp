@@ -1,0 +1,201 @@
+package ystyle::xisp.core.eval
+import ystyle::xisp.types.*
+import std.collection.ArrayList
+import std.env.getVariable
+import std.collection.HashMap
+
+// JIT 值 tag（16B 槽：tag @ [0]，payload @ [8]）
+let JIT_TAG_INT: Int64 = 1
+let JIT_TAG_FLOAT: Int64 = 2
+let JIT_TAG_BOOL: Int64 = 3
+let JIT_TAG_NIL: Int64 = 4
+let JIT_TAG_STR: Int64 = 5
+let JIT_TAG_SYM: Int64 = 6
+let JIT_TAG_REF: Int64 = 7
+
+foreign func mmap(addr: CPointer<Unit>, length: UIntNative, prot: Int32, flags: Int32, fd: Int32, offset: Int64): CPointer<Unit>
+foreign func munmap(addr: CPointer<Unit>, length: UIntNative): Int32
+
+/**
+ * JIT 运行时：页管理、函数登记、解释器↔JIT 桥
+ */
+public class JitRuntime {
+    // globalClosureId(functionTable id) → 机器码入口
+    var entries: HashMap<Int64, CPointer<Unit>> = HashMap<Int64, CPointer<Unit>>()
+    static var shared: Option<JitRuntime> = None
+
+    public init() {
+        JitRuntime.shared = Some(this)
+    }
+
+    public func hasEntry(globalId: Int64): Bool {
+        entries.contains(globalId)
+    }
+
+    // 尝试编译；成功返回入口；失败 None（回退解释器）
+    public func getEntry(globalId: Int64, f: CompiledFunction): Option<CPointer<Unit>> {
+        if (entries.contains(globalId)) {
+            return Some(entries[globalId])
+        }
+        let codegen = JitCodegen()
+        if (getVariable("XISP_JIT_DEBUG") != None) {
+            var gs = StringBuilder("")
+            for (i in 0..f.globalRefs.size) {
+                gs.append("${f.globalRefs[i]}=${if (i < f.globalSlots.size) { f.globalSlots[i] } else { -1 }} ")
+            }
+            eprintln("[JIT] compiling fn ${f.name} id=${globalId} locals=${f.localSlots} globals: ${gs} params=${f.params.size}")
+        }
+        if (let Some(code) <- codegen.compile(f, globalId)) {
+            if (getVariable("XISP_JIT_DEBUG") != None) {
+                var hx = StringBuilder("")
+                for (i in 0..code.size) {
+                    let h = code[i]
+                    let hi = h / 16
+                    let lo = h % 16
+                    hx.append(if (hi < 10) { Rune(0x30 + Int32(hi)) } else { Rune(0x61 + Int32(hi) - 10) })
+                    hx.append(if (lo < 10) { Rune(0x30 + Int32(lo)) } else { Rune(0x61 + Int32(lo) - 10) })
+                    hx.append(" ")
+                }
+                eprintln("[JIT] ${code.size} bytes: ${hx}")
+            }
+            let entry = this.allocPage(code)
+            if (getVariable("XISP_JIT_DEBUG") != None) { eprintln("[JIT] entry=${entry.toUIntNative()}") }
+            entries[globalId] = entry
+            return Some(entry)
+        }
+        None
+    }
+
+    // 分配 RWX 页并拷贝代码
+    func allocPage(code: ArrayList<UInt8>): CPointer<Unit> {
+        var page = unsafe { mmap(CPointer<Unit>(), 4096, 7, 0x22, -1, 0) }
+        if (page.isNull()) {
+            throw Exception("JIT mmap failed")
+        }
+        let p8 = CPointer<UInt8>(page)
+        for (i in 0..code.size) {
+            unsafe { (p8 + i).write(code[i]) }
+        }
+        page
+    }
+
+    /**
+     * 解释器→JIT 桥：args 打包为 16B 槽 → 调入口 → 结果解包
+     * 全局引用每次调用实时解析（与 switchFrame 语义一致）
+     */
+    // 返回 None：编译失败或 deopt（调用方回退解释器）
+    public func invoke(globalId: Int64, f: CompiledFunction, args: ArrayList<LispValue>, env: Environment): Option<LispValue> {
+        let entryOpt = this.getEntry(globalId, f)
+        match (entryOpt) {
+            case None =>
+                return None
+            case Some(entryPtr) =>
+                let n = f.localSlots
+                // 缓冲：16B×(n+1)：buf[0]=结果槽；buf[16+i*16]=槽 i
+                let buf = Array<UInt8>(16 * (n + 1)) { _ => 0 }
+                // 全局引用解析入槽
+                for (i in 0..f.globalRefs.size) {
+                    let name = f.globalRefs[i]
+                    let slotIdx = if (i < f.globalSlots.size) { f.globalSlots[i] } else { f.params.size + i }
+                    if (slotIdx >= 0 && slotIdx < n) {
+                        let val = env.lookup(name)
+                        let slotVal = match (val) {
+                            case Macro(_, _, _) | MacroFromParams(_, _, _) => Str(name)
+                            case _ => val
+                        }
+                        this.writeSlot(buf, slotIdx, slotVal)
+                    }
+                }
+                // 参数入槽
+                for (j in 0..args.size) {
+                    if (j < f.params.size) {
+                        this.writeSlot(buf, j, args[j])
+                    }
+                }
+                // raw 指针 → 调用入口
+                let handle = unsafe { acquireArrayRawData<UInt8>(buf) }
+                let argBase = unsafe { handle.pointer + 16 }
+                let fptr: CFunc<(CPointer<Unit>, Int64, CPointer<Unit>) -> CPointer<Unit>> = CFunc<(CPointer<Unit>, Int64, CPointer<Unit>) -> CPointer<Unit>>(entryPtr)
+                let retPtr = unsafe { fptr(CPointer<Unit>(argBase), Int64(args.size), CPointer<Unit>()) }
+                unsafe { releaseArrayRawData<UInt8>(handle) }
+                let retVal = retPtr.toUIntNative()
+                if (retVal < 1024) {
+                    if (getVariable("XISP_JIT_DEBUG") != None) { eprintln("[JIT] deopt id=${globalId} site=${retVal}") }
+                    return None   // deopt → 回退解释器
+                }
+                Some(this.readSlot(buf, -1))
+        }
+    }
+
+    // 写入 16B 槽（盒装 box）
+    func writeSlot(buf: Array<UInt8>, slotIdx: Int64, v: LispValue): Unit {
+        let (tag, payload) = this.box(v)
+        let base = 16 + slotIdx * 16
+        writeU64(buf, base, tag)
+        writeU64(buf, base + 8, payload)
+    }
+
+    func readSlot(buf: Array<UInt8>, slotIdx: Int64): LispValue {
+        let base = 16 + slotIdx * 16
+        let tag = readU64(buf, base)
+        let payload = readU64(buf, base + 8)
+        this.unbox(tag, payload)
+    }
+
+    // LispValue → (tag, payload)
+    func box(v: LispValue): (Int64, Int64) {
+        match (v) {
+            case Int(x) => (JIT_TAG_INT, x)
+            case Float(x) => (JIT_TAG_FLOAT, floatBits(x))
+            case Boolean(x) => (JIT_TAG_BOOL, if (x) { 1 } else { 0 })
+            case Nil => (JIT_TAG_NIL, 0)
+            case Str(s) => (JIT_TAG_STR, 0)
+            case Symbol(s) => (JIT_TAG_SYM, 0)
+            case Closure(id, _) => (JIT_TAG_REF, id)
+            case _ => (JIT_TAG_REF, -1)
+        }
+    }
+
+    // (tag, payload) → LispValue
+    func unbox(tag: Int64, payload: Int64): LispValue {
+        match (tag) {
+            case JIT_TAG_INT => LispValue.Int(payload)
+            case JIT_TAG_FLOAT => LispValue.Float(floatFromBits(payload))
+            case JIT_TAG_BOOL => LispValue.Boolean(payload != 0)
+            case JIT_TAG_NIL => Nil
+            case _ =>
+                LispValue.Error(XispError(ErrorType.RuntimeError, "JIT: unbox unsupported tag ${tag}"))
+        }
+    }
+}
+
+func floatBits(v: Float64): Int64 {
+    let arr = Array<Float64>(1) { _ => v }
+    let handle = unsafe { acquireArrayRawData<Float64>(arr) }
+    let r = unsafe { CPointer<Int64>(handle.pointer).read() }
+    unsafe { releaseArrayRawData<Float64>(handle) }
+    r
+}
+
+func floatFromBits(bits: Int64): Float64 {
+    let arr = Array<Int64>(1) { _ => bits }
+    let handle = unsafe { acquireArrayRawData<Int64>(arr) }
+    let r = unsafe { CPointer<Float64>(handle.pointer).read() }
+    unsafe { releaseArrayRawData<Int64>(handle) }
+    r
+}
+
+// 16B 槽缓冲读写（手工小端）
+func writeU64(buf: Array<UInt8>, base: Int64, v: Int64): Unit {
+    for (i in 0..8) {
+        buf[base + i] = UInt8((v >> (8 * i)) & 0xFF)
+    }
+}
+
+func readU64(buf: Array<UInt8>, base: Int64): Int64 {
+    var v: Int64 = 0
+    for (i in 0..8) {
+        v = v | (Int64(buf[base + i]) << (8 * i))
+    }
+    v
+}

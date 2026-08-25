@@ -2,6 +2,7 @@ package ystyle::xisp.core.eval
 import ystyle::xisp.types.*
 import std.collection.ArrayList
 import std.collection.HashMap
+import std.env.getVariable
 
 /**
  * 虚拟机接口
@@ -123,6 +124,9 @@ public class BytecodeVM <: VM {
     }
 
     func executeFunc(func_: CompiledFunction, env: Environment): LispValue {
+        if (getVariable("XISP_BC_DUMP") != None) {
+            this.dumpCode(func_)
+        }
         // 嵌套执行安全：保存外层 VM 状态（AST 回退的子求值器可能重入本 VM）
         let savedRegisters = this.registers
         let savedSp = this.sp
@@ -138,6 +142,48 @@ public class BytecodeVM <: VM {
         this.savedFrames = savedFrames
         this.curFunc = savedCur
         result
+    }
+
+    // 临时反汇编 dump（XISP_BC_DUMP=1 触发；J1 翻译器开发用）
+    func dumpCode(f: CompiledFunction): Unit {
+        println("=== fn[${f.identity}] ${f.name} params=${f.params} localSlots=${f.localSlots} globals=${f.globalRefs} ===")
+        let argCounts = HashMap<Int64, Int64>()
+        argCounts[0] = 1; argCounts[1] = 0; argCounts[2] = 0; argCounts[3] = 0
+        argCounts[4] = 0; argCounts[5] = 1; argCounts[6] = 1; argCounts[7] = 1
+        argCounts[8] = 0; argCounts[9] = 0; argCounts[10] = 1; argCounts[11] = 1
+        argCounts[12] = 0; argCounts[13] = 0; argCounts[14] = 0; argCounts[15] = 0
+        argCounts[16] = 0; argCounts[17] = 0; argCounts[23] = 0; argCounts[24] = 1
+        argCounts[25] = 1; argCounts[30] = 1; argCounts[31] = 0; argCounts[32] = 0
+        argCounts[33] = 0; argCounts[34] = 0; argCounts[35] = 0; argCounts[36] = 0
+        argCounts[37] = 0; argCounts[38] = 2; argCounts[39] = 1; argCounts[40] = 1
+        argCounts[41] = 0; argCounts[42] = 1; argCounts[43] = 0; argCounts[44] = 0
+        argCounts[45] = 0; argCounts[46] = 0; argCounts[47] = 0; argCounts[48] = 1
+        argCounts[49] = 0; argCounts[50] = 0; argCounts[51] = 1; argCounts[52] = 3
+        argCounts[56] = 4; argCounts[57] = 1; argCounts[58] = 1; argCounts[59] = 2
+        argCounts[60] = 0; argCounts[99] = 0
+        var ip: Int64 = 0
+        let raw = StringBuilder("[")
+        for (i in 0..f.code.size) {
+            if (i > 0) { raw.append(", ") }
+            raw.append(f.code[i].toString())
+        }
+        println("  raw: ${raw}]  consts=${f.constants.size} typ=${f.constants[0].toString()}")
+        while (ip < f.code.size) {
+            let op = f.code[ip]
+            var n: Int64 = if (argCounts.contains(op)) { argCounts[op] } else { 0 }
+            if (op == 42) {
+                // MAKE_CLOSURE 变长: funcIdx + capCount + 2*capCount
+                let capCount = f.code[ip + 2]
+                n = 2 + 2 * capCount
+            }
+            let argsStr = StringBuilder("")
+            for (i in 0..n) {
+                if (i > 0) { argsStr.append(",") }
+                argsStr.append(f.code[ip + 1 + i].toString())
+            }
+            println("  ${ip}: op${op} (${argsStr})")
+            ip = ip + 1 + n
+        }
     }
 
     func runFunction(func_: CompiledFunction, env: Environment): LispValue {
@@ -493,6 +539,25 @@ public class BytecodeVM <: VM {
                                     case _ => ()
                                 }
                             }
+                            // JIT 快速路径（--with-jit）：编译闭包已 JIT → 直接调机器码
+                            if (let Some(rt) <- JitRuntime.shared && let Closure(id, _) <- funcVal) {
+                                if (id < BytecodeVM.functionTable.size) {
+                                    let jf = BytecodeVM.functionTable[id]
+                                    let paramCount = argCount - 1
+                                    let jargs = ArrayList<LispValue>()
+                                    for (i in 0..paramCount) {
+                                        jargs.add(this.registers[startIdx + 1 + i])
+                                    }
+                                    let jresult = rt.invoke(id, jf, jargs, this.currentEnv)
+                                    match (jresult) {
+                                        case Some(v) =>
+                                            this.sp = this.sp - argCount
+                                            this.push(v)
+                                            continue
+                                        case None => ()   // deopt/未编译：回退解释器路径
+                                    }
+                                }
+                            }
                             // 帧切换快速路径：函数值（Closure）已就位 → 切换编译帧执行
                             if (let Some((nf, nip)) <- this.switchFrame(argCount, startIdx, currentFunc, ip)) {
                                 currentFunc = nf
@@ -830,6 +895,9 @@ public class BytecodeVM <: VM {
                         }
                         if (let Some(f) <- this.curFunc && idx < f.functions.size) {
                             let subFunc = f.functions[idx]
+                            if (getVariable("XISP_BC_DUMP") != None) {
+                                this.dumpCode(subFunc)
+                            }
                             let globalId = if (BytecodeVM.funcIds.contains(subFunc.identity)) {
                                 BytecodeVM.funcIds[subFunc.identity]
                             } else {

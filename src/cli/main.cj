@@ -19,6 +19,7 @@ struct CliConfig {
     var code: Option<String> = None
     var showHelp: Bool = false
     var useBytecode: Bool = false
+    var useJit: Bool = false
 }
 
 main(args: Array<String>): Int64 {
@@ -74,6 +75,9 @@ func parseArgs(args: Array<String>): CliConfig {
             config.simpleRepl = true
         } else if (arg == "--with-bytecode-compiler") {
             config.useBytecode = true
+        } else if (arg == "--with-jit") {
+            config.useJit = true
+            config.useBytecode = true
         } else if (arg.startsWith("-") && arg.size > 1) {
             eprintln("未知参数: ${arg}")
         } else {
@@ -126,6 +130,9 @@ func buildOptions(config: CliConfig): Array<InterpreterOption> {
     if (config.useBytecode) {
         opts.add(withBytecodeCompiler())
     }
+    if (config.useJit) {
+        opts.add(withJit())
+    }
     if (let Some(depth) <- resolveStackDepth(config)) {
         opts.add(withMaxStackDepth(depth))
     }
@@ -174,6 +181,9 @@ func runRepl(useSimple: Bool, config: CliConfig): Unit {
     opts.add(withScriptMode())
     if (config.useBytecode) {
         opts.add(withBytecodeCompiler())
+    }
+    if (config.useJit) {
+        opts.add(withJit())
     }
     if (let Some(depth) <- resolveStackDepth(config)) {
         opts.add(withMaxStackDepth(depth))

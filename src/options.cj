@@ -492,3 +492,14 @@ public func withBytecodeCompiler(): InterpreterOption {
         interp.setVM(vm)
     }
 }
+
+/**
+ * 启用 JIT（叠于字节码之上；未开字节码时无效）
+ * 未支持指令/类型 → 函数级回退解释器（字节码保留）
+ */
+public func withJit(): InterpreterOption {
+    { interp =>
+        JitRuntime()
+        ()
+    }
+}

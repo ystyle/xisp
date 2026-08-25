@@ -497,3 +497,13 @@
 - [x] callClosure 帧切换式执行（bp=1000 布局、参数/全局引用入槽、嵌套安全）
 - [x] 回调体 ~14x（fib 回调实测）；高阶循环 AST 侧为瓶颈 → 整管线 ~1.0x（性能边界已记录）
 - [ ] 待办：&rest/&key 参数编译（C）| JIT 正式工程（大）
+
+## M13: JIT 正式工程 - 设计中 ✅（J0 完成，J1 启动）
+
+- [x] 设计草案 docs/plans/2026-08-25-jit-engineering.md（评审通过）
+- [x] J0 风险验证（temp-match-bench 实测）：@C helper 取址/调用/全局访问/参数传递 ✅；异常穿越机器码帧 ✅ catch 成功；栈错位必崩（16B 对齐硬约束）；callee-saved 不得入 JIT 持久帧
+- [x] 设计修正：JIT 内部 (tag,payload) 双字表示（LispValue 布局风险消除）；慢路径 = deopt 到解释器（单一路径）
+- [x] J1 翻译器骨架 + 直接调用（feat/jit）：发射器/翻译器/运行时/桥 + --with-jit
+      - fib(30) 27ms = 8.3x BC（J1 目标 ≤8ms 未达，待 J4 整数特化）
+      - 6/6 JitTest + 355/355 全量 + 26 examples JIT vs BC 一致
+  - [ ] J2 全指令覆盖 + 跨函数互调桥｜J3 闭包捕获｜J4 整数特化（fib ≤4ms）｜J5 稳定/文档
