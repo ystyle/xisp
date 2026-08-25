@@ -476,5 +476,19 @@ public func withScriptMode(): InterpreterOption {
  * 启用模块模式（禁止 (import "./xxx")，默认）
  */
 public func withModuleMode(): InterpreterOption {
-    { interpreter => interpreter.setModuleMode() }
+    { interp => interp.setModuleMode() }
+}
+
+/**
+ * 启用字节码编译器
+ * 将支持的表达式编译为字节码执行（提升性能）
+ */
+public func withBytecodeCompiler(): InterpreterOption {
+    { interp =>
+        let compiler = BytecodeCompiler()
+        let vm = BytecodeVM()
+        vm.setCompiler(compiler)
+        interp.setCompiler(compiler)
+        interp.setVM(vm)
+    }
 }

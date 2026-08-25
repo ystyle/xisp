@@ -70,6 +70,7 @@ extend Evaluator {
             match (funcValue) {
                 case Procedure(_, _, _) => this.applyProcedure(funcValue, args)
                 case NativeFunc(f) => f(args)
+                case Closure(_, _) => this.applyProcedure(funcValue, args)
                 case _ => Nil
             }
         } else {
@@ -138,6 +139,7 @@ extend Evaluator {
                     let mapped = match (funcValue) {
                         case Procedure(_, _, _) => this.applyProcedure(funcValue, args)
                         case NativeFunc(f) => f(args)
+                        case Closure(_, _) => this.applyProcedure(funcValue, args)
                         case _ => Nil
                     }
                     result.add(mapped)
@@ -184,6 +186,7 @@ extend Evaluator {
                     let testResult = match (pred) {
                         case Procedure(_, _, _) => this.applyProcedure(pred, args)
                         case NativeFunc(f) => f(args)
+                        case Closure(_, _) => this.applyProcedure(pred, args)
                         case _ => LispValue.Boolean(false)
                     }
 
@@ -489,6 +492,15 @@ extend Evaluator {
                 this.stackDepth = this.stackDepth - 1
 
                 result
+            case Closure(id, closureEnv) =>
+                if (id < BytecodeVM.functionTable.size) {
+                    let compiledFunc = BytecodeVM.functionTable[id]
+                    this.applyProcedure(
+                        Procedure(compiledFunc.params, compiledFunc.body, closureEnv),
+                        args)
+                } else {
+                    LispValue.Error(XispError(ErrorType.RuntimeError, "AST: invalid closure ID"))
+                }
             case _ => Nil
         }
     }

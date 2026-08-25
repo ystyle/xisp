@@ -1,21 +1,101 @@
 ;; ============================================================
-;; Xisp 性能基准测试（拆箱栈优化用）
-;; 由外部 time 命令计时：time xisp lisp-tests/benchmark.lisp
+;; Xisp 性能基准测试 v2
+;; 用法（外部计时）：
+;;   AST 模式：    time xisp lisp-tests/benchmark.lisp
+;;   字节码模式：  time xisp --with-bytecode-compiler lisp-tests/benchmark.lisp
+;;
+;; 注意：
+;; - xisp 无内置毫秒时钟/数字转字符串函数，统一用外部 time 计时
+;; - 不依赖 define-macro / 命名 let / current-time-millis（旧版基准均不可用）
+;; - 每个用例同时覆盖「直接调用」与「间接调用」（闭包经变量/参数传递），
+;;   直接调用是字节码帧切换快速路径是否生效的关键对照
 ;; ============================================================
 
-;; 1. 递归 fib(30) — 纯整数递归
+;; 1. 纯整数递归 fib（直接调用：函数名经环境查找）
 (define (fib n)
   (if (< n 2) n (+ (fib (- n 1)) (fib (- n 2)))))
-(println "fib(30): " (fib 30))
 
-;; 2. fact(20)
+;; 2. fact
 (define (fact n)
   (if (< n 2) 1 (* n (fact (- n 1)))))
-(println "fact(20): " (fact 20))
 
-;; 3. 循环求和 0..500000（尾递归，验证非尾递归场景）
-(define (sum-to n)
-  (define (iter i acc)
-    (if (> i n) acc (iter (+ i 1) (+ acc i))))
-  (iter 1 0))
-(println "sum(0..500000): " (sum-to 500000))
+;; 3. 尾递归求和（单层函数，避免嵌套 define 引用外层参数的编译器局限）
+(define (sum-iter i acc n)
+  (if (> i n) acc (sum-iter (+ i 1) (+ acc i) n)))
+
+;; 4. 列表生成（避开内置 range；AST 模式每层递归消耗 ~3 个栈深，深度控制在 200
+;;    以内保证两模式都能完整跑完）
+(define (make-range n)
+  (if (= n 0) '() (prepend n (make-range (- n 1)))))
+
+;; 5. 闭包（lambda 走 AST 回退，作为对照）
+(define (make-counter)
+  (let ((count 0))
+    (lambda ()
+      (set! count (+ count 1))
+      count)))
+
+;; ============================================================
+;; 1. 直接调用 —— 递归
+;; ============================================================
+(println "fib(24) direct:      " (fib 24))
+(println "fib(26) direct:      " (fib 26))
+(println "fact(20) direct:     " (fact 20))
+
+;; ============================================================
+;; 2. 间接调用 —— 闭包值经局部变量/参数传递（帧切换路径）
+;; ============================================================
+(println "fib(24) indirect:    " (let ((f fib)) (f 24)))
+(define (run-it f) (f 20))
+(println "fib(20) via param:   " (run-it fib))
+
+;; ============================================================
+;; 3. 尾递归求和（200 层：AST 模式每层 ~3 栈深，需 < 1000）
+;; ============================================================
+(println "sum(1..200):         " (sum-iter 1 0 200))
+
+;; ============================================================
+;; 4. 列表遍历（reduce/map/filter 走 AST 回退，作为混合负载对照）
+;; ============================================================
+(define data (make-range 200))
+(println "reduce sum(200):     " (reduce + 0 data))
+(println "map double(200):     " (length (map (lambda (x) (* x 2)) data)))
+(println "filter even(200):    " (length (filter (lambda (x) (= (mod x 2) 0)) data)))
+
+;; ============================================================
+;; 5. let 绑定 + 算术（编译路径）
+;; ============================================================
+(define (let-loop)
+  (if (= 0 1) 0
+    (let ((a 1) (b 2) (c 3) (d 4) (e 5))
+      (+ a b c d e))))
+(println "let bind(1):         " (let-loop))
+
+;; ============================================================
+;; 6. match（编译路径）
+;; ============================================================
+(define (match-cls i)
+  (match i
+    (1000 "thousand")
+    (100 "hundred")
+    (10 "ten")
+    (else "other")))
+(println "match(10):           " (match-cls 10))
+
+;; ============================================================
+;; 7. 闭包调用（AST 回退路径，作为对照）
+;; ============================================================
+(define (counter-call n)
+  (let ((c (make-counter)))
+    (c)
+    (c)
+    (c)))
+(println "closure counter:     " (counter-call 2))
+
+;; ============================================================
+(println "")
+(println "benchmark done")
+;; 预期（校验正确性）：
+;;   fib(24) = 46368, fib(26) = 121393, fact(20) = 2432902008176640000
+;;   sum(1..200) = 20100, reduce sum(200) = 20100, filter even = 100
+;; ============================================================

@@ -18,6 +18,7 @@ struct CliConfig {
     var scriptPath: Option<String> = None
     var code: Option<String> = None
     var showHelp: Bool = false
+    var useBytecode: Bool = false
 }
 
 main(args: Array<String>): Int64 {
@@ -44,6 +45,7 @@ main(args: Array<String>): Int64 {
  *   -c "<code>"              执行代码
  *   --stack-depth <N>        栈深度限制（命令行优先于环境变量）
  *   --simple-repl            简单 REPL
+ *   --with-bytecode-compiler 启用字节码编译器（提升性能）
  *   <script.lisp>            执行脚本
  */
 func parseArgs(args: Array<String>): CliConfig {
@@ -70,6 +72,8 @@ func parseArgs(args: Array<String>): CliConfig {
             }
         } else if (arg == "--simple-repl") {
             config.simpleRepl = true
+        } else if (arg == "--with-bytecode-compiler") {
+            config.useBytecode = true
         } else if (arg.startsWith("-") && arg.size > 1) {
             eprintln("未知参数: ${arg}")
         } else {
@@ -119,6 +123,9 @@ func buildOptions(config: CliConfig): Array<InterpreterOption> {
     opts.add(withStdLib())
     opts.add(withQuietMode())
     opts.add(withScriptMode())
+    if (config.useBytecode) {
+        opts.add(withBytecodeCompiler())
+    }
     if (let Some(depth) <- resolveStackDepth(config)) {
         opts.add(withMaxStackDepth(depth))
     }
@@ -146,6 +153,9 @@ func printHelp(): Unit {
     println("  --stack-depth <N>                   设置最大调用栈深度（命令行优先）")
     println("  XISP_MAX_STACK_DEPTH=<N>             环境变量方式设置栈深度（默认 1000）")
     println("")
+    println("字节码:")
+    println("  --with-bytecode-compiler            启用字节码编译器（提升性能）")
+    println("")
     println("环境变量:")
     println("  XISP_PATH=<paths>                   模块搜索路径（用 : 分隔）")
     println("")
@@ -153,6 +163,7 @@ func printHelp(): Unit {
     println("  ystyle::xisp.cli")
     println("  ystyle::xisp.cli script.lisp")
     println("  ystyle::xisp.cli --stack-depth 5000 script.lisp")
+    println("  ystyle::xisp.cli --with-bytecode-compiler script.lisp")
     println("  XISP_PATH=./examples ystyle::xisp.cli -c \"(import pkg1)\"")
     println("")
 }
@@ -161,6 +172,9 @@ func runRepl(useSimple: Bool, config: CliConfig): Unit {
     let opts = ArrayList<InterpreterOption>()
     opts.add(withStdLib())
     opts.add(withScriptMode())
+    if (config.useBytecode) {
+        opts.add(withBytecodeCompiler())
+    }
     if (let Some(depth) <- resolveStackDepth(config)) {
         opts.add(withMaxStackDepth(depth))
     }

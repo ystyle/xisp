@@ -393,6 +393,26 @@
 - 2026-01-22: 现代化语法和桥接层完成
 - 2026-01-21: 核心 MVP 完成
 
+## M9: 字节码调用链修复 + 性能验证 ✅
+
+- [x] 定位性能瓶颈：直接函数调用不经 VM 帧切换（Str(name)→env.lookup→Closure→AST 解释）
+- [x] 帧切换接入 callFunction：Str(name) 预解析 + Closure 统一帧切换
+- [x] 帧布局重构：局部槽区与栈区分离（CompiledFunction.localSlots/globalSlots），
+      消除栈/槽重叠导致的寄存器污染
+- [x] 调用结果槽修复：函数调用结果落在调用点函数槽，保证 (f a)(g b) 等操作数毗邻
+- [x] savedFrames 保存/恢复 currentEnv + 调用点槽（嵌套返回环境正确）
+- [x] 子求值器继承 compiler/vm（宏展开/回退 AST 的子树可再编译进 VM）
+- [x] 嵌套 VM 执行安全化（executeFunc 状态保存/恢复）
+- [x] 正确性修复：命名 let 不再静默编译（回退 AST）、set! 回退 AST（保持修改语义）、
+      多参数算术左折叠、globalRefs 实时解析（set!/重新定义可见）、宏槽保留名字
+- [x] 新增单元测试：src/bytecode_test.cj（11 用例，覆盖直接/间接调用/宏/嵌套/named let）
+- [x] 重写 lisp-tests/benchmark.lisp（旧的 define-macro/命名 let/current-time-millis 全部不可用）
+- [x] 全量 325 单元测试通过
+- [x] 性能：AST 2038ms → 字节码 109ms（~18.7x）
+
+**完成**: 2026-08-25
+**分支**: feat/bytecode-compiler
+
 ## M7: AST 求值器性能优化（拆箱快速路径） ✅
 
 - [x] 算术特殊形式化：`+ - * / < > =` 从函数调用提升为特殊形式
@@ -435,3 +455,28 @@
 **测试**: 318 单元测试（+4 新增）+ 全部 Lisp 集成测试通过
 **分支**: feat/perf-detail-opt（从 master 切出）
 **待合并**: master
+
+## M10: 字节码全语法编译 + examples 双模式验证 ✅
+
+- [x] lambda 编译（子函数 + 变长 MAKE_CLOSURE + 单层闭包捕获）
+  - 捕获环境：child of 定义环境 + 复制外层帧槽值（set! 穿透捕获环境，counter 语义正确）
+  - 跨层捕获（祖父槽）编译回退 AST（运行时槽号不可达，语义保真）
+- [x] set! 编译（OP_SET_GLOBAL 环境链修改 + 帧槽快照；局部直接写槽）
+- [x] quasiquote 编译（OP_CONS/OP_CONCAT 段式拼接，unquote/unquote-splicing）
+- [x] `->` 编译（编译期展开，map/filter/reduce/apply 特殊顺序与 AST 一致）
+- [x] apply 编译（OP_APPLY 列表解包）
+- [x] if-let / when-let* 编译（两者与 AST 语义对齐）
+- [x] 真值语义统一：JUMP_IF_FALSE 改用 isTruthy（0 为假，与 AST 一致）
+- [x] 编译纪律：只有顶层表达式尝试编译；编译失败/宏调用/回退树内禁用再编译
+  （AST 局部变量不在编译帧槽中，解决 UnboundVariable 语义问题）
+- [x] match 重构：Symbol 模式绑定帧槽、字面量回填修复、guard/列表模式回退 AST
+- [x] 参数语义修复：&rest/&key/默认值编译回退 AST（原静默错误编译）；多参数算术左折叠
+- [x] 宏调用参数 quote 化（编译路径已求值 → 恢复"值作为字面"宏语义）
+- [x] 高阶回调支持 Closure（map/filter/reduce 回调编译函数）
+- [x] 新增 17 个 BytecodeTest 用例；全量 347 单元测试通过
+- [x] 子 agent 双模式跑全部 26 个 examples：22 个完全一致，
+      4 个修复（closures/thread_macro/macro_basics/macro_advanced），
+      剩余差异均为示例自身环境项（模块元数据/中文模式/桥接字符串插值示例）
+
+**完成**: 2026-08-25
+**分支**: feat/bytecode-compiler

@@ -8,11 +8,42 @@ import ystyle::xisp.types.*
 extend Evaluator {
     /**
      * 对表达式求值（主入口）
+     * 编译纪律：
+     * - 只有顶层表达式（当前求值树的根）才尝试编译；
+     * - 编译失败、宏调用、或已回退 AST 的子树，禁止本树内再编译
+     *   （AST 局部变量不在编译帧槽中，子表达式编译后按全局引用会产生 UnboundVariable）
      */
     public func eval(expr: LispValue): LispValue {
-        // 尝试编译（默认返回 None，走 AST 解释）
-        if (let Some(code) <- this.compiler.compile(expr)) {
-            return this.vm.execute(code, this.env)
+        let isRoot = this.evalDepth == 0
+        this.evalDepth = this.evalDepth + 1
+        var result: LispValue = Nil
+        try {
+            result = this.evalInner(expr, isRoot)
+        } finally {
+            this.evalDepth = this.evalDepth - 1
+        }
+        result
+    }
+
+    /**
+     * 求值内部实现（含编译分派）
+     */
+    func evalInner(expr: LispValue, isRoot: Bool): LispValue {
+        if (isRoot) {
+            this.compileSuspended = false
+        }
+        if (!this.compileSuspended && let Some(c) <- this.compiler) {
+            if (this.isMacroCallExpr(expr)) {
+                // 宏调用：展开体可能引用调用点局部（AST 环境），本树禁用编译（AST 展开）
+                this.compileSuspended = true
+            } else if (let Some(code) <- c.compile(expr)) {
+                if (let Some(v) <- this.vm) {
+                    return v.execute(code, this.env)
+                }
+            } else {
+                // 编译失败：回退 AST，本树禁用后续编译
+                this.compileSuspended = true
+            }
         }
         match (expr) {
             case LispValue.Int(_) => expr
@@ -34,6 +65,26 @@ extend Evaluator {
                 }
             case Cons(cell) => this.doEvalList(cell)
             case _ => expr
+        }
+    }
+
+    /**
+     * 判断表达式是否为宏调用（编译前必须先展开宏，否则宏调用会被编译成
+     * 普通函数调用并在运行时反复展开，导致无限递归）
+     */
+    func isMacroCallExpr(expr: LispValue): Bool {
+        match (expr) {
+            case Cons(cell) =>
+                if (let Symbol(sym) <- cell.car) {
+                    let resolvedSym = this.env.lookupKeyword(sym)
+                    match (this.env.lookup(resolvedSym)) {
+                        case Macro(_, _, _) | MacroFromParams(_, _, _) => true
+                        case _ => false
+                    }
+                } else {
+                    false
+                }
+            case _ => false
         }
     }
 
@@ -233,6 +284,19 @@ extend Evaluator {
                     }
                 }
                 f(args)
+            case Closure(_, _) =>
+                let args = this.evalArguments(rest)
+                for (arg in args) {
+                    match (arg) {
+                        case Error(_) => return this.injectStack(arg)
+                        case _ => ()
+                    }
+                }
+                let procResult = this.applyProcedure(funcValue, args)
+                match (procResult) {
+                    case Error(_) => this.injectStack(procResult)
+                    case _ => procResult
+                }
             case Nil =>
                 if (let Symbol(fn) <- first) {
                     this.injectStack(LispValue.Error(XispError(ErrorType.UndefinedFunction, "Undefined function: '${fn}'")))

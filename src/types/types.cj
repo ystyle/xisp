@@ -645,9 +645,16 @@ public enum LispValue <: ToString {
      *
      * 接收参数列表，返回结果
      */
-    | NativeFunc((ArrayList<LispValue>) -> LispValue)
+     | NativeFunc((ArrayList<LispValue>) -> LispValue)
 
-    /**
+     /**
+      * 编译后的闭包
+      *
+      * 包含：字节码函数索引、捕获的环境
+      */
+     | Closure(Int64, Environment)
+
+     /**
      * 哈希映射（字典）
      *
      * 键值对集合，键是字符串，值可以是任意 LispValue
@@ -833,6 +840,7 @@ public enum LispValue <: ToString {
             case Macro(_, _, _) => "#<macro>"
             case MacroFromParams(_, _, _) => "#<macro>"
             case NativeFunc(_) => "#<native-function>"
+            case Closure(_, _) => "#<closure>"
             case HashMap(map) => hashmapToString(map)
             case Error(err) => err.toString()
         }
@@ -855,6 +863,7 @@ public enum LispValue <: ToString {
             case Macro(params, body, env) => Macro(params, body, env.clone())
             case MacroFromParams(params, body, env) => MacroFromParams(params, body, env.clone())
             case NativeFunc(f) => NativeFunc(f)  // 原生函数不需要克隆
+            case Closure(id, env) => Closure(id, env.clone())
             case HashMap(map) => HashMap(map)  // HashMap 是不可变的，直接复制引用
             case Error(err) => Error(err)  // 错误是不可变的，直接复制引用
         }

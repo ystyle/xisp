@@ -424,6 +424,20 @@ public class LispInterpreter {
     }
 
     /**
+     * 设置编译器
+     */
+    public func setCompiler(compiler: Compiler): Unit {
+        this.evaluator.setCompiler(compiler)
+    }
+
+    /**
+     * 设置虚拟机
+     */
+    public func setVM(vm: VM): Unit {
+        this.evaluator.setVM(vm)
+    }
+
+    /**
      * 添加模块搜索路径
      * 如果模块系统尚未初始化，缓存路径，初始化时自动添加
      */

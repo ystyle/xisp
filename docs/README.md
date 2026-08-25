@@ -32,5 +32,6 @@ npm run docs:build    # 构建到 ../docs/dist
 - [核心功能设计](core.md) - 数据类型、求值器、内置函数
 - [架构设计](design.md) - 分层架构、语法规范、路线图
 - [模块来源设计](module-source-design.md) - 模块系统扩展性设计
+- [字节码性能对比报告](bytecode-performance.md) - AST vs 字节码模式性能数据与优化历程
 - [设计计划](plans/) - 功能设计与实现计划
 - [Bug 调查](bugs/) - 问题排查记录

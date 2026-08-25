@@ -31,9 +31,15 @@ public class Evaluator {
     // 当前 Loader（模块上下文用 ModuleLoader，脚本/REPL 用 ScriptLoader）
     public var currentLoader: Option<Loader> = None
 
-    // 编译器和虚拟机（预留）
-    var compiler: Compiler = Compiler()
-    var vm: VM = VM()
+    // 编译器和虚拟机
+    var compiler: Option<Compiler> = None
+    var vm: Option<VM> = None
+
+    // 求值深度（0 = 顶层表达式根部，用于编译纪律）
+    var evalDepth: Int64 = 0
+    // 编译挂起：当前顶层表达式树已回退 AST（或含宏调用、AST 局部变量），
+    // 禁止本树内子表达式再编译（AST 局部变量不在编译帧槽中，编译后按全局查找会出错）
+    var compileSuspended: Bool = false
 
     // 算术操作符守卫缓存（+ - * / < > =）
     // arithGuardVersion 匹配 env.arithVersion.value 时缓存有效
@@ -46,14 +52,14 @@ public class Evaluator {
      * 设置编译器
      */
     public func setCompiler(c: Compiler) {
-        this.compiler = c
+        this.compiler = Some(c)
     }
 
     /**
      * 设置虚拟机
      */
     public func setVM(v: VM) {
-        this.vm = v
+        this.vm = Some(v)
     }
 
     // 调用栈追踪
