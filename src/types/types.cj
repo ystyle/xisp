@@ -43,6 +43,8 @@ public open class Environment {
      * 对 + - * / < > = 的 define/set 会递增
      */
     public var arithVersion: ArithVersionCell = ArithVersionCell()
+    // 全局引用版本（全环境共享 cell：任何绑定/修改都会使所有帧切换的 globalRefs 缓存失效）
+    public static var defineVersion: ArithVersionCell = ArithVersionCell()
 
     /**
      * 变量绑定表
@@ -107,6 +109,7 @@ public open class Environment {
      */
     public func define(name: String, value: LispValue): Unit {
         this.bindings[name] = value
+        Environment.defineVersion.value = Environment.defineVersion.value + 1
         if (Environment.isArithOp(name)) {
             this.arithVersion.value = this.arithVersion.value + 1
         }
@@ -147,11 +150,19 @@ public open class Environment {
     }
 
     /**
+     * 静默定义（闭包捕获等私有新绑定）：不递增全局版本——不使已解析的全局引用缓存失效
+     */
+    public func defineSilent(name: String, value: LispValue): Unit {
+        this.bindings[name] = value
+    }
+
+    /**
      * 修改已有变量
      */
     public func set(name: String, value: LispValue): Bool {
         if (this.bindings.contains(name)) {
             this.bindings[name] = value
+            Environment.defineVersion.value = Environment.defineVersion.value + 1
             if (Environment.isArithOp(name)) {
                 this.arithVersion.value = this.arithVersion.value + 1
             }

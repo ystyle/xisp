@@ -23,6 +23,10 @@ public class BytecodeVM <: VM {
     var savedFrames: ArrayList<(CompiledFunction, Int64, Int64, Environment, Int64)> = ArrayList<(CompiledFunction, Int64, Int64, Environment, Int64)>()
     // 字节码编译器（供回退 AST 的子求值器使用，让 AST 边缘的子表达式仍可再编译进 VM）
     var compiler: Option<Compiler> = None
+    // globalRefs 解析缓存：编译函数 identity → (解析环境, 环境版本, 值列表)
+    static var globalRefCache: HashMap<Int64, (Environment, Int64, ArrayList<LispValue>)> = HashMap<Int64, (Environment, Int64, ArrayList<LispValue>)>()
+    // 编译函数 identity → 全局闭包 id（同一函数只注册一次，避免 functionTable 膨胀）
+    static var funcIds: HashMap<Int64, Int64> = HashMap<Int64, Int64>()
 
     /**
      * 设置字节码编译器（子求值器回退 AST 后仍可再编译）
@@ -81,22 +85,38 @@ public class BytecodeVM <: VM {
             while (ip < currentFunc.code.size && running) {
                 let op = currentFunc.code[ip]
                 ip++
-                if (op == OP_PUSH_CONSTANT) {
+                match (op) {
+                    case 0 =>
+
                     if (ip < currentFunc.code.size) {
                         let idx = currentFunc.code[ip]; ip++
                         this.push(currentFunc.constants[idx])
                     } else {
                         return LispValue.Error(XispError(ErrorType.RuntimeError, "Bytecode: OP_PUSH_CONSTANT missing index"))
                     }
-                } else if (op == OP_PUSH_NIL) {
+                
+
+                    case 1 =>
+
                     this.push(Nil)
-                } else if (op == OP_PUSH_TRUE) {
+                
+
+                    case 2 =>
+
                     this.push(LispValue.Boolean(true))
-                } else if (op == OP_PUSH_FALSE) {
+                
+
+                    case 3 =>
+
                     this.push(LispValue.Boolean(false))
-                } else if (op == OP_POP) {
+                
+
+                    case 4 =>
+
                     if (this.sp >= 0) { this.sp-- }
-                } else if (op == OP_ADD) {
+                
+
+                    case 8 =>
                     if (this.sp >= 1) {
                         let b = this.pop()
                         let a = this.pop()
@@ -119,7 +139,10 @@ public class BytecodeVM <: VM {
                             this.push(result)
                         }
                     }
-                } else if (op == OP_SUB) {
+                
+
+                    case 9 =>
+
                     if (this.sp >= 1) {
                         let b = this.pop()
                         let a = this.pop()
@@ -141,7 +164,10 @@ public class BytecodeVM <: VM {
                             this.push(result)
                         }
                     }
-                } else if (op == OP_MUL) {
+                
+
+                    case 12 =>
+
                     if (this.sp >= 1) {
                         let b = this.pop()
                         let a = this.pop()
@@ -163,7 +189,10 @@ public class BytecodeVM <: VM {
                             this.push(result)
                         }
                     }
-                } else if (op == OP_DIV) {
+                
+
+                    case 13 =>
+
                     if (this.sp >= 1) {
                         let b = this.pop()
                         let a = this.pop()
@@ -185,7 +214,10 @@ public class BytecodeVM <: VM {
                             this.push(result)
                         }
                     }
-                } else if (op == OP_LT) {
+                
+
+                    case 14 =>
+
                     if (this.sp >= 1) {
                         let b = this.pop()
                         let a = this.pop()
@@ -208,7 +240,10 @@ public class BytecodeVM <: VM {
                             this.push(result)
                         }
                     }
-                } else if (op == OP_GT) {
+                
+
+                    case 15 =>
+
                     if (this.sp >= 1) {
                         let b = this.pop()
                         let a = this.pop()
@@ -231,7 +266,10 @@ public class BytecodeVM <: VM {
                             this.push(result)
                         }
                     }
-                } else if (op == OP_EQ) {
+                
+
+                    case 16 =>
+
                     if (this.sp >= 1) {
                         let b = this.pop()
                         let a = this.pop()
@@ -241,7 +279,10 @@ public class BytecodeVM <: VM {
                             this.push(if (this.equalValue(a, b)) { Boolean(true) } else { Boolean(false) })
                         }
                     }
-                } else if (op == OP_NOT) {
+                
+
+                    case 17 =>
+
                     if (this.sp >= 0) {
                         let v = this.pop()
                         let result = match (v) {
@@ -251,11 +292,17 @@ public class BytecodeVM <: VM {
                         }
                         this.push(result)
                     }
-                } else if (op == OP_DUP) {
+                
+
+                    case 23 =>
+
                     if (this.sp >= 0) {
                         this.push(this.registers[this.sp])
                     }
-                } else if (op == OP_STORE_GLOBAL) {
+                
+
+                    case 5 =>
+
                     if (ip < currentFunc.code.size) {
                         let nameIdx = currentFunc.code[ip]; ip++
                         let value = this.pop()
@@ -266,7 +313,10 @@ public class BytecodeVM <: VM {
                             case _ => return LispValue.Error(XispError(ErrorType.RuntimeError, "Bytecode: STORE_GLOBAL expected string"))
                         }
                     }
-                } else if (op == OP_LOAD_GLOBAL) {
+                
+
+                    case 6 =>
+
                     if (ip < currentFunc.code.size) {
                         let nameIdx = currentFunc.code[ip]; ip++
                         match (currentFunc.constants[nameIdx]) {
@@ -276,12 +326,18 @@ public class BytecodeVM <: VM {
                             case _ => return LispValue.Error(XispError(ErrorType.RuntimeError, "Bytecode: LOAD_GLOBAL expected string"))
                         }
                     }
-                } else if (op == OP_JUMP) {
+                
+
+                    case 10 =>
+
                     if (ip < currentFunc.code.size) {
                         let target = currentFunc.code[ip]; ip++
                         ip = target
                     }
-                } else if (op == OP_JUMP_IF_FALSE) {
+                
+
+                    case 11 =>
+
                     if (ip < currentFunc.code.size) {
                         let target = currentFunc.code[ip]; ip++
                         if (this.sp >= 0) {
@@ -292,7 +348,10 @@ public class BytecodeVM <: VM {
                             }
                         }
                     }
-                } else if (op == OP_SET_GLOBAL) {
+                
+
+                    case 48 =>
+
                     if (ip < currentFunc.code.size) {
                         let nameIdx = currentFunc.code[ip]; ip++
                         let value = this.pop()
@@ -307,20 +366,29 @@ public class BytecodeVM <: VM {
                             case _ => return LispValue.Error(XispError(ErrorType.RuntimeError, "Bytecode: SET_GLOBAL expected string"))
                         }
                     }
-                } else if (op == OP_CONS) {
+                
+
+                    case 49 =>
+
                     if (this.sp >= 1) {
                         // 栈顶 = car，次顶 = cdr（序列构造：push 从右到左）
                         let a = this.pop()
                         let b = this.pop()
                         this.push(Cons(ConsCell(a, b)))
                     }
-                } else if (op == OP_CONCAT) {
+                
+
+                    case 50 =>
+
                     if (this.sp >= 1) {
                         let b = this.pop()
                         let a = this.pop()
                         this.push(this.appendCopy(a, b))
                     }
-                } else if (op == OP_APPLY) {
+                
+
+                    case 51 =>
+
                     if (ip < currentFunc.code.size) {
                         let prefixCount = currentFunc.code[ip]; ip++
                         let result = this.applyCall(prefixCount, env)
@@ -329,7 +397,10 @@ public class BytecodeVM <: VM {
                             case _ => this.push(result)
                         }
                     }
-                } else if (op == OP_CALL) {
+                
+
+                    case 7 =>
+
                     if (ip < currentFunc.code.size) {
                         let argCount = currentFunc.code[ip]; ip++
                         let startIdx = this.sp - argCount + 1
@@ -359,10 +430,16 @@ public class BytecodeVM <: VM {
                             case _ => this.push(result)
                         }
                     }
-                } else if (op == OP_HALT) {
+                
+
+                    case 99 =>
+
                     running = false
                     break
-                } else if (op == OP_MATCH_LIT) {
+                
+
+                    case 38 =>
+
                     if (ip + 1 < currentFunc.code.size) {
                         let idx = currentFunc.code[ip]; ip++
                         let target = currentFunc.code[ip]; ip++
@@ -374,13 +451,19 @@ public class BytecodeVM <: VM {
                             }
                         }
                     }
-                } else if (op == OP_LOAD_LOCAL_R) {
+                
+
+                    case 39 =>
+
                     if (ip + 1 < currentFunc.code.size) {
                         let rd = currentFunc.code[ip]; ip++
                         let idx = currentFunc.code[ip]; ip++
                         this.setReg(rd, this.getReg(this.bp + idx))
                     }
-                } else if (op == OP_LOAD_GLOBAL_R) {
+                
+
+                    case 40 =>
+
                     if (ip + 1 < currentFunc.code.size) {
                         let rd = currentFunc.code[ip]; ip++
                         let sIdx = currentFunc.code[ip]; ip++
@@ -389,47 +472,68 @@ public class BytecodeVM <: VM {
                             case _ => this.setReg(rd, Nil)
                         }
                     }
-                } else if (op == OP_LOAD_CONST) {
+                
+
+                    case 30 =>
+
                     if (ip + 1 < currentFunc.code.size) {
                         let rd = currentFunc.code[ip]; ip++
                         let idx = currentFunc.code[ip]; ip++
                         this.setReg(rd, currentFunc.constants[idx])
                     }
-                } else if (op == OP_ADD_R) {
+                
+
+                    case 31 =>
+
                     if (ip + 2 < currentFunc.code.size) {
                         let rd = currentFunc.code[ip]; ip++
                         let rs1 = currentFunc.code[ip]; ip++
                         let rs2 = currentFunc.code[ip]; ip++
                         this.binopReg(rd, rs1, rs2, 0)
                     }
-                } else if (op == OP_SUB_R) {
+                
+
+                    case 32 =>
+
                     if (ip + 2 < currentFunc.code.size) {
                         let rd = currentFunc.code[ip]; ip++
                         let rs1 = currentFunc.code[ip]; ip++
                         let rs2 = currentFunc.code[ip]; ip++
                         this.binopReg(rd, rs1, rs2, 1)
                     }
-                } else if (op == OP_MUL_R) {
+                
+
+                    case 33 =>
+
                     if (ip + 2 < currentFunc.code.size) {
                         let rd = currentFunc.code[ip]; ip++
                         let rs1 = currentFunc.code[ip]; ip++
                         let rs2 = currentFunc.code[ip]; ip++
                         this.binopReg(rd, rs1, rs2, 2)
                     }
-                } else if (op == OP_DIV_R) {
+                
+
+                    case 34 =>
+
                     if (ip + 2 < currentFunc.code.size) {
                         let rd = currentFunc.code[ip]; ip++
                         let rs1 = currentFunc.code[ip]; ip++
                         let rs2 = currentFunc.code[ip]; ip++
                         this.binopReg(rd, rs1, rs2, 3)
                     }
-                } else if (op == OP_NEG_R) {
+                
+
+                    case 35 =>
+
                     if (ip + 1 < currentFunc.code.size) {
                         let rd = currentFunc.code[ip]; ip++
                         let rs = currentFunc.code[ip]; ip++
                         this.unopNegReg(rd, rs)
                     }
-                } else if (op == OP_NOT_R) {
+                
+
+                    case 41 =>
+
                     if (ip + 1 < currentFunc.code.size) {
                         let rd = currentFunc.code[ip]; ip++
                         let rs = currentFunc.code[ip]; ip++
@@ -440,13 +544,19 @@ public class BytecodeVM <: VM {
                             case _ => LispValue.Boolean(false)
                         })
                     }
-                } else if (op == OP_MOV_R) {
+                
+
+                    case 36 =>
+
                     if (ip + 1 < currentFunc.code.size) {
                         let rd = currentFunc.code[ip]; ip++
                         let rs = currentFunc.code[ip]; ip++
                         this.setReg(rd, this.getReg(rs))
                     }
-                } else if (op == OP_LT_R) {
+                
+
+                    case 44 =>
+
                     if (ip + 2 < currentFunc.code.size) {
                         let rd = currentFunc.code[ip]; ip++
                         let rs1 = currentFunc.code[ip]; ip++
@@ -455,7 +565,10 @@ public class BytecodeVM <: VM {
                         let b = this.getReg(rs2)
                         this.setReg(rd, this.cmpLT(a, b))
                     }
-                } else if (op == OP_GT_R) {
+                
+
+                    case 45 =>
+
                     if (ip + 2 < currentFunc.code.size) {
                         let rd = currentFunc.code[ip]; ip++
                         let rs1 = currentFunc.code[ip]; ip++
@@ -464,7 +577,10 @@ public class BytecodeVM <: VM {
                         let b = this.getReg(rs2)
                         this.setReg(rd, this.cmpGT(a, b))
                     }
-                } else if (op == OP_EQ_R) {
+                
+
+                    case 46 =>
+
                     if (ip + 2 < currentFunc.code.size) {
                         let rd = currentFunc.code[ip]; ip++
                         let rs1 = currentFunc.code[ip]; ip++
@@ -473,18 +589,27 @@ public class BytecodeVM <: VM {
                         let b = this.getReg(rs2)
                         this.setReg(rd, this.cmpEQ(a, b))
                     }
-                } else if (op == OP_POP_R) {
+                
+
+                    case 47 =>
+
                     if (ip < currentFunc.code.size) {
                         let rd = currentFunc.code[ip]; ip++
                         let val = this.pop()
                         this.setReg(rd, val)
                     }
-                } else if (op == OP_PUSH_R) {
+                
+
+                    case 37 =>
+
                     if (ip < currentFunc.code.size) {
                         let rd = currentFunc.code[ip]; ip++
                         this.push(this.getReg(rd))
                     }
-                } else if (op == OP_LOAD_LOCAL) {
+                
+
+                    case 24 =>
+
                     if (ip < currentFunc.code.size) {
                         let idx = currentFunc.code[ip]; ip++
                         if (this.bp + idx < this.registers.size) {
@@ -493,7 +618,10 @@ public class BytecodeVM <: VM {
                             this.push(Nil)
                         }
                     }
-                } else if (op == OP_STORE_LOCAL) {
+                
+
+                    case 25 =>
+
                     if (ip < currentFunc.code.size) {
                         let idx = currentFunc.code[ip]; ip++
                         let val = this.pop()
@@ -504,12 +632,18 @@ public class BytecodeVM <: VM {
                         this.registers[targetIdx] = val
                         // 绑定不是表达式值，不保留在栈上（保持栈平衡）
                     }
-                } else if (op == OP_MAKE_CLOSURE) {
+                
+
+                    case 42 =>
+
                     if (ip < currentFunc.code.size) {
                         let idx = currentFunc.code[ip]; ip++
                         let capCount = currentFunc.code[ip]; ip++
                         // 捕获环境：child of currentEnv + 复制外层帧槽值（闭包捕获语义）
-                        let capEnv = this.currentEnv.createChild()
+                        // 捕获环境：独立 env（不共享 defineVersion——捕获变量的定义不应使
+                        // 其他环境的 globalRefs 缓存失效；闭包内 set! 仍通过自身版本正确失效）
+                        let capEnv = Environment()
+                        capEnv.parent = Some(this.currentEnv)
                         for (i in 0..capCount) {
                             let nameIdx = currentFunc.code[ip]; ip++
                             let slot = currentFunc.code[ip]; ip++
@@ -519,20 +653,29 @@ public class BytecodeVM <: VM {
                                 Nil
                             }
                             match (currentFunc.constants[nameIdx]) {
-                                case Str(name) => capEnv.define(name, val)
+                                case Str(name) => capEnv.defineSilent(name, val)
                                 case _ => return LispValue.Error(XispError(ErrorType.RuntimeError, "Bytecode: MAKE_CLOSURE expected string"))
                             }
                         }
                         if (let Some(f) <- this.curFunc && idx < f.functions.size) {
                             let subFunc = f.functions[idx]
-                            let globalId = BytecodeVM.functionTable.size
-                            BytecodeVM.functionTable.add(subFunc)
+                            let globalId = if (BytecodeVM.funcIds.contains(subFunc.identity)) {
+                                BytecodeVM.funcIds[subFunc.identity]
+                            } else {
+                                let newId = BytecodeVM.functionTable.size
+                                BytecodeVM.functionTable.add(subFunc)
+                                BytecodeVM.funcIds[subFunc.identity] = newId
+                                newId
+                            }
                             this.push(Closure(globalId, capEnv))
                         } else {
                             this.push(Nil)
                         }
                     }
-                } else if (op == OP_RETURN) {
+                
+
+                    case 43 =>
+
                     let result = if (this.sp >= 0) { this.registers[this.sp] } else { Nil }
                     if (let Some((prevFunc, prevIp)) <- this.restoreFrame()) {
                         currentFunc = prevFunc
@@ -546,8 +689,13 @@ public class BytecodeVM <: VM {
                         running = false
                         break
                     }
-                } else {
+                
+
+                    case _ =>
+
                     return LispValue.Error(XispError(ErrorType.RuntimeError, "Bytecode: unknown opcode ${op}"))
+                
+
                 }
             }
             // 函数执行完毕，检查是否有保存的帧
@@ -624,22 +772,46 @@ public class BytecodeVM <: VM {
                 }
                 this.currentEnv = closureEnv
                 this.curFunc = Some(nextFunc)
-                // 解析函数体的全局引用到帧槽（实时解析，不缓存；槽号来自编译期记录）
+                // 解析函数体的全局引用到帧槽（版本号缓存：环境未变时命中；正确性由
+                // defineVersion（共享 cell）与解析环境引用（refEq）双重保证）
                 if (nextFunc.globalRefs.size > 0) {
-                    for (i in 0..nextFunc.globalRefs.size) {
-                        let name = nextFunc.globalRefs[i]
-                        let slotIdx = if (i < nextFunc.globalSlots.size) { nextFunc.globalSlots[i] } else { nextFunc.params.size + i }
-                        let val = this.currentEnv.lookup(name)
-                        // 宏值需要保留名字（callFunction 依赖名字重建调用表达式做展开）
-                        let slotVal = match (val) {
-                            case Macro(_, _, _) | MacroFromParams(_, _, _) => Str(name)
-                            case _ => val
+                    let cacheKey = nextFunc.identity
+                    var cached: Option<(Environment, Int64, ArrayList<LispValue>)> = None
+                    if (BytecodeVM.globalRefCache.contains(cacheKey)) {
+                        cached = BytecodeVM.globalRefCache[cacheKey]
+                    }
+                    var values: ArrayList<LispValue> = ArrayList<LispValue>()
+                    var cacheHit = false
+                    match (cached) {
+                        case Some((cenv, cver, cvals)) =>
+                            if (refEq(cenv, this.currentEnv) && cver == Environment.defineVersion.value) {
+                                values = cvals
+                                cacheHit = true
+                            }
+                        case None => ()
+                    }
+                    if (!cacheHit) {
+                        let resolved = ArrayList<LispValue>()
+                        for (i in 0..nextFunc.globalRefs.size) {
+                            let name = nextFunc.globalRefs[i]
+                            let val = this.currentEnv.lookup(name)
+                            // 宏值需要保留名字（callFunction 依赖名字重建调用表达式做展开）
+                            let slotVal = match (val) {
+                                case Macro(_, _, _) | MacroFromParams(_, _, _) => Str(name)
+                                case _ => val
+                            }
+                            resolved.add(slotVal)
                         }
+                        BytecodeVM.globalRefCache[cacheKey] = (this.currentEnv, Environment.defineVersion.value, resolved)
+                        values = resolved
+                    }
+                    for (i in 0..values.size) {
+                        let slotIdx = if (i < nextFunc.globalSlots.size) { nextFunc.globalSlots[i] } else { nextFunc.params.size + i }
                         let targetIdx = this.bp + slotIdx
                         while (targetIdx >= this.registers.size) {
                             this.registers.add(Nil)
                         }
-                        this.registers[targetIdx] = slotVal
+                        this.registers[targetIdx] = values[i]
                     }
                 }
                 Some((nextFunc, 0))
