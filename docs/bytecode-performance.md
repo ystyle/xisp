@@ -178,3 +178,13 @@ time ./target/release/bin/ystyle::xisp.cli --with-bytecode-compiler lisp-tests/p
 - **跨函数 JIT 调用**：单程 f→p 已正确（4/16/503 与 BC 一致）；**互递归 ping-pong 仍有 bug，本轮以「非自调用 → deopt 回退」保正确**（互递归 f(10)=5 ✓，测试覆盖）；
 - **性能**：fib(30) 27ms 保持 8.3x（FLAG 快路径避免了 helper 每帧调用——修复过程中发现 `and rax,imm32` 会截断高位的坑）；
 - 357/357 测试（+2 JitTest），26 examples JIT vs BC 逐字节一致。
+
+## 11. J4 整数特化（INT-spec，2026-08-26）
+
+- `jit_codegen_int.cj`：全 INT/BOOL 函数的 8B 槽 + 零 tag 检查形式（槽 8B@[rbp-8(i+1)]、栈项 8B、
+  调用帧缓冲仍 16B 与桥 ABI 一致）；无 deopt——资格判定（常量 Int/Boolean + 指令集 + **全局引用全为自身名**）
+  保证纯自递归；非自调用慢桩 rax=0 级联回退
+- **资格收紧教训**：`(<= n 1)` 编译为 builtin CALL → INT 慢桩返回 0 破坏语义 → 全局名全等于函数名才可 INT
+- 性能：fib(30) **27ms → 15-16ms（~1.8x）**；BC/JIT 比 14-26x（机器噪声内）
+- 验证：357/357 测试；26 examples JIT vs BC 逐字节一致；fib(25)=75025 ✓
+- 修复链：INT 版漏发函数体末尾 epilogue（主路径落尾桩返回 0——根因）

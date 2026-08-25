@@ -507,4 +507,5 @@
 - [x] J2 增量（c972978）：全局解析 helper（自调用 FLAG 复制 / 跨函数 helper 解析）+ 入口表基建
       - 跨函数单程 JIT 正确（503/4/16）；互递归 ping-pong bug → 暂 deopt 保正确
       - 357/357 测试（+2 JitTest）；26 examples 一致；fib 27ms 保持
-  - [ ] J2b 互递归时序 bug ｜J3 闭包捕获｜J4 整数特化（fib ≤4ms）｜J5 稳定/文档
+  - [x] J4 整数特化（INT-spec）：fib 30：27→15ms（~1.8x，资格=纯自递归 INT 函数）；357/357 + 26 examples 一致
+- [ ] J2b 互递归时序 bug ｜J3 闭包捕获｜J4b 寄存器分配（fib ≤4ms 需寄存器级，当前 15ms）｜J5 稳定/文档

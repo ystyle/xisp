@@ -78,6 +78,7 @@ public class JitRuntime {
         // 全局解析 helper 地址
         let hf: CFunc<(Int64, CPointer<Unit>, Int64) -> Unit> = jitResolveGlobals
         JitCodegen.resolveFnAbs = Int64(unsafe { CPointer<Int8>(hf).toUIntNative() })
+
     }
 
     public func hasEntry(globalId: Int64): Bool {
@@ -88,6 +89,36 @@ public class JitRuntime {
     public func getEntry(globalId: Int64, f: CompiledFunction): Option<CPointer<Unit>> {
         if (entries.contains(globalId)) {
             return Some(entries[globalId])
+        }
+        if (getVariable("XISP_JIT_DEBUG") != None) { eprintln("[JIT] eligible-int=${JitCodegenInt.isEligible(f)}") }
+        let intCode: Option<ArrayList<UInt8>> = if (JitCodegenInt.isEligible(f)) {
+            let cg = JitCodegenInt()
+            let r = cg.compile(f, globalId)
+            if (getVariable("XISP_JIT_DEBUG") != None) { eprintln("[JIT] int-compile=${r != None}") }
+            r
+        } else {
+            None
+        }
+        if (let Some(bytes) <- intCode) {
+            if (getVariable("XISP_JIT_DEBUG") != None) {
+                var hx = StringBuilder("")
+                for (i in 0..bytes.size) {
+                    let h = bytes[i]
+                    let hi = h / 16
+                    let lo = h % 16
+                    hx.append(if (hi < 10) { Rune(0x30 + Int32(hi)) } else { Rune(0x61 + Int32(hi) - 10) })
+                    hx.append(if (lo < 10) { Rune(0x30 + Int32(lo)) } else { Rune(0x61 + Int32(lo) - 10) })
+                    hx.append(" ")
+                }
+                eprintln("[JIT] inthex: ${hx}")
+            }
+            let entry = this.allocPage(bytes)
+            if (getVariable("XISP_JIT_DEBUG") != None) { eprintln("[JIT] entryaddr=${entry.toUIntNative()}") }
+            if (globalId >= 0 && globalId < JIT_ENTRY_CAP) {
+                jitEntryTable[globalId] = Int64(entry.toUIntNative())
+            }
+            entries[globalId] = entry
+            return Some(entry)
         }
         let codegen = JitCodegen()
         if (getVariable("XISP_JIT_DEBUG") != None) {
