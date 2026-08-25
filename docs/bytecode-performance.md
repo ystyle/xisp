@@ -188,3 +188,15 @@ time ./target/release/bin/ystyle::xisp.cli --with-bytecode-compiler lisp-tests/p
 - 性能：fib(30) **27ms → 15-16ms（~1.8x）**；BC/JIT 比 14-26x（机器噪声内）
 - 验证：357/357 测试；26 examples JIT vs BC 逐字节一致；fib(25)=75025 ✓
 - 修复链：INT 版漏发函数体末尾 epilogue（主路径落尾桩返回 0——根因）
+
+## 12. 语义一致性修正（三模式）+ JIT 基准档（2026-08-26）
+
+- **除法语义统一**：AST `/` 恒返回 Float（与 evalArithBin 一致）；VM binNum/case13/DIV_R 三处 Int-div 修正——
+  `(/ 20 4)` 三模式均为 5.000000；JIT 通用除法恒 deopt（语义交还 VM）；INT-spec 资格已排除除法
+- **基准三档**：`lisp-tests/perf/run.sh` 增加 jit 档（AST/BC/JIT 三列 + 双比值）
+- **遗留（真实缺口，已记录）**：
+  1. **闭包共享可变捕获**：`(make-counter 100)` 三个 lambda 共享 `count`——BC 的 MAKE_CLOSURE 按值复制
+     → set! 不共享（AST 500 vs BC 100）——J3 范畴（共享 cell 捕获）
+  2. **基准深层场景崩溃**（03-fact 等）：深层 VM↔JIT 混合调用 getEntry 参数损坏（addr nil）——
+     待修（下轮优先）
+- examples 三模式：26 中 8 为已知语义差（除法已修 2 个；其余=闭包捕获/模块导出）——BC vs JIT 恒一致 ✓

@@ -320,7 +320,7 @@ public class BytecodeVM <: VM {
                         let b = this.pop()
                         let a = this.pop()
                         if (let Int(ai) <- a && let Int(bi) <- b) {
-                            this.push(LispValue.Int(ai / bi))
+                            this.push(if (bi == 0) { Nil } else { LispValue.Float(Float64(ai) / Float64(bi)) })
                         } else {
                             let result = match (a) {
                                 case Int(ai) => match (b) {
@@ -917,7 +917,7 @@ public class BytecodeVM <: VM {
                                 BytecodeVM.funcIds[subFunc.identity] = newId
                                 newId
                             }
-                            if (getVariable("XISP_JIT_DEBUG") != None) { eprintln("[VM] MAKE_CLOSURE name=${subFunc.name} identity=${subFunc.identity} globalId=${globalId} tableSize=${BytecodeVM.functionTable.size}") }
+                            if (jitDebug) { eprintln("[VM] MAKE_CLOSURE name=${subFunc.name} identity=${subFunc.identity} globalId=${globalId} tableSize=${BytecodeVM.functionTable.size}") }
                             this.push(Closure(globalId, capEnv))
                         } else {
                             this.push(Nil)
@@ -1381,7 +1381,7 @@ public class BytecodeVM <: VM {
                             case 0 => LispValue.Int(ai + bi)
                             case 1 => LispValue.Int(ai - bi)
                             case 2 => LispValue.Int(ai * bi)
-                            case _ => LispValue.Int(ai / bi)
+                            case _ => if (bi == 0) { Nil } else { LispValue.Float(Float64(ai) / Float64(bi)) }
                         })
                     case LispValue.Float(bf) =>
                         Some(match (opKind) {
@@ -1436,7 +1436,7 @@ public class BytecodeVM <: VM {
                 case 0 => LispValue.Int(ai + bi)
                 case 1 => LispValue.Int(ai - bi)
                 case 2 => LispValue.Int(ai * bi)
-                case _ => LispValue.Int(ai / bi)
+                case _ => if (bi == 0) { Nil } else { LispValue.Float(Float64(ai) / Float64(bi)) }
             }
         }
         match (a) {

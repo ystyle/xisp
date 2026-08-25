@@ -21,6 +21,8 @@ var jitCurEnv: Environment = Environment()
 // 入口表：closureId → 机器码入口地址（0=未编译）；固定容量保证 raw 指针稳定
 let JIT_ENTRY_CAP: Int64 = 1024
 var jitEntryTable = Array<Int64>(JIT_ENTRY_CAP) { _ => 0 }
+// JIT 调试标志（一次读取；热路径避免重复 getVariable）
+var jitDebug: Bool = false
 
 /**
  * J2：callee 全局引用解析（@C，被 callee prologue 绝对地址调用）
@@ -74,6 +76,8 @@ public class JitRuntime {
 
     public init() {
         JitRuntime.shared = Some(this)
+        let dbg = getVariable("XISP_JIT_DEBUG")
+        jitDebug = dbg != None
         // 入口表 raw 指针（固定容量，地址稳定）
         let handle = unsafe { acquireArrayRawData<Int64>(jitEntryTable) }
         JitCodegen.entryTablePtr = Int64(unsafe { handle.pointer.toUIntNative() })
@@ -92,7 +96,7 @@ public class JitRuntime {
         if (entries.contains(globalId)) {
             return Some(entries[globalId])
         }
-        if (getVariable("XISP_JIT_DEBUG") != None) { eprintln("[JIT] eligible-int=${JitCodegenInt.isEligible(f)} eligible-reg=${JitCodegenIntR.isEligible(f)}") }
+        if (jitDebug) { eprintln("[JIT] eligible-int=${JitCodegenInt.isEligible(f)} eligible-reg=${JitCodegenIntR.isEligible(f)}") }
         // J4b R 形式（寄存器级）：已修 分支快照/prologue/BIN_LC 复制/弹栈顺序/桥接 rcx 槽 等，
         // 但递归调用链路仍有最终不一致（值池跨调用复用/返回路径）——暂禁用，保 v1 INT（正确性优先）
         let intCode: Option<ArrayList<UInt8>> = if (JitCodegenInt.isEligible(f)) {
@@ -102,7 +106,7 @@ public class JitRuntime {
             None
         }
         if (let Some(bytes) <- intCode) {
-            if (getVariable("XISP_JIT_DEBUG") != None) {
+            if (jitDebug) {
                 var hx = StringBuilder("")
                 for (i in 0..bytes.size) {
                     let h = bytes[i]
@@ -115,7 +119,7 @@ public class JitRuntime {
                 eprintln("[JIT] hex: ${hx}")
             }
             let entry = this.allocPage(bytes)
-            if (getVariable("XISP_JIT_DEBUG") != None) { eprintln("[JIT] entryaddr=${entry.toUIntNative()}") }
+            if (jitDebug) { eprintln("[JIT] entryaddr=${entry.toUIntNative()}") }
             if (globalId >= 0 && globalId < JIT_ENTRY_CAP) {
                 jitEntryTable[globalId] = Int64(entry.toUIntNative())
             }
@@ -124,7 +128,7 @@ public class JitRuntime {
             return Some(entry)
         }
         let codegen = JitCodegen()
-        if (getVariable("XISP_JIT_DEBUG") != None) {
+        if (jitDebug) {
             var gs = StringBuilder("")
             for (i in 0..f.globalRefs.size) {
                 gs.append("${f.globalRefs[i]}=${if (i < f.globalSlots.size) { f.globalSlots[i] } else { -1 }} ")
@@ -132,7 +136,7 @@ public class JitRuntime {
             eprintln("[JIT] compiling fn ${f.name} id=${globalId} locals=${f.localSlots} globals: ${gs} params=${f.params.size}")
         }
         if (let Some(code) <- codegen.compile(f, globalId)) {
-            if (getVariable("XISP_JIT_DEBUG") != None) {
+            if (jitDebug) {
                 var hx = StringBuilder("")
                 for (i in 0..code.size) {
                     let h = code[i]
@@ -148,7 +152,7 @@ public class JitRuntime {
             if (globalId >= 0 && globalId < JIT_ENTRY_CAP) {
                 jitEntryTable[globalId] = Int64(entry.toUIntNative())
             }
-            if (getVariable("XISP_JIT_DEBUG") != None) { eprintln("[JIT] entry=${entry.toUIntNative()}") }
+            if (jitDebug) { eprintln("[JIT] entry=${entry.toUIntNative()}") }
             entries[globalId] = entry
             return Some(entry)
         }
@@ -174,7 +178,7 @@ public class JitRuntime {
      */
     // 返回 None：编译失败或 deopt（调用方回退解释器）
     public func invoke(globalId: Int64, f: CompiledFunction, args: ArrayList<LispValue>, env: Environment): Option<LispValue> {
-        if (getVariable("XISP_JIT_DEBUG") != None) { eprintln("[JIT] invoke id=${globalId} fn=${f.name} args=${args.size}") }
+        if (jitDebug) { eprintln("[JIT] invoke id=${globalId} fn=${f.name} args=${args.size}") }
         let entryOpt = this.getEntry(globalId, f)
         match (entryOpt) {
             case None =>
@@ -211,7 +215,7 @@ public class JitRuntime {
                 unsafe { releaseArrayRawData<UInt8>(handle) }
                 let retVal = retPtr.toUIntNative()
                 if (retVal < 1024) {
-                    if (getVariable("XISP_JIT_DEBUG") != None) { eprintln("[JIT] deopt id=${globalId} site=${retVal}") }
+                    if (jitDebug) { eprintln("[JIT] deopt id=${globalId} site=${retVal}") }
                     return None   // deopt → 回退解释器
                 }
                 Some(this.readSlot(buf, -1))
