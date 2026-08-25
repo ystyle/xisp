@@ -493,13 +493,18 @@ extend Evaluator {
 
                 result
             case Closure(id, closureEnv) =>
-                if (id < BytecodeVM.functionTable.size) {
-                    let compiledFunc = BytecodeVM.functionTable[id]
-                    this.applyProcedure(
-                        Procedure(compiledFunc.params, compiledFunc.body, closureEnv),
-                        args)
-                } else {
-                    LispValue.Error(XispError(ErrorType.RuntimeError, "AST: invalid closure ID"))
+                // 高阶回调进 VM 执行（编译闭包直接帧切换式执行）
+                match (this.vm) {
+                    case Some(vm) => vm.callClosure(id, args, closureEnv)
+                    case None =>
+                        if (id < BytecodeVM.functionTable.size) {
+                            let compiledFunc = BytecodeVM.functionTable[id]
+                            this.applyProcedure(
+                                Procedure(compiledFunc.params, compiledFunc.body, closureEnv),
+                                args)
+                        } else {
+                            LispValue.Error(XispError(ErrorType.RuntimeError, "AST: invalid closure ID"))
+                        }
                 }
             case _ => Nil
         }

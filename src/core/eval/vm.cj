@@ -8,6 +8,8 @@ import std.collection.HashMap
  */
 public interface VM {
     func execute(code: CompiledCode, env: Environment): LispValue
+    // 直接调用编译闭包（AST 侧高阶回调进 VM 执行）
+    func callClosure(id: Int64, args: ArrayList<LispValue>, env: Environment): LispValue
 }
 
 /**
@@ -55,6 +57,71 @@ public class BytecodeVM <: VM {
         }
     }
 
+    /**
+     * 直接调用编译闭包（AST 高阶回调路径）：帧初始化（bp=1000 布局，参数/全局引用入槽）
+     * 后经 runMainLoop 执行。与 executeFunc 同级的嵌套执行安全。
+     */
+    public func callClosure(id: Int64, args: ArrayList<LispValue>, env: Environment): LispValue {
+        if (id < BytecodeVM.functionTable.size) {
+            let f = BytecodeVM.functionTable[id]
+            let savedRegisters = this.registers
+            let savedSp = this.sp
+            let savedBp = this.bp
+            let savedEnv = this.currentEnv
+            let savedFrames = this.savedFrames
+            let savedCur = this.curFunc
+            let result = this.runFunctionArgs(f, env, args)
+            this.registers = savedRegisters
+            this.sp = savedSp
+            this.bp = savedBp
+            this.currentEnv = savedEnv
+            this.savedFrames = savedFrames
+            this.curFunc = savedCur
+            result
+        } else {
+            LispValue.Error(XispError(ErrorType.RuntimeError, "Bytecode: invalid closure ID"))
+        }
+    }
+
+    func runFunctionArgs(func_: CompiledFunction, env: Environment, args: ArrayList<LispValue>): LispValue {
+        this.registers = ArrayList<LispValue>()
+        this.sp = -1
+        this.currentEnv = env
+        this.bp = 1000
+        this.curFunc = Some(func_)
+        this.savedFrames = ArrayList<(CompiledFunction, Int64, Int64, Environment, Int64)>()
+        // 位置参数入槽（与帧切换约定一致：参数 0..params.size-1 在 bp+0..）
+        for (i in 0..args.size) {
+            let targetIdx = 1000 + i
+            while (targetIdx >= this.registers.size) {
+                this.registers.add(Nil)
+            }
+            this.registers[targetIdx] = args[i]
+        }
+        // 全局引用解析入槽（AST 回调路径频率低，直接解析不缓存）
+        if (func_.globalRefs.size > 0) {
+            for (i in 0..func_.globalRefs.size) {
+                let name = func_.globalRefs[i]
+                let slotIdx = if (i < func_.globalSlots.size) { func_.globalSlots[i] } else { func_.params.size + i }
+                let val = this.currentEnv.lookup(name)
+                let slotVal = match (val) {
+                    case Macro(_, _, _) | MacroFromParams(_, _, _) => Str(name)
+                    case _ => val
+                }
+                let targetIdx = this.bp + slotIdx
+                while (targetIdx >= this.registers.size) {
+                    this.registers.add(Nil)
+                }
+                this.registers[targetIdx] = slotVal
+            }
+        }
+        this.sp = 1000 + func_.localSlots - 1
+        while (this.sp >= this.registers.size) {
+            this.registers.add(Nil)
+        }
+        this.runMainLoop(func_, env)
+    }
+
     func executeFunc(func_: CompiledFunction, env: Environment): LispValue {
         // 嵌套执行安全：保存外层 VM 状态（AST 回退的子求值器可能重入本 VM）
         let savedRegisters = this.registers
@@ -80,6 +147,13 @@ public class BytecodeVM <: VM {
         this.bp = 1000
         this.curFunc = Some(func_)
         this.savedFrames = ArrayList<(CompiledFunction, Int64, Int64, Environment, Int64)>()
+        this.runMainLoop(func_, env)
+    }
+
+    /**
+     * 执行编译函数的主循环（运行状态已由调用方初始化；供顶层执行与 callClosure 复用）
+     */
+    func runMainLoop(func_: CompiledFunction, env: Environment): LispValue {
         var ip: Int64 = 0
         var currentFunc = func_
         var running = true
