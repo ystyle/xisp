@@ -311,6 +311,46 @@ class BuiltinEdgeTest {
     }
 
     @TestCase
+    func testStringContainsFunction() {
+        println("\n=== 测试 string-contains? 函数 ===")
+        let env = Environment()
+        BuiltinFunctions.registerAll(env)
+        let evaluator = Evaluator(env)
+
+        // 包含命中
+        let expr1 = Parser.parseSingleFromString("(string-contains? \"parsed: raw\" \"parsed\")")
+        let result1 = evaluator.eval(expr1)
+        match (result1) {
+            case LispValue.Boolean(b) => @Assert(b == true)
+            case _ => @Fail("expected true, got ${result1}")
+        }
+
+        // 不包含
+        let expr2 = Parser.parseSingleFromString("(string-contains? \"abc\" \"xyz\")")
+        let result2 = evaluator.eval(expr2)
+        match (result2) {
+            case LispValue.Boolean(b) => @Assert(b == false)
+            case _ => @Fail("expected false, got ${result2}")
+        }
+
+        // 空子串恒真
+        let expr3 = Parser.parseSingleFromString("(string-contains? \"abc\" \"\")")
+        let result3 = evaluator.eval(expr3)
+        match (result3) {
+            case LispValue.Boolean(b) => @Assert(b == true)
+            case _ => @Fail("expected true, got ${result3}")
+        }
+
+        // 非字符串参数返回 false
+        let expr4 = Parser.parseSingleFromString("(string-contains? 42 \"2\")")
+        let result4 = evaluator.eval(expr4)
+        match (result4) {
+            case LispValue.Boolean(b) => @Assert(b == false)
+            case _ => @Fail("expected false, got ${result4}")
+        }
+    }
+
+    @TestCase
     func testPrintVsPrincVsDisplay() {
         println("\n=== 测试 print/princ/display 区别 ===")
         let env = Environment()

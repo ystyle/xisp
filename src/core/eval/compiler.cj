@@ -545,11 +545,8 @@ public class BytecodeCompiler <: Compiler {
                             match (cell.cdr) {
                                 case Cons(restCell) =>
                                     let thenExpr = restCell.car
-                                    var elseExpr: LispValue = Nil
-                                    match (restCell.cdr) {
-                                        case Cons(eCell) => elseExpr = eCell.car
-                                        case _ => ()
-                                    }
+                                    // else 以尾部列表传递（与 AST evalIfLet 一致），避免点对列表让 compileIf 丢失 else
+                                    let elseExpr = restCell.cdr
                                     // 构造 (let ((var value)) (if var then else))
                                     let binding = Cons(ConsCell(Symbol(varName), Cons(ConsCell(valCell.car, Nil))))
                                     let bindings = Cons(ConsCell(binding, Nil))
@@ -580,6 +577,10 @@ public class BytecodeCompiler <: Compiler {
                 var ok = true
                 try {
                     let bindingCount = this.countArgs(bindings)
+                    if (bindingCount == 0) {
+                        // 空绑定：与 AST evalWhenLetStar 一致，返回 Nil，body 不执行
+                        this.emit(OP_PUSH_NIL)
+                    } else {
                     var idx: Int64 = 0
                     var current = bindings
                     var failed = false
@@ -628,6 +629,7 @@ public class BytecodeCompiler <: Compiler {
                             this.emit(OP_PUSH_NIL)
                             this.code[endJump + 1] = this.code.size
                         }
+                    }
                     }
                 } finally {
                     this.locals = savedLocals

@@ -61,6 +61,24 @@ extend BuiltinFunctions {
             }
         }))
 
+        // (string-contains? str substr) - 字符串包含子串判断
+        env.define("string-contains?", NativeFunc({ args =>
+            if (args.size != 2) {
+                return LispValue.Boolean(false)
+            }
+            let arg0 = args[0]
+            let arg1 = args[1]
+            if (let Str(s1) <- arg0) {
+                if (let Str(s2) <- arg1) {
+                    LispValue.Boolean(s1.contains(s2))
+                } else {
+                    LispValue.Boolean(false)
+                }
+            } else {
+                LispValue.Boolean(false)
+            }
+        }))
+
         // (str x1 x2 ...) - 字符串拼接（将所有参数转换为字符串并拼接）
         env.define("str", NativeFunc({ args =>
             let sb = StringBuilder()

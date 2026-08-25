@@ -248,12 +248,59 @@ class BytecodeTest {
     }
 
     @TestCase
+    func testIfLetFalsyElseCompiled() {
+        // 回归：假值绑定时 else 分支必须返回 else 表达式（曾因点对列表丢失 else 而返回 nil）
+        let result = this.evalWithBytecode("(if-let (x 0) x 100)")
+        match (result) {
+            case LispValue.Int(i) => @Assert(i == 100)
+            case _ => @Fail("expected 100, got ${result}")
+        }
+    }
+
+    @TestCase
+    func testIfLetNoElseCompiled() {
+        let result = this.evalWithBytecode("(if-let (x 0) x)")
+        match (result) {
+            case Nil => ()
+            case _ => @Fail("expected nil, got ${result}")
+        }
+    }
+
+    @TestCase
+    func testIfLetTruthyThenCompiled() {
+        let result = this.evalWithBytecode("(if-let (x 7) (+ x 1) 0)")
+        match (result) {
+            case LispValue.Int(i) => @Assert(i == 8)
+            case _ => @Fail("expected 8, got ${result}")
+        }
+    }
+
+    @TestCase
     func testWhenLetStarCompiled() {
         let result = this.evalWithBytecode(
             "(when-let* ((a 1) (b (+ a 1))) (+ a b))")
         match (result) {
             case LispValue.Int(i) => @Assert(i == 3)
             case _ => @Fail("expected 3, got ${result}")
+        }
+    }
+
+    @TestCase
+    func testWhenLetStarEmptyCompiled() {
+        // 回归：空绑定应与 AST 语义一致返回 nil（曾因空栈 JUMP_IF_FALSE 误执行 body 返回 42）
+        let result = this.evalWithBytecode("(when-let* () 42)")
+        match (result) {
+            case Nil => ()
+            case _ => @Fail("expected nil, got ${result}")
+        }
+    }
+
+    @TestCase
+    func testWhenLetStarFalsyCompiled() {
+        let result = this.evalWithBytecode("(when-let* ((y 0)) (+ y 1))")
+        match (result) {
+            case Nil => ()
+            case _ => @Fail("expected nil, got ${result}")
         }
     }
 

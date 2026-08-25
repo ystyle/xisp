@@ -141,7 +141,7 @@
 ; 模拟函数
 (define fetch-data (lambda () "raw data"))
 (define parse (lambda (s) (str "parsed: " s)))
-(define validate (lambda (s) (if (s.contains "parsed") s nil)))
+(define validate (lambda (s) (if (string-contains? s "parsed") s nil)))
 (define process (lambda (s) (str "processed: " s)))
 (define handle (lambda (s) (println "最终结果: " s)))
 
