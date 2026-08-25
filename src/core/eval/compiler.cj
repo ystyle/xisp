@@ -853,13 +853,13 @@ public class BytecodeCompiler <: Compiler {
     func compileBinop(args: LispValue, stackOp: Int64): Bool {
         // 左折叠多参数：(+ a b c) → a b ADD c ADD
         // 二元 (op <局部变量> <字面量>) → 超级指令（省 LOAD/PUSH 分派与栈操作）
-        let superOp = if (stackOp == OP_ADD) { OP_ADD_LC }
-            else if (stackOp == OP_SUB) { OP_SUB_LC }
-            else if (stackOp == OP_MUL) { OP_MUL_LC }
-            else if (stackOp == OP_DIV) { OP_DIV_LC }
+        let binKind = if (stackOp == OP_ADD) { 0 }
+            else if (stackOp == OP_SUB) { 1 }
+            else if (stackOp == OP_MUL) { 2 }
+            else if (stackOp == OP_DIV) { 3 }
             else { -1 }
-        if (superOp >= 0) {
-            match (this.tryBinopLC(args, superOp)) {
+        if (binKind >= 0) {
+            match (this.tryBinopLC(args, binKind)) {
                 case Some(ok) => return ok
                 case None => ()
             }
@@ -884,7 +884,7 @@ public class BytecodeCompiler <: Compiler {
      * 尝试超指令化二元 (局部变量, 字面量) 运算。
      * 返回 Some(是否成功)——None 表示形式不匹配（走通用路径）
      */
-    func tryBinopLC(args: LispValue, superOp: Int64): Option<Bool> {
+    func tryBinopLC(args: LispValue, binKind: Int64): Option<Bool> {
         match (args) {
             case Cons(firstCell) =>
                 match (firstCell.cdr) {
@@ -895,8 +895,10 @@ public class BytecodeCompiler <: Compiler {
                                 if (!this.locals.contains(name)) { return None }
                                 let val = secondCell.car
                                 if (let LispValue.Int(_) <- val || let LispValue.Float(_) <- val || let Str(_) <- val) {
-                                    // (op local const)：发射 [superOp, localIdx, constIdx]
-                                    this.emitWithArg(superOp, this.locals[name])
+                                    // (op local const)：发射 [OP_BIN_LC, kind, localIdx, constIdx]
+                                    this.emit(OP_BIN_LC)
+                                    this.emit(binKind)
+                                    this.emit(this.locals[name])
                                     this.code.add(this.addConst(val))
                                     Some(true)
                                 } else { None }

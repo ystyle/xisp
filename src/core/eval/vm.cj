@@ -437,37 +437,11 @@ public class BytecodeVM <: VM {
 
                     case 52 =>
 
-                    if (ip + 1 < currentFunc.code.size) {
+                    if (ip + 2 < currentFunc.code.size) {
+                        let binKind = currentFunc.code[ip]; ip++
                         let localIdx = currentFunc.code[ip]; ip++
                         let constIdx = currentFunc.code[ip]; ip++
-                        this.push(this.binNum(this.getReg(this.bp + localIdx), currentFunc.constants[constIdx], 0))
-                    }
-                
-
-                    case 53 =>
-
-                    if (ip + 1 < currentFunc.code.size) {
-                        let localIdx = currentFunc.code[ip]; ip++
-                        let constIdx = currentFunc.code[ip]; ip++
-                        this.push(this.binNum(this.getReg(this.bp + localIdx), currentFunc.constants[constIdx], 1))
-                    }
-                
-
-                    case 54 =>
-
-                    if (ip + 1 < currentFunc.code.size) {
-                        let localIdx = currentFunc.code[ip]; ip++
-                        let constIdx = currentFunc.code[ip]; ip++
-                        this.push(this.binNum(this.getReg(this.bp + localIdx), currentFunc.constants[constIdx], 2))
-                    }
-                
-
-                    case 55 =>
-
-                    if (ip + 1 < currentFunc.code.size) {
-                        let localIdx = currentFunc.code[ip]; ip++
-                        let constIdx = currentFunc.code[ip]; ip++
-                        this.push(this.binNum(this.getReg(this.bp + localIdx), currentFunc.constants[constIdx], 3))
+                        this.push(this.binNum(this.getReg(this.bp + localIdx), currentFunc.constants[constIdx], binKind))
                     }
                 
 
