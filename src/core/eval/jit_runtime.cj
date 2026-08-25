@@ -97,8 +97,33 @@ public class JitRuntime {
             return Some(entries[globalId])
         }
         if (jitDebug) { eprintln("[JIT] eligible-int=${JitCodegenInt.isEligible(f)} eligible-reg=${JitCodegenIntR.isEligible(f)}") }
-        // J4b R 形式（寄存器级）：已修 分支快照/prologue/BIN_LC 复制/弹栈顺序/桥接 rcx 槽 等，
-        // 但递归调用链路仍有最终不一致（值池跨调用复用/返回路径）——暂禁用，保 v1 INT（正确性优先）
+        // J5 R 形式（寄存器级）：固定值池映射 + rbx 结果槽 + 分支合并一致（值全物化）
+        // 资格更严格（纯自递归/值栈深度≤4-k），优先于 v1 INT（零 tag 检查）
+        if (JitCodegenIntR.isEligible(f)) {
+            let cgR = JitCodegenIntR()
+            if (let Some(bytes) <- cgR.compile(f, globalId)) {
+                if (jitDebug) {
+                    var hx = StringBuilder("")
+                    for (i in 0..bytes.size) {
+                        let h = bytes[i]
+                        let hi = h / 16
+                        let lo = h % 16
+                        hx.append(if (hi < 10) { Rune(0x30 + Int32(hi)) } else { Rune(0x61 + Int32(hi) - 10) })
+                        hx.append(if (lo < 10) { Rune(0x30 + Int32(lo)) } else { Rune(0x61 + Int32(lo) - 10) })
+                        hx.append(" ")
+                    }
+                    eprintln("[JIT] R-form ${bytes.size} bytes: ${hx}")
+                }
+                let entry = this.allocPage(bytes)
+                if (jitDebug) { eprintln("[JIT] R entryaddr=${entry.toUIntNative()}") }
+                if (globalId >= 0 && globalId < JIT_ENTRY_CAP) {
+                    jitEntryTable[globalId] = Int64(entry.toUIntNative())
+                }
+                entries[globalId] = entry
+                rForms[globalId] = true
+                return Some(entry)
+            }
+        }
         let intCode: Option<ArrayList<UInt8>> = if (JitCodegenInt.isEligible(f)) {
             let cg2 = JitCodegenInt()
             cg2.compile(f, globalId)
@@ -190,6 +215,32 @@ public class JitRuntime {
                 return None
             case Some(entryPtr) =>
                 jitCurEnv = env
+                // R 形式桥（J5）：rdi/rsi/rdx = 裸 Int 参数，返回值 rax = payload
+                // （资格函数仅自调用、仅 Int 值——无 tag/槽校验；4 参 rcx 保留占位）
+                if (rForms.contains(globalId) && rForms[globalId]) {
+                    var a0: Int64 = 0
+                    var a1: Int64 = 0
+                    var a2: Int64 = 0
+                    match (args[0]) {
+                        case Int(x) => a0 = x
+                        case _ => return None
+                    }
+                    if (args.size > 1) {
+                        match (args[1]) {
+                            case Int(x) => a1 = x
+                            case _ => return None
+                        }
+                    }
+                    if (args.size > 2) {
+                        match (args[2]) {
+                            case Int(x) => a2 = x
+                            case _ => return None
+                        }
+                    }
+                    let rfptr: CFunc<(Int64, Int64, Int64, CPointer<Unit>) -> Int64> = CFunc<(Int64, Int64, Int64, CPointer<Unit>) -> Int64>(entryPtr)
+                    let rret = unsafe { rfptr(a0, a1, a2, CPointer<Unit>()) }
+                    return Some(LispValue.Int(rret))
+                }
                 let n = f.localSlots
                 // 缓冲：16B×(n+1)：buf[0]=结果槽；buf[16+i*16]=槽 i
                 let buf = Array<UInt8>(16 * (n + 1)) { _ => 0 }

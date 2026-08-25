@@ -43,14 +43,15 @@ public class JitEmitter {
         if (reg >= 8) {
             this.buf.add(0x41)   // REX.B
         }
-        this.buf.add(UInt8(0x50 + reg))
+        // push 操作码域仅 0x50+rd(3bit)；reg=12 直接 0x50+12=0x5C 会落入 pop 编码域
+        this.buf.add(UInt8(0x50 + (reg & 7)))
     }
 
     public func popReg(reg: Int64): Unit {
         if (reg >= 8) {
             this.buf.add(0x41)
         }
-        this.buf.add(UInt8(0x58 + reg))
+        this.buf.add(UInt8(0x58 + (reg & 7)))
     }
 
     // mov r64, r/m64：REX.W + 8B /r（reg=dst, rm=src）
@@ -113,6 +114,30 @@ public class JitEmitter {
         this.rexW(a, b)
         this.buf.add(0x39)
         this.buf.add(UInt8(0xC0 + 8 * (b & 7) + (a & 7)))
+    }
+
+    // cmp r/m64, imm32：REX.W + 81 /7 id
+    public func cmpRmImm32(rm: Int64, imm: Int64): Unit {
+        this.rexW(rm, 0)
+        this.buf.add(0x81)
+        this.buf.add(UInt8(0xF8 + (rm & 7)))
+        this.w32(imm)
+    }
+
+    // add r/m64, imm32：REX.W + 81 /0 id
+    public func addRmImm32(rm: Int64, imm: Int64): Unit {
+        this.rexW(rm, 0)
+        this.buf.add(0x81)
+        this.buf.add(UInt8(0xC0 + (rm & 7)))
+        this.w32(imm)
+    }
+
+    // sub r/m64, imm32：REX.W + 81 /5 id
+    public func subRmImm32(rm: Int64, imm: Int64): Unit {
+        this.rexW(rm, 0)
+        this.buf.add(0x81)
+        this.buf.add(UInt8(0xE8 + (rm & 7)))
+        this.w32(imm)
     }
 
     // sub rsp, imm32：48 81 EC id

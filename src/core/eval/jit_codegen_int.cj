@@ -65,6 +65,8 @@ public class JitCodegenInt {
             // 除法（kind 3）排除：除零语义无法在无 deopt 的 INT 形式表达
             if (op == 52 && code[ip + 2] == 3) { return false }
             if (op == 13) { return false }
+            // 自调用必须传递全部参数（缺参槽 → callee 读垃圾寄存器/槽）
+            if (op == 7 && code[ip] - 1 != f.params.size) { return false }
             ip = ip + n
         }
         true

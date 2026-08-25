@@ -22,6 +22,7 @@ public class JitCodegenIntR {
     static let R_RAX: Int64 = 0
     static let R_RCX: Int64 = 1
     static let R_RDX: Int64 = 2
+    static let R_RBX: Int64 = 3
     static let R_RSP: Int64 = 4
     static let R_RDI: Int64 = 7
     static let R_R8: Int64 = 8
@@ -38,6 +39,7 @@ public class JitCodegenIntR {
     var labelAt: HashMap<Int64, Int64> = HashMap<Int64, Int64>()
     var fn: CompiledFunction = CompiledFunction(ArrayList<Int64>(), ArrayList<LispValue>(), ArrayList<CompiledFunction>(), "", Nil, ArrayList<String>(), ArrayList<String>(), ArrayList<Int64>(), 0, ArrayList<ParamInfo>())
     var selfClosureId: Int64 = -1
+    var poolBase: Int64 = R_R13
     var bailJumps: ArrayList<Int64> = ArrayList<Int64>()
     // 分支目标的值栈快照（CFG 合并：条件跳转目标进入时恢复分支入口状态）
     var snapshots: HashMap<Int64, ArrayList<Int64>> = HashMap<Int64, ArrayList<Int64>>()
@@ -56,58 +58,107 @@ public class JitCodegenIntR {
         }
         let k = f.params.size
         let code = f.code
-        var ip: Int64 = 0
-        var depth: Int64 = 0
-        var maxDepth: Int64 = 0
         if (getVariable("XISP_JIT_DEBUG") != None) {
             eprintln("[R] scan params=${f.params.size} globals=${f.globalSlots} name=${f.name} refs=${f.globalRefs}")
         }
-        while (ip < code.size) {
-            let op = code[ip]; ip++
-            // 推进指令：n = 参数个数（op 已由 ip++ 消费）
-            let n: Int64 = match (op) {
-                case 0 | 7 | 10 | 11 | 24 | 25 => 1
-                case 52 => 3
-                case 56 => 4
-                case _ => 0
-            }
-            // 真实深度模拟
-            match (op) {
-                case 0 | 1 | 2 | 3 | 14 | 15 | 16 | 17 | 23 | 24 | 52 =>
-                    depth = depth + 1
-                case 4 | 11 =>
-                    depth = depth - 1
-                    if (depth < 0) { if (getVariable("XISP_JIT_DEBUG") != None) { eprintln("[R] fail depth op=${op}") }; return false }
-                case 8 | 9 | 12 =>
-                    depth = depth - 1
-                    if (depth < 0) { if (getVariable("XISP_JIT_DEBUG") != None) { eprintln("[R] fail depth op=${op}") }; return false }
-                case 7 =>
-                    let argCount = if (ip < code.size) { code[ip] } else { 0 }
-                    depth = depth - argCount
-                    if (depth < 0) { if (getVariable("XISP_JIT_DEBUG") != None) { eprintln("[R] fail call depth=${depth}") }; return false }
-                case 10 | 43 | 56 | 99 => ()
-                case _ =>
-                    if (getVariable("XISP_JIT_DEBUG") != None) { eprintln("[R] fail op ${op}") }
-                    return false
-            }
-            if (getVariable("XISP_JIT_DEBUG") != None) { eprintln("[R] step op=${op} ip=${ip} depth=${depth}") }
-            if (depth > maxDepth) { maxDepth = depth }
-            if (maxDepth > 3) { if (getVariable("XISP_JIT_DEBUG") != None) { eprintln("[R] fail maxdepth ${maxDepth}") }; return false }
-            // 槽检查
-            if (op == 24 || op == 25) {
-                let idx = code[ip]
-                var isGlobal = false
-                for (gi in 0..f.globalSlots.size) {
-                    if (f.globalSlots[gi] == idx) { isGlobal = true }
+        // CFG 感知 worklist 模拟（镜像编译期快照语义）：
+        // 标签入口深度必须唯一（固定值池映射下与运行态一致）；任一深度冲突 → 不资格
+        var maxDepth: Int64 = 0
+        // labelDepth: ip → 已知入口深度
+        let labelDepth = HashMap<Int64, Int64>()
+        let pending = ArrayList<(Int64, Int64)>()
+        pending.add((0, 0))
+        while (pending.size > 0) {
+            let (startIp, startDepth) = pending[pending.size - 1]
+            pending.remove((pending.size - 1)..pending.size)
+            var ip: Int64 = startIp
+            var depth: Int64 = startDepth
+            var advancing = true
+            while (advancing && ip < code.size) {
+                let op = code[ip]; ip++
+                let n: Int64 = match (op) {
+                    case 0 | 7 | 10 | 11 | 24 | 25 => 1
+                    case 52 => 3
+                    case 56 => 4
+                    case _ => 0
                 }
-                if (idx >= k && !isGlobal) { if (getVariable("XISP_JIT_DEBUG") != None) { eprintln("[R] fail slot idx=${idx}") }; return false }
+                match (op) {
+                    case 0 | 1 | 2 | 3 | 14 | 15 | 16 | 17 | 23 | 24 | 52 =>
+                        depth = depth + 1
+                    case 4 | 11 =>
+                        depth = depth - 1
+                        if (depth < 0) { if (getVariable("XISP_JIT_DEBUG") != None) { eprintln("[R] fail depth op=${op}") }; return false }
+                    case 8 | 9 | 12 =>
+                        depth = depth - 1
+                        if (depth < 0) { if (getVariable("XISP_JIT_DEBUG") != None) { eprintln("[R] fail depth op=${op}") }; return false }
+                    case 7 =>
+                        let argCount = if (ip < code.size) { code[ip] } else { 0 }
+                        // 自调用必须传递全部参数（缺参槽 → callee 读垃圾寄存器）
+                        if (argCount - 1 != k) { if (getVariable("XISP_JIT_DEBUG") != None) { eprintln("[R] fail arity ${argCount} k=${k}") }; return false }
+                        depth = depth - argCount
+                        if (depth < 0) { if (getVariable("XISP_JIT_DEBUG") != None) { eprintln("[R] fail call depth=${depth}") }; return false }
+                        depth = depth + 1   // 调用结果回推（与 emitCall 一致）
+                    case 10 =>
+                        // 无条件跳转：目标深度 = 当前
+                        let target = if (ip < code.size) { code[ip] } else { -1 }
+                        if (target >= 0) {
+                            if (labelDepth.contains(target)) {
+                                if (labelDepth[target] != depth) { if (getVariable("XISP_JIT_DEBUG") != None) { eprintln("[R] fail merge jmp target=${target} depth=${depth}") }; return false }
+                            } else {
+                                labelDepth[target] = depth
+                                pending.add((target, depth))
+                            }
+                        }
+                        advancing = false
+                    case 11 =>
+                        // 条件跳转：false 路径消费条件 → 目标深度 = depth-1；true 路径 pop 后继续
+                        let target = if (ip < code.size) { code[ip] } else { -1 }
+                        let dAfter = depth - 1
+                        if (target >= 0) {
+                            if (labelDepth.contains(target)) {
+                                if (labelDepth[target] != dAfter) { if (getVariable("XISP_JIT_DEBUG") != None) { eprintln("[R] fail merge jif target=${target} depth=${dAfter}") }; return false }
+                            } else {
+                                labelDepth[target] = dAfter
+                                pending.add((target, dAfter))
+                            }
+                        }
+                        depth = dAfter
+                    case 56 =>
+                        // CMP_LC_JF：无弹栈；目标深度 = 当前
+                        let target = if (ip + 3 < code.size) { code[ip + 3] } else { -1 }
+                        if (target >= 0) {
+                            if (labelDepth.contains(target)) {
+                                if (labelDepth[target] != depth) { if (getVariable("XISP_JIT_DEBUG") != None) { eprintln("[R] fail merge cmplc target=${target} depth=${depth}") }; return false }
+                            } else {
+                                labelDepth[target] = depth
+                                pending.add((target, depth))
+                            }
+                        }
+                    case 43 | 99 =>
+                        advancing = false
+                    case _ =>
+                        if (getVariable("XISP_JIT_DEBUG") != None) { eprintln("[R] fail op ${op}") }
+                        return false
+                }
+                if (depth > maxDepth) { maxDepth = depth }
+                // 值池 = R_R12+k .. R_R15 → 深度上限 ≤ 4-k
+                if (maxDepth > 4 - k) { if (getVariable("XISP_JIT_DEBUG") != None) { eprintln("[R] fail maxdepth ${maxDepth} k=${k}") }; return false }
+                // 槽检查
+                if (op == 24 || op == 25) {
+                    let idx = if (ip < code.size) { code[ip] } else { -1 }
+                    var isGlobal = false
+                    for (gi in 0..f.globalSlots.size) {
+                        if (f.globalSlots[gi] == idx) { isGlobal = true }
+                    }
+                    if (idx >= k && !isGlobal) { if (getVariable("XISP_JIT_DEBUG") != None) { eprintln("[R] fail slot idx=${idx}") }; return false }
+                }
+                if (op == 52 || op == 56) {
+                    let localIdx = if (ip + 1 < code.size) { code[ip + 1] } else { -1 }
+                    if (localIdx >= k) { if (getVariable("XISP_JIT_DEBUG") != None) { eprintln("[R] fail localIdx=${localIdx} op=${op}") }; return false }
+                }
+                if (op == 52 && ip < code.size && code[ip] == 3) { if (getVariable("XISP_JIT_DEBUG") != None) { eprintln("[R] fail div") }; return false }
+                ip = ip + n
             }
-            if (op == 52 || op == 56) {
-                let localIdx = code[ip + 1]
-                if (localIdx >= k) { if (getVariable("XISP_JIT_DEBUG") != None) { eprintln("[R] fail localIdx=${localIdx} op=${op}") }; return false }
-            }
-            if (op == 52 && code[ip] == 3) { if (getVariable("XISP_JIT_DEBUG") != None) { eprintln("[R] fail div") }; return false }
-            ip = ip + n
         }
         true
     }
@@ -121,17 +172,19 @@ public class JitCodegenIntR {
         this.snapshots = HashMap<Int64, ArrayList<Int64>>()
 
         let k = f.params.size
+        this.poolBase = R_R12 + k
+        // 固定值池映射：栈底 → poolBase（R_R12+k），位置 i → poolBase+i；
+        // 所有值一律物化到池寄存器 → 分支合并天然一致（无动态分配歧义）
+        // ABI：rdi/rsi/rdx = 裸 Int 参数；返回值走 rax（无结果槽/无 rcx 槽指针）
 
         // ---- prologue ----
-        // entry: rdi = &buf；args rdi/rsi/rdx（caller 约定）
+        // 4 pushes = 32B；entry rsp%16==8 → 8+32=40 → %16==8 → sub8 pad → %16==0（call 对齐）
         em.pushReg(R_R12); em.pushReg(R_R13); em.pushReg(R_R14); em.pushReg(R_R15)
-        em.subRspImm32(8)                          // 对齐：entry rsp%16==8 + 32(push) → 8 → sub 8 → 0
-        em.movRegRm(R_R10, R_RCX)                  // r10 = 结果槽指针
-        // 参数 rdi/rsi/rdx → r12/r13/r14 —— 先存 rax 中转（r12 对 rdi 的覆盖安全）
+        em.subRspImm32(8)
+        // 参数 rdi/rsi/rdx → r12/r13/r14（直接复制，无重叠）
         let srcRegs: Array<Int64> = [R_RDI, 6, R_RDX]   // rdi, rsi, rdx
         for (i in 0..k) {
-            em.movRegRm(R_RAX, srcRegs[i])
-            em.movRegRm(R_R12 + i, R_RAX)
+            em.movRegRm(R_R12 + i, srcRegs[i])
         }
 
         // ---- body ----
@@ -161,7 +214,7 @@ public class JitCodegenIntR {
                 case 15 => this.emitCmpStack(0x8F, ip, valStack)
                 case 16 => this.emitCmpStack(0x84, ip, valStack)
                 case 17 => this.emitNot(ip, valStack)
-                case 10 => this.emitJump(this.argAt(code, ip), ip + 1)
+                case 10 => this.emitJump(this.argAt(code, ip), ip + 1, valStack)
                 case 11 => this.emitJmpIfFalse(this.argAt(code, ip), ip + 1, valStack)
                 case 23 => this.emitDup(ip, valStack)
                 case 24 => this.emitLoadLocal(this.argAt(code, ip), ip + 1, valStack)
@@ -190,7 +243,7 @@ public class JitCodegenIntR {
             em.patchRel32(at, t)
         }
 
-        // ---- bail 桩（非自调用 → rax=0 级联）----
+        // ---- bail 桩（非自调用 → rax=0 级联；资格函数仅自调用，防御性死代码）----
         if (bailJumps.size > 0) {
             let stub = em.here()
             for (p in bailJumps) { em.patchRel32(p, stub) }
@@ -229,12 +282,12 @@ public class JitCodegenIntR {
     }
 
     func allocVal(valStack: ArrayList<Int64>): Int64 {
-        for (p in [R_R13, R_R14, R_R15]) {
-            if (!valStack.contains(p)) {
-                return p
-            }
+        // 固定映射：栈位置 i → poolBase+i（无动态分配 → 分支合并一致）
+        let reg = this.poolBase + valStack.size
+        if (reg > R_R15) {
+            return -1
         }
-        -1
+        reg
     }
 
     func emitPushConst(idx: Int64, nextIp: Int64, valStack: ArrayList<Int64>): Option<Int64> {
@@ -246,19 +299,21 @@ public class JitCodegenIntR {
         }
     }
 
-    func emitJump(target: Int64, nextIp: Int64): Option<Int64> {
+    func emitJump(target: Int64, nextIp: Int64, valStack: ArrayList<Int64>): Option<Int64> {
         let at = em.jmpRel32()
+        // 记录目标入口值栈（固定映射下各路径寄存器一致；深度冲突由资格扫描拦截）
+        snapshots[target] = this.copyStack(valStack)
         patches.add((at, target))
         Some(nextIp)
     }
 
     func emitJmpIfFalse(target: Int64, nextIp: Int64, valStack: ArrayList<Int64>): Option<Int64> {
         let top = valStack[valStack.size - 1]
-        em.movRmImm32(R_RCX, 0)
-        em.cmpRmReg(top, R_RCX)
-        snapshots[target] = this.copyStack(valStack)
+        em.cmpRmImm32(top, 0)
         let jFalse = em.jccRel32(0x84)
         this.popV(valStack)
+        // 目标入口态 = 条件已消费后的栈（固定映射下两路径位置一致）
+        snapshots[target] = this.copyStack(valStack)
         let jCont = em.jmpRel32()
         em.patchRel32(jFalse, em.here())
         let jTarget = em.jmpRel32()
@@ -268,15 +323,17 @@ public class JitCodegenIntR {
     }
 
     func emitLoadLocal(idx: Int64, nextIp: Int64, valStack: ArrayList<Int64>): Option<Int64> {
+        // 一律物化到池寄存器（固定位置）→ 分支合并处寄存器一致
+        let reg = this.allocVal(valStack)
+        if (reg < 0) { return None }
         if (idx < this.fn.params.size) {
-            valStack.add(R_R12 + idx)
+            em.movRegRm(reg, R_R12 + idx)
+            valStack.add(reg)
             return Some(nextIp)
         }
-        // 全局（自身闭包 id）→ 直接发射 imm
+        // 全局（自身闭包 id）：模型仅占位（emitCall 不发函数值检查——纯自调用），
+        // 结果槽 = 该位置 ⇒ 无需任何指令
         if (idx < this.fn.params.size + this.fn.globalSlots.size) {
-            let reg = this.allocVal(valStack)
-            if (reg < 0) { return None }
-            em.movRmImm32(reg, this.selfClosureId)
             valStack.add(reg)
             return Some(nextIp)
         }
@@ -318,16 +375,19 @@ public class JitCodegenIntR {
         if (valStack.size < 2) { return None }
         let a = valStack[valStack.size - 2]
         let b = valStack[valStack.size - 1]
-        em.movRegRm(R_RAX, a)
-        em.movRegRm(R_RCX, b)
         match (kind) {
-            case 0 => em.addRmReg(R_RAX, R_RCX)
-            case 1 => em.subRmReg(R_RAX, R_RCX)
-            case 2 => em.b(0x48); em.b(0x0F); em.b(0xAF); em.b(0xC1)
+            case 0 => em.addRmReg(a, b)
+            case 1 => em.subRmReg(a, b)
+            case 2 =>
+                // imul a, b：REX.W+[R,B] + 0F AF /r（reg=a, rm=b）
+                var rex: Int64 = 0x48
+                if (a >= 8) { rex = rex | 0x04 }
+                if (b >= 8) { rex = rex | 0x01 }
+                em.b(UInt8(rex)); em.b(0x0F); em.b(0xAF)
+                em.b(UInt8(0xC0 + 8 * (a & 7) + (b & 7)))
             case _ => return None
         }
         this.popV(valStack)
-        em.movRegRm(a, R_RAX)
         Some(nextIp)
     }
 
@@ -335,18 +395,15 @@ public class JitCodegenIntR {
         if (valStack.size < 2) { return None }
         let a = valStack[valStack.size - 2]
         let b = valStack[valStack.size - 1]
-        em.movRegRm(R_RAX, a)
-        em.movRegRm(R_RCX, b)
-        em.cmpRmReg(R_RAX, R_RCX)
+        em.cmpRmReg(a, b)
         let jtrue = em.jccRel32(jccSuffix)
-        em.movRmImm32(R_RAX, 0)
+        em.movRmImm32(a, 0)
         let jd = em.jmpRel32()
         em.patchRel32(jtrue, em.here())
-        em.movRmImm32(R_RAX, 1)
+        em.movRmImm32(a, 1)
         em.patchRel32(jd, em.here())
         this.popV(valStack)
         this.popV(valStack)
-        em.movRegRm(a, R_RAX)
         valStack.add(a)
         Some(nextIp)
     }
@@ -371,18 +428,24 @@ public class JitCodegenIntR {
                     valStack.add(reg)
                     return Some(nextIp)
                 }
-                em.movRmImm32(R_RCX, bv)
                 let reg = this.allocVal(valStack)
                 if (reg < 0) { return None }
                 em.movRegRm(reg, lreg)          // 复制参数到值寄存器（不得就地修改参数寄存器！）
                 match (kind) {
-                    case 0 => em.addRmReg(reg, R_RCX)
-                    case 1 => em.subRmReg(reg, R_RCX)
-                    case 2 => em.b(0x48); em.b(0x0F); em.b(0xAF); em.b(0xC1)
+                    case 0 => em.addRmImm32(reg, bv)
+                    case 1 => em.subRmImm32(reg, bv)
+                    case 2 =>
+                        // imul reg, rcx-imm：mov rcx, imm → imul reg, rcx（REX.WRB）
+                        em.movRmImm32(R_RCX, bv)
+                        var rex2: Int64 = 0x48 | 0x04
+                        if (reg >= 8) { rex2 = rex2 | 0x04 }
+                        if (R_RCX >= 8) { rex2 = rex2 | 0x01 }
+                        em.b(UInt8(rex2)); em.b(0x0F); em.b(0xAF)
+                        em.b(UInt8(0xC0 + 8 * (reg & 7) + (R_RCX & 7)))
                     case 3 => return None
-                    case 4 => return this.cmpLocalJcc(0x8C, reg, nextIp, valStack)
-                    case 5 => return this.cmpLocalJcc(0x8F, reg, nextIp, valStack)
-                    case 6 => return this.cmpLocalJcc(0x84, reg, nextIp, valStack)
+                    case 4 => em.cmpRmImm32(lreg, bv); return this.cmpLocalJcc(0x8C, reg, nextIp, valStack)
+                    case 5 => em.cmpRmImm32(lreg, bv); return this.cmpLocalJcc(0x8F, reg, nextIp, valStack)
+                    case 6 => em.cmpRmImm32(lreg, bv); return this.cmpLocalJcc(0x84, reg, nextIp, valStack)
                     case _ => return None
                 }
                 valStack.add(reg)
@@ -421,8 +484,7 @@ public class JitCodegenIntR {
         if (lreg < 0) { return None }
         match (c) {
             case Int(bv) =>
-                em.movRmImm32(R_RCX, bv)
-                em.cmpRmReg(lreg, R_RCX)
+                em.cmpRmImm32(lreg, bv)
                 snapshots[target] = this.copyStack(valStack)
                 let at = match (cmpKind) {
                     case 0 => em.jccRel32(0x8D)
@@ -432,8 +494,7 @@ public class JitCodegenIntR {
                 patches.add((at, target))
                 return Some(nextIp)
             case Boolean(bv) =>
-                em.movRmImm32(R_RCX, if (bv) { 1 } else { 0 })
-                em.cmpRmReg(lreg, R_RCX)
+                em.cmpRmImm32(lreg, if (bv) { 1 } else { 0 })
                 snapshots[target] = this.copyStack(valStack)
                 let at2 = em.jccRel32(0x85)
                 patches.add((at2, target))
@@ -446,12 +507,10 @@ public class JitCodegenIntR {
         if (argCount < 2) { return None }
         let n = argCount
         let k = n - 1
+        if (k != this.fn.params.size) { return None }   // 自调用必须传全参数
         if (k > 3 || valStack.size < n) { return None }
-        let funcReg = valStack[valStack.size - n]
-        em.movRmImm32(R_RCX, this.selfClosureId)
-        em.cmpRmReg(funcReg, R_RCX)
-        let bail = em.jccRel32(0x85)
-        bailJumps.add(bail)
+        // 纯自调用：函数值位置是模型占位（emitLoadLocal 全局分支零指令），
+        // 无 selfClosureId 检查——资格扫描已保证唯一全局引用为自身
         // 参数 → rdi/rsi/rdx（arg0 → rdi）
         let argRegs: Array<Int64> = [R_RDI, 6, R_RDX]
         for (j in 0..k) {
@@ -461,15 +520,12 @@ public class JitCodegenIntR {
         for (i in 0..n) {
             this.popV(valStack)
         }
-        // 结果槽：caller 栈预留 16B → rcx（callee 写 [rcx+0]=tag [rcx+8]=payload）
-        em.subRspImm32(16)
-        em.movRegRm(R_RCX, R_RSP)
+        // 自调用 rel32：target = 偏移 0（函数入口）
         let callAt = em.callRel32()
         patches.add((callAt, -1))
         let resReg = this.allocVal(valStack)
         if (resReg < 0) { return None }
         em.movRegRm(resReg, R_RAX)
-        em.addRspImm32(16)
         valStack.add(resReg)
         Some(nextIp)
     }
@@ -478,11 +534,7 @@ public class JitCodegenIntR {
         if (valStack.size > 0) {
             em.movRegRm(R_RAX, valStack[valStack.size - 1])
         }
-        // 写 [r10+0]=tag(INT), [r10+8]=payload
-        em.movRmDispReg(R_R10, 0, R_RAX)
-        em.movRmImm32(R_RCX, JIT_TAG_INT)
-        em.movRmDispReg(R_R10, 0, R_RCX)
-        em.movRmDispReg(R_R10, 8, R_RAX)
+        // 纯 rax 返回（调用方直接读 rax；无结果槽写）
         em.addRspImm32(8)
         em.popReg(R_R15); em.popReg(R_R14); em.popReg(R_R13); em.popReg(R_R12)
         em.ret()

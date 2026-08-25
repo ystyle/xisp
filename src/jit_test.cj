@@ -3,6 +3,7 @@ package ystyle::xisp
 import std.unittest.*
 import std.unittest.testmacro.*
 import std.collection.ArrayList
+import std.time.MonoTime
 import ystyle::xisp.core.eval.*
 import ystyle::xisp.core.builtin.*
 import ystyle::xisp.types.*
@@ -103,6 +104,84 @@ class JitTest {
             case LispValue.Int(i) => @Assert(i == 5)
             case _ => @Fail("expected 5, got ${result}")
         }
+    }
+
+    @TestCase
+    func testJitRFormFibSeries() {
+        // R 形式（寄存器级）回归：fib 全系列（含叶路径 n<2 与深递归路径）
+        let cases = [(0, 0), (1, 1), (2, 1), (3, 2), (10, 55), (20, 6765), (30, 832040)]
+        for ((n, expect) in cases) {
+            let result = this.evalWithJit(
+                "(define (fib n) (if (< n 2) n (+ (fib (- n 1)) (fib (- n 2))))) (fib ${n})")
+            match (result) {
+                case LispValue.Int(i) => @Assert(i == expect)
+                case _ => @Fail("fib(${n}) expected ${expect}, got ${result}")
+            }
+        }
+    }
+
+    @TestCase
+    func testJitRFormArityMismatchFallback() {
+        // 自调用缺参（2 参函数 1 参自调用）→ JIT 不编译 → 回退 VM 结果一致（回归：曾 v1 编译后读垃圾槽崩溃）
+        let jit = this.evalWithJit(
+            "(define (ev x a) (if (< x 1) a (ev (- x a)))) (ev 20 3)")
+        let bc = Environment()
+        BuiltinFunctions.registerAll(bc)
+        let evaluator = Evaluator(bc)
+        let compiler = BytecodeCompiler()
+        let vm = BytecodeVM()
+        vm.setCompiler(compiler)
+        evaluator.setCompiler(compiler)
+        evaluator.setVM(vm)
+        var r2: LispValue = Nil
+        for (expr in Parser.parseFromString("(define (ev x a) (if (< x 1) a (ev (- x a)))) (ev 20 3)")) {
+            r2 = evaluator.eval(expr)
+        }
+        match (jit) {
+            case LispValue.Int(i) =>
+                match (r2) {
+                    case LispValue.Int(j) => @Assert(i == j)
+                    case _ => @Fail("bc result mismatch")
+                }
+            case _ => @Fail("expected Int, got ${jit}")
+        }
+    }
+
+    @TestCase
+    func testJitRFormBoolResult() {
+        // 布尔谓词结果（BIN_LC kind 4-6 → 0/1 池值）贯穿返回
+        let result = this.evalWithJit(
+            "(define (b n) (if (< n 2) (> n 0) (b (- n 1)))) (b 5)")
+        match (result) {
+            case LispValue.Int(i) => @Assert(i == 1)
+            case _ => @Fail("expected 1, got ${result}")
+        }
+    }
+
+    @TestCase
+    func testJitRFormJifCond() {
+        // IF 条件走 JUMP_IF_FALSE（op11）路径：条件为参数本身
+        let result = this.evalWithJit(
+            "(define (f n) (if n (f (- n 1)) 99)) (f 7)")
+        match (result) {
+            case LispValue.Int(i) => @Assert(i == 99)
+            case _ => @Fail("expected 99, got ${result}")
+        }
+    }
+
+    @TestCase
+    func testJitFib30Perf() {
+        // 进程内 fib(30) 计时（R 形式；宽松上界防灾难性回归，真实值远低于此）
+        let t0 = MonoTime.now()
+        let result = this.evalWithJit(
+            "(define (fib n) (if (< n 2) n (+ (fib (- n 1)) (fib (- n 2))))) (fib 30)")
+        let ms = (MonoTime.now() - t0).toNanoseconds() / 1000000
+        match (result) {
+            case LispValue.Int(i) => @Assert(i == 832040)
+            case _ => @Fail("expected 832040, got ${result}")
+        }
+        println("  [JIT] fib(30) in-process: ${ms} ms")
+        @Assert(ms < 100)
     }
 
     @TestCase
