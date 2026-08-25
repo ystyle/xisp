@@ -35,6 +35,7 @@ public class JitCodegenInt {
     var bailJumps: ArrayList<Int64> = ArrayList<Int64>()
 
     public static func isEligible(f: CompiledFunction): Bool {
+        if (f.localSlots > 64) { return false }   // 大帧栈溢出防护
         // 仅自递归：所有全局引用必须是本函数自身（INT 特化不能处理非自调用——慢桩会返回 0 破坏语义）
         for (name in f.globalRefs) {
             if (name != f.name) { return false }

@@ -159,9 +159,14 @@ public class JitRuntime {
         None
     }
 
-    // 分配 RWX 页并拷贝代码
+    // 分配 RWX 页并拷贝代码（按代码长度扩展容量，防止越界写）
     func allocPage(code: ArrayList<UInt8>): CPointer<Unit> {
-        var page = unsafe { mmap(CPointer<Unit>(), 4096, 7, 0x22, -1, 0) }
+        let total = Int64(code.size) + 4096
+        var cap = 4096
+        while (cap < total) {
+            cap = cap + 4096
+        }
+        var page = unsafe { mmap(CPointer<Unit>(), UIntNative(cap), 7, 0x22, -1, 0) }
         if (page.isNull()) {
             throw Exception("JIT mmap failed")
         }

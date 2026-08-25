@@ -204,6 +204,8 @@ public class JitCodegen {
 
     func checkSupported(): Bool {
         let f = this.fn
+        // 大帧函数（大量 let 局部）机器栈帧过大 → 深递归可能撞原生栈守卫 → 回退 VM
+        if (f.localSlots > 64) { return false }
         // 编译器只产出纯位置参数（paramInfos 恒为空或与 params 等长）；带默认值等不编译
         if (f.paramInfos.size != 0 && f.paramInfos.size != f.params.size) { return false }
         for (info in f.paramInfos) {

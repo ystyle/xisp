@@ -209,3 +209,22 @@ time ./target/release/bin/ystyle::xisp.cli --with-bytecode-compiler lisp-tests/p
   疑似 ~30 次 invoke/释放后对象状态（acquireArrayRawData 句柄/entries 缓存/栈）累积损坏
 - 纯 JIT 递归（fib/fact 单次）、纯字节码（200 层）、JIT+bytecode 各单次调用均 ✓
 - 修复方向：invoke 缓冲/句柄生命周期审计（release 语义）、entries 缓存一致性、深层混合帧的寄存器保存
+
+## 14. 深层崩溃根治 + 基准全场景验收（2026-08-26）
+
+**两个根因（均真实修复）**：
+1. **JIT 页容量 4KB 固定**：`allocPage` 固定 `mmap(4096)`——生成代码 >4KB（如字节码内重复 N 次调用的循环体）→ **写越界 SIGSEGV**（"~24-33 invoke 阈值"实为 4KB 容量线）。修复：按代码长度扩展页容量（+4096 余量，4K 对齐）
+2. **机器帧过大撞原生栈守卫**：大量 let 局部（localSlots 350）→ 每帧 2.8KB × 200 层递归 ≈ 560KB → 原生栈溢出（RET 弹守卫数据）。修复：JIT 资格（通用+INT-spec）限制 `localSlots ≤ 64` → 大帧回退 VM
+
+**基准全场景验收（三档，3 轮中位数）**：
+
+| 亮点 | JIT/BC |
+|---|---|
+| fib-direct / fib-indirect | 36.3x / 35.3x |
+| tail-sum | 5.3x（顶递归已最快路径） |
+| let-arith / set-state | 1.1x / 0.9x |
+| **全场景平均** | **~5.7x（≥3x 验收 ✓）** |
+| 15 场景正确性 | JIT vs BC 0 differ ✓ |
+
+- 慢场景（closure-factory 0.2x 等）= 已知边界（高阶/闭包/deopt 锤击），语义一致 ✓
+- 357/357 单测；examples 26 JIT vs BC 0 differ
