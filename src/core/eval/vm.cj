@@ -30,6 +30,7 @@ public class BytecodeVM <: VM {
     static var funcIds: HashMap<Int64, Int64> = HashMap<Int64, Int64>()
 
 
+
     /**
      * 设置字节码编译器（子求值器回退 AST 后仍可再编译）
      */
@@ -1387,6 +1388,13 @@ public class BytecodeVM <: VM {
     }
 
     func equalValue(a: LispValue, b: LispValue): Bool {
+        // Int 快路径（match 字面量模式最常见）
+        if (let LispValue.Int(ai) <- a && let LispValue.Int(bi) <- b) {
+            return ai == bi
+        }
+        if (let LispValue.Float(af) <- a && let LispValue.Float(bf) <- b) {
+            return af == bf
+        }
         match (a) {
             case LispValue.Int(ai) => match (b) { case LispValue.Int(bi) => ai == bi; case _ => false }
             case LispValue.Float(af) => match (b) { case LispValue.Float(bf) => af == bf; case _ => false }
