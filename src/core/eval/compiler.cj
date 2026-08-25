@@ -857,6 +857,9 @@ public class BytecodeCompiler <: Compiler {
             else if (stackOp == OP_SUB) { 1 }
             else if (stackOp == OP_MUL) { 2 }
             else if (stackOp == OP_DIV) { 3 }
+            else if (stackOp == OP_LT) { 4 }
+            else if (stackOp == OP_GT) { 5 }
+            else if (stackOp == OP_EQ) { 6 }
             else { -1 }
         if (binKind >= 0) {
             match (this.tryBinopLC(args, binKind)) {
@@ -952,10 +955,20 @@ public class BytecodeCompiler <: Compiler {
             case Cons(cell) =>
                 match (cell.cdr) {
                     case Nil =>
-                        if (this.compileExpr(cell.car)) {
-                            this.emit(OP_NOT)
-                            true
-                        } else { false }
+                        // (not 局部变量) → OP_BIN_LC kind=7（并入家族，不新增 case）
+                        match (cell.car) {
+                            case Symbol(name) where this.locals.contains(name) =>
+                                this.emit(OP_BIN_LC)
+                                this.emit(7)
+                                this.emit(this.locals[name])
+                                this.code.add(this.addConst(LispValue.Int(0)))  // 占位
+                                true
+                            case _ =>
+                                if (this.compileExpr(cell.car)) {
+                                    this.emit(OP_NOT)
+                                    true
+                                } else { false }
+                        }
                     case _ => false
                 }
             case _ => false

@@ -441,7 +441,19 @@ public class BytecodeVM <: VM {
                         let binKind = currentFunc.code[ip]; ip++
                         let localIdx = currentFunc.code[ip]; ip++
                         let constIdx = currentFunc.code[ip]; ip++
-                        this.push(this.binNum(this.getReg(this.bp + localIdx), currentFunc.constants[constIdx], binKind))
+                        let a = this.getReg(this.bp + localIdx)
+                        let b = currentFunc.constants[constIdx]
+                        let result = match (binKind) {
+                            case 0 => this.binNum(a, b, 0)
+                            case 1 => this.binNum(a, b, 1)
+                            case 2 => this.binNum(a, b, 2)
+                            case 3 => this.binNum(a, b, 3)
+                            case 4 => LispValue.Boolean(this.compareLT(a, b))
+                            case 5 => LispValue.Boolean(this.compareGT(a, b))
+                            case 6 => LispValue.Boolean(this.compareEQ(a, b))
+                            case _ => LispValue.Boolean(!a.isTruthy())
+                        }
+                        this.push(result)
                     }
                 
 
