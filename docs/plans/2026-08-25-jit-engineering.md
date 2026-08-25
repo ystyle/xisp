@@ -38,10 +38,11 @@ xisp 字节码模式现状（2026-08-25）：fib(30) 字节码 ~32ms，AST ~440m
 
 > 关键约束：`LispValue` 是仓颉 `enum`，其**内存布局未经文档化**，机器码无法安全读取其 tag。这是本工程最大的前置风险（见 2.6 J0 之一）。
 
-- **J 层 1（首版，盒装语义 + 整数快路径）**：
-  - JIT 帧槽仍是 `LispValue` 盒（与 VM 同构），但**常驻寄存器**：每个局部槽映射到可用 GPR（SysV：`rax rbx rcx rdx rsi rdi r8-r15`，callee-saved 做帧持久）；
-  - 整数算术用 **tag 检查快路径**：两操作数均为 Int 盒 → 拆箱后原生 `add/sub/mul`（`div` 走慢路径防除零）→ 生成新盒；非 Int → 调通用慢路径 helper（与 VM `binNum` 相同语义）；
-  - 盒分配走独立小对象分配器（见 2.5）。
+- **J 层 1（首版，J0 修订后）**：
+  - JIT 槽 = `(tag: Int64, payload: Int64)` 16 字节，位于 JIT 原生栈帧槽区（**不是** LispValue 盒；见 2.6）；
+  - JIT 寄存器只用 caller-saved（rax/rcx/rdx/rsi/rdi/r8-r11），局部槽常驻**原生栈槽区**；
+  - 整数算术用 **tag 检查快路径**：两操作数均为 `JIT_TAG_INT` → payload 原生 `add/sub/mul`（`div` 走慢路径防除零）→ 写结果槽；否则跳慢路径 helper（与 VM `binNum` 相同语义，可抛异常）；
+  - 边界经 Cangjie bridge `box/unbox`（match 实现），机器码不触 LispValue 布局。
 - **J 层 2（特化，若 J 层 1 不达标）**：翻译期**简单类型推理**（槽/常在的整数传播），整数不盒化、直接以 `Int64` 在寄存器/i64 栈槽流动，仅逃逸点（跨调用、存全局、返回未知类型上下文）盒化。
 - 布尔/比较：`lt/gt/eq` 快路径直接比较双 Int 盒的 payload，结果生成 Boolean 盒（复用 `OP_NORM_FALSE` 语义）。
 
@@ -72,14 +73,22 @@ xisp 字节码模式现状（2026-08-25）：fib(30) 字节码 ~32ms，AST ~440m
 - 为 `LispValue` 盒提供**小块 bump 分配器**（固定块 + 链表，类似线程局部分配器）；JIT 快路径内联分配（指针 bump + 阈值比较）；
 - 首版允许简单化：`malloc`/仓颉分配器（慢路径直接调用），快路径 bump 优化留到 J5 性能阶段。**需确认**：仓颉对象能否被机器码"借用内存"——J0 验证项（备选：JIT 专用字节数组池 + 盒为 `CPointer` 包装的结构，见 2.6）。
 
-### 2.6 前置风险与验证（J0，先于一切实现）
+### 2.6 前置风险与验证（J0，已实测完成 2026-08-25）
 
-| 风险 | 对策与验证 |
+> **J0 结论先行**：核心风险全部澄清，且 `LispValue` 布局风险**被设计消除**。
+
+| 原风险 | J0 实测结论（temp-match-bench 原型） |
 |---|---|
-| 仓颉 `enum`（LispValue）内存布局未文档化，机器码读 tag 不安全 | 若无法可靠读取 → **将 `LispValue` 重构为 `struct`（Int64 tag + Int64 payload）**（对 AST/VM 用访问器封装，贯穿但机械）；J0 先做布局探测原型（`sizeof` + 内存字节打印 + FFI 传递验证） |
-| 仓颉异常穿过机器码 `call` 帧 | J0 原型：机器码调用慢路径 helper，helper 抛异常，验证 unwinding/终止行为；不安全则慢路径改为错误码返回 + 栈上错误槽 |
-| `CFunc` 调用约定与 SysV 栈帧要求 | 原型已验证基本通路；函数模板化后需保持 16 字节栈对齐（调用点 `sub rsp,8` 对齐） |
-| 可执行页权限/缓存一致性 | x86-64 无 I-cache 问题；`mprotect` RWX→RX 双阶段写码（安全实践）；aarch64 后续需 `__clear_cache`（模板表平台化） |
+| 仓颉 `enum`（LispValue）内存布局未文档化 | **已消除**：JIT 内部改为自有 (tag, payload) 双字表示（tag 编码与 LispValue 无关），边界经 Cangjie `box/unbox`（match 实现），JIT 永不读 LispValue 原始字节 |
+| `CFunc` 取址 + 机器码调用 `@C` helper | ✅ 实测：`CFunc→CPointer` 取址、`call rax`、3/4 参数 rdi/rsi/rdx/rcx 传递完全正确；helper 访问模块全局状态正常 |
+| 仓颉异常穿过机器码 `call` 帧 | ✅ 实测：helper 抛异常 → 外层 `catch` 成功、进程存活。**慢路径可直接抛异常**，无需错误码通道 |
+| 栈对齐 | ⚠️ 实测：`sub rsp,8` 错位调用必崩（SIGSEGV）→ 发射器保证 16B 对齐是硬约束（SysV 规则，`push rbp` 后天然对齐） |
+| **新发现**：异常穿越后 callee-saved 脏寄存器 | ⚠️ 异常跳过 JIT 帧时其保存的 rbx/r12-r15 不会恢复 → **JIT 帧规范：只用 caller-saved 寄存器（rax/rcx/rdx/rsi/rdi/r8-r11），callee-saved 一律不入 JIT 持久帧**（fib 原型的 rbx 用法需改为 r8 或栈槽） |
+
+**J0 修订后的值表示（替代草案 2.2）**：
+- JIT 槽 = 16 字节 `(tag: Int64, payload: Int64)`，位于 JIT 原生栈帧槽区；
+- 整数快路径：槽 tag == `JIT_TAG_INT` → payload 原生运算 → 写结果槽；否则跳慢路径 helper（语义单一源，可抛异常）；
+- 解释器→JIT / JIT→解释器边界：Cangjie bridge 用 `match` 完成 box/unbox（`LispValue → (tag,payload)` 与反向），机器码只认 (tag,payload)。
 
 ### 2.7 与既有工作衔接
 
@@ -156,7 +165,7 @@ public class JitEmitter {
 
 | 阶段 | 内容 | 估 | 验收 |
 |---|---|---|---|
-| **J0 布局/风险验证** | LispValue 布局探测原型；异常穿越机器码帧行为；栈对齐/ABI 细节 | 1-2 天 | 探测结论成文；决定 LispValue 是否重构 |
+| **J0 布局/风险验证** | ✅ 完成（2026-08-25，temp-match-bench）：@C helper 取址/调用/全局访问/异常穿越/栈对齐/callee-saved 约束全部实测；LispValue 布局风险消除 | 1-2 天 | 见 2.6 结论表 |
 | **J1 翻译器骨架 + 直接调用** | 发射器/标签回填；核心指令模板；JIT→JIT 递归调用；`--with-jit` 管线接入；解释器→JIT 入口 | 3-5 天 | fib(30) 正确且 ≤8ms；基准首个场景 JIT>0 增益 |
 | **J2 全指令覆盖 + 互调桥** | 剩余指令模板；JIT→解释器/内置桥；全局引用解析入 JIT 帧 | 3-5 天 | 15 场景全跑正确；平均 ≥3x BC；examples 三模式一致 |
 | **J3 闭包捕获** | MAKE_CLOSURE 模板（捕获 vlen 语义平移）；applyProcedure JIT 分支 | 2-3 天 | 闭包基准（3-4x BC 场景）不回归且提速 |
