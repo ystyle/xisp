@@ -90,12 +90,12 @@ public class JitRuntime {
         if (entries.contains(globalId)) {
             return Some(entries[globalId])
         }
-        if (getVariable("XISP_JIT_DEBUG") != None) { eprintln("[JIT] eligible-int=${JitCodegenInt.isEligible(f)}") }
+        if (getVariable("XISP_JIT_DEBUG") != None) { eprintln("[JIT] eligible-int=${JitCodegenInt.isEligible(f)} eligible-reg=${JitCodegenIntR.isEligible(f)}") }
+        // 注：JitCodegenIntR（寄存器级）实验版存在编译期挂起问题（分支值栈不合并）——暂禁用，仅保留 v1 INT
+        // if (JitCodegenIntR.isEligible(f)) { ... }
         let intCode: Option<ArrayList<UInt8>> = if (JitCodegenInt.isEligible(f)) {
-            let cg = JitCodegenInt()
-            let r = cg.compile(f, globalId)
-            if (getVariable("XISP_JIT_DEBUG") != None) { eprintln("[JIT] int-compile=${r != None}") }
-            r
+            let cg2 = JitCodegenInt()
+            cg2.compile(f, globalId)
         } else {
             None
         }
@@ -110,7 +110,7 @@ public class JitRuntime {
                     hx.append(if (lo < 10) { Rune(0x30 + Int32(lo)) } else { Rune(0x61 + Int32(lo) - 10) })
                     hx.append(" ")
                 }
-                eprintln("[JIT] inthex: ${hx}")
+                eprintln("[JIT] hex: ${hx}")
             }
             let entry = this.allocPage(bytes)
             if (getVariable("XISP_JIT_DEBUG") != None) { eprintln("[JIT] entryaddr=${entry.toUIntNative()}") }
