@@ -490,3 +490,10 @@
 - [x] JIT 通路验证（fib 模板 2.5ms = 13x BC / 176x AST）
 - [x] 347 单元测试 + 30 examples 双模式一致
 - [x] 性能文档/基准套件/设计文档
+
+## M12: 优化收尾 - 高阶回调进 VM ✅
+
+- [x] 高阶回调直接进 VM：applyProcedure Closure 分支按 vm 分派 vm.callClosure
+- [x] callClosure 帧切换式执行（bp=1000 布局、参数/全局引用入槽、嵌套安全）
+- [x] 回调体 ~14x（fib 回调实测）；高阶循环 AST 侧为瓶颈 → 整管线 ~1.0x（性能边界已记录）
+- [ ] 待办：&rest/&key 参数编译（C）| JIT 正式工程（大）
