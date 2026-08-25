@@ -3,7 +3,7 @@
 > 仓颉嵌入式 Lisp 脚本语言
 
 [![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
-[![Version](https://img.shields.io/badge/version-0.2.0-green.svg)](https://github.com/ystyle/xisp)
+[![Version](https://img.shields.io/badge/version-0.3.0-green.svg)](https://github.com/ystyle/xisp)
 [![Cangjie](https://img.shields.io/badge/Cangjie-1.1.0-orange.svg)](https://cangjie-lang.cn/)
 ![star](https://atomgit.com/ystyle/xisp/star/badge.svg)
 
@@ -14,7 +14,8 @@ Xisp（星枢）是一个用仓颉（Cangjie）语言编写的嵌入式 Lisp 解
 - ✨ **纯仓颉实现** - 无需外部依赖
 - 🎯 **图灵完备** - 支持函数式编程
 - 📦 **嵌入式友好** - 可轻松集成到仓颉项目
-- 🚀 **高性能** - 基于仓颉原生性能
+- 🚀 **高性能** - 基于仓颉原生性能；可选字节码编译器（`--with-bytecode-compiler`，
+  调用密集场景较 AST 解释最高 **14x** 加速，详见 `docs/bytecode-performance.md`）
 - 🔐 **安全沙箱** - 限制文件访问和函数调用权限
 - 🎨 **强大的宏系统** - 元编程能力，扩展语法
 - 📚 **模块化支持** - 代码组织和复用
@@ -347,5 +348,5 @@ class Point <: LispDeserializable<Point> {
 
 ---
 
-**版本**: 0.2.0
+**版本**: 0.3.0
 **最后更新**: 2026-08-02

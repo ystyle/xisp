@@ -480,3 +480,13 @@
 
 **完成**: 2026-08-25
 **分支**: feat/bytecode-compiler
+
+## M11: 发版 v0.3.0 - 字节码编译器 ✅
+
+- [x] 字节码编译器 + 寄存器栈 VM（--with-bytecode-compiler）
+- [x] 全语法编译（lambda/闭包/set!/quasiquote/->/apply/if-let/when-let*/match）
+- [x] 混合执行：语义边界（高阶回调/宏/&rest）回退 AST 保真
+- [x] 性能：fib 14.0x vs AST（5 轮优化：match 分派/缓存/超指令/组合指令/家族化）
+- [x] JIT 通路验证（fib 模板 2.5ms = 13x BC / 176x AST）
+- [x] 347 单元测试 + 30 examples 双模式一致
+- [x] 性能文档/基准套件/设计文档
