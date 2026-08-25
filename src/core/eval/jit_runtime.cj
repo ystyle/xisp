@@ -16,6 +16,52 @@ let JIT_TAG_REF: Int64 = 7
 foreign func mmap(addr: CPointer<Unit>, length: UIntNative, prot: Int32, flags: Int32, fd: Int32, offset: Int64): CPointer<Unit>
 foreign func munmap(addr: CPointer<Unit>, length: UIntNative): Int32
 
+// J2：JIT 调用上下文（单线程解释器）
+var jitCurEnv: Environment = Environment()
+// 入口表：closureId → 机器码入口地址（0=未编译）；固定容量保证 raw 指针稳定
+let JIT_ENTRY_CAP: Int64 = 1024
+var jitEntryTable = Array<Int64>(JIT_ENTRY_CAP) { _ => 0 }
+
+/**
+ * J2：callee 全局引用解析（@C，被 callee prologue 绝对地址调用）
+ * 参数：rdi=closureId, rsi=framePtr(callee rbp), rdx=paramCount
+ * 语义与 switchFrame 一致：实时 env.lookup；宏保留名字字符串。
+ */
+@C
+func jitResolveGlobals(closureId: Int64, framePtr: CPointer<Unit>, paramCount: Int64): Unit {
+    if (closureId >= 0 && closureId < BytecodeVM.functionTable.size) {
+        let f = BytecodeVM.functionTable[closureId]
+        let p8 = CPointer<UInt8>(framePtr)
+        for (i in 0..f.globalRefs.size) {
+            let slot = if (i < f.globalSlots.size) { f.globalSlots[i] } else { f.params.size + i }
+            let val = jitCurEnv.lookup(f.globalRefs[i])
+            let slotVal = match (val) {
+                case Macro(_, _, _) | MacroFromParams(_, _, _) => Str(f.globalRefs[i])
+                case _ => val
+            }
+            let (tag, payload) = jitBox(slotVal)
+            let off = -16 * (slot + 1)
+            unsafe {
+                CPointer<Int64>(p8 + off).write(tag)
+                CPointer<Int64>(p8 + off + 8).write(payload)
+            }
+        }
+    }
+}
+
+func jitBox(v: LispValue): (Int64, Int64) {
+    match (v) {
+        case Int(x) => (JIT_TAG_INT, x)
+        case Float(x) => (JIT_TAG_FLOAT, floatBits(x))
+        case Boolean(x) => (JIT_TAG_BOOL, if (x) { 1 } else { 0 })
+        case Nil => (JIT_TAG_NIL, 0)
+        case Str(s) => (JIT_TAG_STR, 0)
+        case Symbol(s) => (JIT_TAG_SYM, 0)
+        case Closure(id, _) => (JIT_TAG_REF, id)
+        case _ => (JIT_TAG_REF, -1)
+    }
+}
+
 /**
  * JIT 运行时：页管理、函数登记、解释器↔JIT 桥
  */
@@ -26,6 +72,12 @@ public class JitRuntime {
 
     public init() {
         JitRuntime.shared = Some(this)
+        // 入口表 raw 指针（固定容量，地址稳定）
+        let handle = unsafe { acquireArrayRawData<Int64>(jitEntryTable) }
+        JitCodegen.entryTablePtr = Int64(unsafe { handle.pointer.toUIntNative() })
+        // 全局解析 helper 地址
+        let hf: CFunc<(Int64, CPointer<Unit>, Int64) -> Unit> = jitResolveGlobals
+        JitCodegen.resolveFnAbs = Int64(unsafe { CPointer<Int8>(hf).toUIntNative() })
     }
 
     public func hasEntry(globalId: Int64): Bool {
@@ -59,6 +111,9 @@ public class JitRuntime {
                 eprintln("[JIT] ${code.size} bytes: ${hx}")
             }
             let entry = this.allocPage(code)
+            if (globalId >= 0 && globalId < JIT_ENTRY_CAP) {
+                jitEntryTable[globalId] = Int64(entry.toUIntNative())
+            }
             if (getVariable("XISP_JIT_DEBUG") != None) { eprintln("[JIT] entry=${entry.toUIntNative()}") }
             entries[globalId] = entry
             return Some(entry)
@@ -85,11 +140,13 @@ public class JitRuntime {
      */
     // 返回 None：编译失败或 deopt（调用方回退解释器）
     public func invoke(globalId: Int64, f: CompiledFunction, args: ArrayList<LispValue>, env: Environment): Option<LispValue> {
+        if (getVariable("XISP_JIT_DEBUG") != None) { eprintln("[JIT] invoke id=${globalId} fn=${f.name} args=${args.size}") }
         let entryOpt = this.getEntry(globalId, f)
         match (entryOpt) {
             case None =>
                 return None
             case Some(entryPtr) =>
+                jitCurEnv = env
                 let n = f.localSlots
                 // 缓冲：16B×(n+1)：buf[0]=结果槽；buf[16+i*16]=槽 i
                 let buf = Array<UInt8>(16 * (n + 1)) { _ => 0 }
@@ -144,17 +201,9 @@ public class JitRuntime {
 
     // LispValue → (tag, payload)
     func box(v: LispValue): (Int64, Int64) {
-        match (v) {
-            case Int(x) => (JIT_TAG_INT, x)
-            case Float(x) => (JIT_TAG_FLOAT, floatBits(x))
-            case Boolean(x) => (JIT_TAG_BOOL, if (x) { 1 } else { 0 })
-            case Nil => (JIT_TAG_NIL, 0)
-            case Str(s) => (JIT_TAG_STR, 0)
-            case Symbol(s) => (JIT_TAG_SYM, 0)
-            case Closure(id, _) => (JIT_TAG_REF, id)
-            case _ => (JIT_TAG_REF, -1)
-        }
+        jitBox(v)
     }
+
 
     // (tag, payload) → LispValue
     func unbox(tag: Int64, payload: Int64): LispValue {

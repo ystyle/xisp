@@ -95,6 +95,28 @@ class JitTest {
     }
 
     @TestCase
+    func testJitMutualRecursion() {
+        // 互递归（非自调用 → CALL guard deopt → VM 回退级联；语义保真）
+        let result = this.evalWithJit(
+            "(define (f n) (if (< n 2) n (g (- n 1)))) (define (g n) (if (< n 2) n (+ (f (- n 1)) 1))) (f 10)")
+        match (result) {
+            case LispValue.Int(i) => @Assert(i == 5)
+            case _ => @Fail("expected 5, got ${result}")
+        }
+    }
+
+    @TestCase
+    func testJitCrossCallWithGlobal() {
+        // 跨函数调用（被调函数 JIT 化 + callee 自解析全局）：(p 4) = 503
+        let result = this.evalWithJit(
+            "(define (p n) (if (< n 2) n (q (- n 1)))) (define (q n) (+ n 500)) (p 4)")
+        match (result) {
+            case LispValue.Int(i) => @Assert(i == 503)
+            case _ => @Fail("expected 503, got ${result}")
+        }
+    }
+
+    @TestCase
     func testJitConsistentWithBytecode() {
         // 多表达式：JIT 与纯字节码结果一致（含全局访问 + let 局部槽）
         let jit = this.evalWithJit(

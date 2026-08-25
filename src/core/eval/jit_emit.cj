@@ -67,6 +67,16 @@ public class JitEmitter {
         this.buf.add(UInt8(0xC0 + 8 * (src & 7) + (dst & 7)))
     }
 
+    // mov r9, [r10 + rax*8]：4D 8B 0C C2（REX.WRB；SIB scale=8 index=rax base=r10；reg=001→r9）
+    public func movR9PtrR10X(): Unit {
+        this.buf.add(0x4D); this.buf.add(0x8B); this.buf.add(0x0C); this.buf.add(0xC2)
+    }
+
+    // mov r9, [mem] 备用……（当前用 movR9PtrR10X）
+    public func movR11R9(): Unit {
+        this.buf.add(0x4D); this.buf.add(0x89); this.buf.add(0xD9)
+    }
+
     // mov r/m64, imm32（符号扩展）：REX.W + C7 /0 id
     public func movRmImm32(rm: Int64, imm: Int64): Unit {
         this.rexW(rm, 0)

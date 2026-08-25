@@ -533,6 +533,7 @@ public class BytecodeVM <: VM {
                             // 宏/未定义仍需保留名字走 callFunction 的宏分支）
                             if (let Str(name) <- funcVal) {
                                 let resolved = this.currentEnv.lookup(name)
+                                if (getVariable("XISP_JIT_DEBUG") != None && let Closure(rid, _) <- resolved) { eprintln("[VM] resolve '${name}' → Closure(${rid})") }
                                 match (resolved) {
                                     case Closure(_, _) | NativeFunc(_) | Procedure(_, _, _) | ProcedureFromParams(_, _, _) =>
                                         this.registers[startIdx] = resolved
@@ -540,7 +541,17 @@ public class BytecodeVM <: VM {
                                 }
                             }
                             // JIT 快速路径（--with-jit）：编译闭包已 JIT → 直接调机器码
+                            if (getVariable("XISP_JIT_DEBUG") != None) {
+                                eprintln("[VM] pre funcVal=${funcVal}")
+                            }
                             if (let Some(rt) <- JitRuntime.shared && let Closure(id, _) <- funcVal) {
+                                if (getVariable("XISP_JIT_DEBUG") != None) {
+                                    var tbl = StringBuilder("")
+                                    for (ti in 0..BytecodeVM.functionTable.size) {
+                                        tbl.append("${ti}:${BytecodeVM.functionTable[ti].name} ")
+                                    }
+                                    eprintln("[VM] jit-call id=${id} table=[${tbl}] fn=${if (id < BytecodeVM.functionTable.size) { BytecodeVM.functionTable[id].name } else { "?" }}")
+                                }
                                 if (id < BytecodeVM.functionTable.size) {
                                     let jf = BytecodeVM.functionTable[id]
                                     let paramCount = argCount - 1
@@ -906,6 +917,7 @@ public class BytecodeVM <: VM {
                                 BytecodeVM.funcIds[subFunc.identity] = newId
                                 newId
                             }
+                            if (getVariable("XISP_JIT_DEBUG") != None) { eprintln("[VM] MAKE_CLOSURE name=${subFunc.name} identity=${subFunc.identity} globalId=${globalId} tableSize=${BytecodeVM.functionTable.size}") }
                             this.push(Closure(globalId, capEnv))
                         } else {
                             this.push(Nil)

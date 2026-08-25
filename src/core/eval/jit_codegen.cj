@@ -25,6 +25,10 @@ import std.env.getVariable
  * JIT 栈：16B 值往下增长；调用布局 [func][arg0]...[argN-1]（N=argCount, func 最低地址）
  */
 public class JitCodegen {
+    // J2：跨函数调用/全局解析（由 JitRuntime.init 注入）
+    public static var entryTablePtr: Int64 = 0
+    public static var resolveFnAbs: Int64 = 0
+
     static let R_RAX: Int64 = 0
     static let R_RCX: Int64 = 1
     static let R_RDX: Int64 = 2
@@ -32,6 +36,10 @@ public class JitCodegen {
     static let R_RBP: Int64 = 5
     static let R_RSI: Int64 = 6
     static let R_RDI: Int64 = 7
+    static let R_R10: Int64 = 10
+    static let R_R9: Int64 = 9
+    // rsi 高位置位 = 调用方已填入 callee 全局槽（自/同函数调用；跨函数未填 → callee 走 helper）
+    static let FLAG_GLOBALS_FILLED: Int64 = 1 << 31   // 需 imm32 可表示（and rax, imm32 符号扩展）
     static let R_R11: Int64 = 11
 
     let em = JitEmitter()
@@ -63,7 +71,8 @@ public class JitCodegen {
         em.pushRbp()
         em.movRbpRsp()
         em.subRspImm32(frameSize)
-        for (i in 0..localSlots) {
+        let k = f.params.size
+        for (i in 0..k) {
             em.movRegRmDisp(R_RAX, R_RDI, 16 * i)
             em.movRmDispReg(R_RBP, -16 * (i + 1), R_RAX)
             em.movRegRmDisp(R_RAX, R_RDI, 16 * i + 8)
@@ -72,6 +81,31 @@ public class JitCodegen {
         em.movRmDispReg(R_RBP, -16 * (localSlots + 1), R_RDX)
         em.movRmDispReg(R_RBP, -16 * (localSlots + 2), R_RDI)
         em.movRmDispReg(R_RBP, -16 * (localSlots + 3), R_RSI)
+        // 全局槽：调用方已填（flag）→ 从缓冲复制；否则（跨函数）→ @C helper 实时解析
+        if (f.globalRefs.size > 0) {
+            em.movRegRm(R_RAX, R_RSI)
+            em.b(0x48); em.b(0x25)                 // and rax, imm32
+            em.w32(FLAG_GLOBALS_FILLED)
+            let jHelper = em.jccRel32(0x84)        // je → helper
+            for (gi in 0..f.globalSlots.size) {
+                let gs = f.globalSlots[gi]
+                if (gs >= k && gs < localSlots) {
+                    em.movRegRmDisp(R_RAX, R_RDI, 16 * gs)
+                    em.movRmDispReg(R_RBP, -16 * (gs + 1), R_RAX)
+                    em.movRegRmDisp(R_RAX, R_RDI, 16 * gs + 8)
+                    em.movRmDispReg(R_RBP, -16 * (gs + 1) + 8, R_RAX)
+                }
+            }
+            let jAfterG = em.jmpRel32()
+            em.patchRel32(jHelper, em.here())
+            if (JitCodegen.resolveFnAbs != 0) {
+                em.movRmImm32(R_RDI, this.selfClosureId)
+                em.movRegRm(R_RSI, R_RBP)
+                em.movRmImm32(R_RDX, k)
+                em.callAbs(JitCodegen.resolveFnAbs)
+            }
+            em.patchRel32(jAfterG, em.here())
+        }
 
         // ---- body ----
         let code = f.code
@@ -473,34 +507,9 @@ public class JitCodegen {
         em.movRegRmDisp(R_RAX, R_RSP, 16 * k + 8)         // func payload
         em.movRmImm32(R_RCX, this.selfClosureId)
         em.cmpRmReg(R_RAX, R_RCX)
+        // J2（本次仅自调用）：非自 → deopt 回退（跨函数 JIT 基建 r9/入口表就绪；互递归时序 bug 下轮修）
         let slowId = this.slowJcc()
-        // 1. 新区：result + localSlots 槽
-        em.subRspImm32(16 * (localSlots + 1))
-        let newRsp = 0  // 相对 [rsp]
-        // 2. 复制参数：arg_j 旧位置 [旧rsp + 16*(k-1-j)] = [newRsp + 16*(localSlots+1) + 16*(k-1-j)]
-        for (j in 0..k) {
-            let srcOff = 16 * (localSlots + 1) + 16 * (k - 1 - j)
-            em.movRegRmDisp(R_RAX, R_RSP, srcOff)
-            em.movRmDispReg(R_RSP, 16 * (j + 1), R_RAX)
-            em.movRegRmDisp(R_RAX, R_RSP, srcOff + 8)
-            em.movRmDispReg(R_RSP, 16 * (j + 1) + 8, R_RAX)
-        }
-        // 复制全局槽：callee 槽 gs @ [newRsp + 16*(gs+1)]
-        for (gi in 0..this.fn.globalSlots.size) {
-            let gs = this.fn.globalSlots[gi]
-            if (gs >= k && gs < localSlots) {
-                em.movRegRmDisp(R_RAX, R_RBP, -16 * (gs + 1))
-                em.movRmDispReg(R_RSP, 16 * (gs + 1), R_RAX)
-                em.movRegRmDisp(R_RAX, R_RBP, -16 * (gs + 1) + 8)
-                em.movRmDispReg(R_RSP, 16 * (gs + 1) + 8, R_RAX)
-            }
-        }
-        // 3. 调用
-        em.leaRegRmDisp(R_RDI, R_RSP, 16)                 // &slot0
-        em.movRmImm32(R_RSI, k)
-        em.movRegRmDisp(R_RDX, R_RBP, -16 * (localSlots + 1))   // ctx
-        let callAt = em.callRel32()
-        patches.add((callAt, -1))        // 函数入口 0
+        this.emitFrameAndCall(k, localSlots, false)
         // 3b. 结果为空（下层 deopt）→ 本帧级联退栈
         em.b(0x48); em.b(0x85); em.b(0xC0)   // test rax, rax
         let bail = em.jccRel32(0x84)         // je → deopt stub（延迟回填）
@@ -508,12 +517,46 @@ public class JitCodegen {
         // 4. 结果 @ [newRsp+0]
         em.movRegRmDisp(R_RAX, R_RSP, 0)
         em.movRegRmDisp(R_RCX, R_RSP, 8)
-        em.addRspImm32(16 * (localSlots + 1 + n))
+        em.addRspImm32(16 * (k + 1 + n))
         em.subRspImm32(16)
         em.movRmDispReg(R_RSP, 0, R_RAX)
         em.movRmDispReg(R_RSP, 8, R_RCX)
-        this.fixSlow([])
         Some(nextIp)
+    }
+
+    // 公共调用段：帧缓冲 = result + k 参数槽；rdi=&slot0；r11Mode=true → call r11（跨函数），
+    // false → call rel32（self，回填入口 0）
+    func emitFrameAndCall(k: Int64, localSlots: Int64, r11Mode: Bool): Unit {
+        em.subRspImm32(16 * (k + 1))
+        for (j in 0..k) {
+            let srcOff = 16 * (k + 1) + 16 * (k - 1 - j)
+            em.movRegRmDisp(R_RAX, R_RSP, srcOff)
+            em.movRmDispReg(R_RSP, 16 * (j + 1), R_RAX)
+            em.movRegRmDisp(R_RAX, R_RSP, srcOff + 8)
+            em.movRmDispReg(R_RSP, 16 * (j + 1) + 8, R_RAX)
+        }
+        // self（同函数）：调用方复制 callee 全局槽 + FLAG；跨函数：无全局复制（callee helper 解析）
+        if (!r11Mode) {
+            for (gi in 0..this.fn.globalSlots.size) {
+                let gs = this.fn.globalSlots[gi]
+                if (gs >= k && gs < localSlots) {
+                    em.movRegRmDisp(R_RAX, R_RBP, -16 * (gs + 1))
+                    em.movRmDispReg(R_RSP, 16 * (gs + 1), R_RAX)
+                    em.movRegRmDisp(R_RAX, R_RBP, -16 * (gs + 1) + 8)
+                    em.movRmDispReg(R_RSP, 16 * (gs + 1) + 8, R_RAX)
+                }
+            }
+        }
+        em.leaRegRmDisp(R_RDI, R_RSP, 16)
+        em.movRmImm32(R_RSI, if (r11Mode) { k } else { k | FLAG_GLOBALS_FILLED })
+        em.movRegRmDisp(R_RDX, R_RBP, -16 * (localSlots + 1))
+        if (r11Mode) {
+            em.movR11R9()                                  // r11 = 入口
+            em.b(0x41); em.b(0xFF); em.b(0xD3)             // call r11
+        } else {
+            let callAt = em.callRel32()
+            patches.add((callAt, -1))                      // 函数入口 0
+        }
     }
 
     func emitReturn(nextIp: Int64): Option<Int64> {

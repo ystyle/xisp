@@ -168,3 +168,13 @@ time ./target/release/bin/ystyle::xisp.cli --with-bytecode-compiler lisp-tests/p
 **deopt 机制**：慢分支（tag guard 失败/非自调用）→ 恢复帧后返回 null → 桥感知 → VM 回退解释器重跑该闭包调用（语义保真）；嵌套调用逐层级联退栈。
 
 **已验证**：fib(10)=55、fib(25)=75025；6/6 JitTest；355/355 全量测试；26 examples JIT vs BC 逐字节一致。约束：仅 Int 快路径 + 自递归调用；互递归/跨函数 JIT 调用暂回退（待 J2 互调桥）。
+
+## 10. J2 增量（跨函数调用基建 + 全局解析 helper，2026-08-25 深夜）
+
+- **全局解析重构**：callee 全局引用不再由调用方复制，改由 callee prologue 自解析——
+  - 自/同函数调用（rsi 置 FLAG 位）：调用方直接把自身全局槽复制进 callee 帧（零开销）；
+  - 跨函数调用：callee 经 `@C jitResolveGlobals` helper 实时 env.lookup（与 switchFrame 语义一致）；
+- **入口表基建**：`jitEntryTable`（closureId→机器码入口，固定容量）+ r9 装载指令（`mov r9,[r10+rax*8]`）就绪；
+- **跨函数 JIT 调用**：单程 f→p 已正确（4/16/503 与 BC 一致）；**互递归 ping-pong 仍有 bug，本轮以「非自调用 → deopt 回退」保正确**（互递归 f(10)=5 ✓，测试覆盖）；
+- **性能**：fib(30) 27ms 保持 8.3x（FLAG 快路径避免了 helper 每帧调用——修复过程中发现 `and rax,imm32` 会截断高位的坑）；
+- 357/357 测试（+2 JitTest），26 examples JIT vs BC 逐字节一致。
