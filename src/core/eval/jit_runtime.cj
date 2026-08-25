@@ -68,6 +68,8 @@ func jitBox(v: LispValue): (Int64, Int64) {
 public class JitRuntime {
     // globalClosureId(functionTable id) → 机器码入口
     var entries: HashMap<Int64, CPointer<Unit>> = HashMap<Int64, CPointer<Unit>>()
+    // 寄存器级形式（R-ABI：rdi/rsi/rdx=裸参数，rcx=结果槽）
+    var rForms: HashMap<Int64, Bool> = HashMap<Int64, Bool>()
     static var shared: Option<JitRuntime> = None
 
     public init() {
@@ -91,8 +93,8 @@ public class JitRuntime {
             return Some(entries[globalId])
         }
         if (getVariable("XISP_JIT_DEBUG") != None) { eprintln("[JIT] eligible-int=${JitCodegenInt.isEligible(f)} eligible-reg=${JitCodegenIntR.isEligible(f)}") }
-        // 注：JitCodegenIntR（寄存器级）实验版存在编译期挂起问题（分支值栈不合并）——暂禁用，仅保留 v1 INT
-        // if (JitCodegenIntR.isEligible(f)) { ... }
+        // J4b R 形式（寄存器级）：已修 分支快照/prologue/BIN_LC 复制/弹栈顺序/桥接 rcx 槽 等，
+        // 但递归调用链路仍有最终不一致（值池跨调用复用/返回路径）——暂禁用，保 v1 INT（正确性优先）
         let intCode: Option<ArrayList<UInt8>> = if (JitCodegenInt.isEligible(f)) {
             let cg2 = JitCodegenInt()
             cg2.compile(f, globalId)
@@ -118,6 +120,7 @@ public class JitRuntime {
                 jitEntryTable[globalId] = Int64(entry.toUIntNative())
             }
             entries[globalId] = entry
+            rForms[globalId] = false
             return Some(entry)
         }
         let codegen = JitCodegen()

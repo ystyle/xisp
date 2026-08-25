@@ -39,6 +39,8 @@ public class JitCodegenIntR {
     var fn: CompiledFunction = CompiledFunction(ArrayList<Int64>(), ArrayList<LispValue>(), ArrayList<CompiledFunction>(), "", Nil, ArrayList<String>(), ArrayList<String>(), ArrayList<Int64>(), 0, ArrayList<ParamInfo>())
     var selfClosureId: Int64 = -1
     var bailJumps: ArrayList<Int64> = ArrayList<Int64>()
+    // 分支目标的值栈快照（CFG 合并：条件跳转目标进入时恢复分支入口状态）
+    var snapshots: HashMap<Int64, ArrayList<Int64>> = HashMap<Int64, ArrayList<Int64>>()
 
     public static func isEligible(f: CompiledFunction): Bool {
         if (f.params.size < 1 || f.params.size > 3) { return false }
@@ -116,6 +118,7 @@ public class JitCodegenIntR {
         this.patches = ArrayList<(Int64, Int64)>()
         this.labelAt = HashMap<Int64, Int64>()
         this.bailJumps = ArrayList<Int64>()
+        this.snapshots = HashMap<Int64, ArrayList<Int64>>()
 
         let k = f.params.size
 
@@ -123,7 +126,7 @@ public class JitCodegenIntR {
         // entry: rdi = &buf；args rdi/rsi/rdx（caller 约定）
         em.pushReg(R_R12); em.pushReg(R_R13); em.pushReg(R_R14); em.pushReg(R_R15)
         em.subRspImm32(8)                          // 对齐：entry rsp%16==8 + 32(push) → 8 → sub 8 → 0
-        em.movRegRm(R_R10, R_RDI)                  // &buf
+        em.movRegRm(R_R10, R_RCX)                  // r10 = 结果槽指针
         // 参数 rdi/rsi/rdx → r12/r13/r14 —— 先存 rax 中转（r12 对 rdi 的覆盖安全）
         let srcRegs: Array<Int64> = [R_RDI, 6, R_RDX]   // rdi, rsi, rdx
         for (i in 0..k) {
@@ -137,8 +140,11 @@ public class JitCodegenIntR {
         var valStack = ArrayList<Int64>()
         while (ip < code.size) {
             this.labelAt[ip] = em.here()
+            if (snapshots.contains(ip)) {
+                valStack = this.copyStack(snapshots[ip])
+            }
             let op = code[ip]; ip++
-            if (getVariable("XISP_JIT_DEBUG") != None) { eprintln("[C] op=${op} ip=${ip}") }
+
             let r: Option<Int64> = match (op) {
                 case 0 => this.emitPushConst(this.argAt(code, ip), ip + 1, valStack)
                 case 1 => this.pushVal(0, ip, valStack)
@@ -162,7 +168,7 @@ public class JitCodegenIntR {
                 case 25 => this.emitStoreLocal(this.argAt(code, ip), ip + 1, valStack)
                 case 43 => this.emitReturn(ip, valStack)
                 case 52 => this.emitBinLC(this.argAt(code, ip), this.argAt(code, ip + 1), this.argAt(code, ip + 2), ip + 3, valStack)
-                case 56 => this.emitCmpLCJF(this.argAt(code, ip), this.argAt(code, ip + 1), this.argAt(code, ip + 2), this.argAt(code, ip + 3), ip + 4)
+                case 56 => this.emitCmpLCJF(this.argAt(code, ip), this.argAt(code, ip + 1), this.argAt(code, ip + 2), this.argAt(code, ip + 3), ip + 4, valStack)
                 case 99 => this.emitReturn(ip, valStack)
                 case _ => return None
             }
@@ -197,8 +203,14 @@ public class JitCodegenIntR {
         Some(em.bytes())
     }
 
+    func copyStack(vs: ArrayList<Int64>): ArrayList<Int64> {
+        let c = ArrayList<Int64>()
+        for (v in vs) { c.add(v) }
+        c
+    }
+
     func popV(valStack: ArrayList<Int64>): Unit {
-        let _ = this.popV(valStack)
+        valStack.remove((valStack.size - 1)..valStack.size)
         ()
     }
 
@@ -244,6 +256,7 @@ public class JitCodegenIntR {
         let top = valStack[valStack.size - 1]
         em.movRmImm32(R_RCX, 0)
         em.cmpRmReg(top, R_RCX)
+        snapshots[target] = this.copyStack(valStack)
         let jFalse = em.jccRel32(0x84)
         this.popV(valStack)
         let jCont = em.jmpRel32()
@@ -402,7 +415,7 @@ public class JitCodegenIntR {
         -1
     }
 
-    func emitCmpLCJF(cmpKind: Int64, localIdx: Int64, constIdx: Int64, target: Int64, nextIp: Int64): Option<Int64> {
+    func emitCmpLCJF(cmpKind: Int64, localIdx: Int64, constIdx: Int64, target: Int64, nextIp: Int64, valStack: ArrayList<Int64>): Option<Int64> {
         let c = this.fn.constants[constIdx]
         let lreg = this.localReg(localIdx)
         if (lreg < 0) { return None }
@@ -410,6 +423,7 @@ public class JitCodegenIntR {
             case Int(bv) =>
                 em.movRmImm32(R_RCX, bv)
                 em.cmpRmReg(lreg, R_RCX)
+                snapshots[target] = this.copyStack(valStack)
                 let at = match (cmpKind) {
                     case 0 => em.jccRel32(0x8D)
                     case 1 => em.jccRel32(0x8E)
@@ -420,6 +434,7 @@ public class JitCodegenIntR {
             case Boolean(bv) =>
                 em.movRmImm32(R_RCX, if (bv) { 1 } else { 0 })
                 em.cmpRmReg(lreg, R_RCX)
+                snapshots[target] = this.copyStack(valStack)
                 let at2 = em.jccRel32(0x85)
                 patches.add((at2, target))
                 return Some(nextIp)
@@ -428,7 +443,6 @@ public class JitCodegenIntR {
     }
 
     func emitCall(argCount: Int64, nextIp: Int64, valStack: ArrayList<Int64>): Option<Int64> {
-        if (getVariable("XISP_JIT_DEBUG") != None) { eprintln("[CALL] n=${argCount} vs=${valStack.size}") }
         if (argCount < 2) { return None }
         let n = argCount
         let k = n - 1
@@ -444,17 +458,18 @@ public class JitCodegenIntR {
             let reg = valStack[valStack.size - n + 1 + j]
             em.movRegRm(argRegs[j], reg)
         }
-        // 弹 n 项；结果 rax → 值池
         for (i in 0..n) {
             this.popV(valStack)
         }
+        // 结果槽：caller 栈预留 16B → rcx（callee 写 [rcx+0]=tag [rcx+8]=payload）
+        em.subRspImm32(16)
+        em.movRegRm(R_RCX, R_RSP)
         let callAt = em.callRel32()
         patches.add((callAt, -1))
-        if (getVariable("XISP_JIT_DEBUG") != None) { eprintln("[CALL] after call ${callAt} vs=${valStack.size}") }
         let resReg = this.allocVal(valStack)
-        if (getVariable("XISP_JIT_DEBUG") != None) { eprintln("[CALL] resReg=${resReg}") }
         if (resReg < 0) { return None }
         em.movRegRm(resReg, R_RAX)
+        em.addRspImm32(16)
         valStack.add(resReg)
         Some(nextIp)
     }
