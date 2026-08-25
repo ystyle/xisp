@@ -28,6 +28,7 @@ public class BytecodeVM <: VM {
     // 编译函数 identity → 全局闭包 id（同一函数只注册一次，避免 functionTable 膨胀）
     static var funcIds: HashMap<Int64, Int64> = HashMap<Int64, Int64>()
 
+
     /**
      * 设置字节码编译器（子求值器回退 AST 后仍可再编译）
      */
@@ -428,6 +429,62 @@ public class BytecodeVM <: VM {
                         match (result) {
                             case Error(_) => return result
                             case _ => this.push(result)
+                        }
+                    }
+                
+
+                    case 52 =>
+
+                    if (ip + 1 < currentFunc.code.size) {
+                        let localIdx = currentFunc.code[ip]; ip++
+                        let constIdx = currentFunc.code[ip]; ip++
+                        this.push(this.binNum(this.getReg(this.bp + localIdx), currentFunc.constants[constIdx], 0))
+                    }
+                
+
+                    case 53 =>
+
+                    if (ip + 1 < currentFunc.code.size) {
+                        let localIdx = currentFunc.code[ip]; ip++
+                        let constIdx = currentFunc.code[ip]; ip++
+                        this.push(this.binNum(this.getReg(this.bp + localIdx), currentFunc.constants[constIdx], 1))
+                    }
+                
+
+                    case 54 =>
+
+                    if (ip + 1 < currentFunc.code.size) {
+                        let localIdx = currentFunc.code[ip]; ip++
+                        let constIdx = currentFunc.code[ip]; ip++
+                        this.push(this.binNum(this.getReg(this.bp + localIdx), currentFunc.constants[constIdx], 2))
+                    }
+                
+
+                    case 55 =>
+
+                    if (ip + 1 < currentFunc.code.size) {
+                        let localIdx = currentFunc.code[ip]; ip++
+                        let constIdx = currentFunc.code[ip]; ip++
+                        this.push(this.binNum(this.getReg(this.bp + localIdx), currentFunc.constants[constIdx], 3))
+                    }
+                
+
+                    case 56 =>
+
+                    if (ip + 3 < currentFunc.code.size) {
+                        let cmpKind = currentFunc.code[ip]; ip++
+                        let localIdx = currentFunc.code[ip]; ip++
+                        let constIdx = currentFunc.code[ip]; ip++
+                        let target = currentFunc.code[ip]; ip++
+                        let a = this.getReg(this.bp + localIdx)
+                        let b = currentFunc.constants[constIdx]
+                        let cond = match (cmpKind) {
+                            case 0 => this.compareLT(a, b)
+                            case 1 => this.compareGT(a, b)
+                            case _ => this.compareEQ(a, b)
+                        }
+                        if (!cond) {
+                            ip = target
                         }
                     }
                 
@@ -1174,6 +1231,106 @@ public class BytecodeVM <: VM {
             case LispValue.Int(ai) => this.setReg(rd, LispValue.Int(-ai))
             case LispValue.Float(af) => this.setReg(rd, LispValue.Float(-af))
             case _ => this.setReg(rd, LispValue.Error(XispError(ErrorType.TypeError, "Bytecode: expected number")))
+        }
+    }
+
+    /**
+     * 数值二元运算（L+C 超指令用）：opKind 0=+ 1=- 2=* 3=/（Int 快路径）
+     */
+    func binNum(a: LispValue, b: LispValue, opKind: Int64): LispValue {
+        if (let LispValue.Int(ai) <- a && let LispValue.Int(bi) <- b) {
+            return match (opKind) {
+                case 0 => LispValue.Int(ai + bi)
+                case 1 => LispValue.Int(ai - bi)
+                case 2 => LispValue.Int(ai * bi)
+                case _ => LispValue.Int(ai / bi)
+            }
+        }
+        match (a) {
+            case LispValue.Int(ai) =>
+                match (b) {
+                    case LispValue.Float(bf) =>
+                        match (opKind) {
+                            case 0 => LispValue.Float(Float64(ai) + bf)
+                            case 1 => LispValue.Float(Float64(ai) - bf)
+                            case 2 => LispValue.Float(Float64(ai) * bf)
+                            case _ => LispValue.Float(Float64(ai) / bf)
+                        }
+                    case _ => LispValue.Error(XispError(ErrorType.TypeError, "Bytecode: expected number"))
+                }
+            case LispValue.Float(af) =>
+                match (b) {
+                    case LispValue.Int(bi) =>
+                        match (opKind) {
+                            case 0 => LispValue.Float(af + Float64(bi))
+                            case 1 => LispValue.Float(af - Float64(bi))
+                            case 2 => LispValue.Float(af * Float64(bi))
+                            case _ => LispValue.Float(af / Float64(bi))
+                        }
+                    case LispValue.Float(bf) =>
+                        match (opKind) {
+                            case 0 => LispValue.Float(af + bf)
+                            case 1 => LispValue.Float(af - bf)
+                            case 2 => LispValue.Float(af * bf)
+                            case _ => LispValue.Float(af / bf)
+                        }
+                    case _ => LispValue.Error(XispError(ErrorType.TypeError, "Bytecode: expected number"))
+                }
+            case _ => LispValue.Error(XispError(ErrorType.TypeError, "Bytecode: expected number"))
+        }
+    }
+
+    func compareLT(a: LispValue, b: LispValue): Bool {
+        match (a) {
+            case LispValue.Int(ai) =>
+                match (b) {
+                    case LispValue.Int(bi) => ai < bi
+                    case LispValue.Float(bf) => Float64(ai) < bf
+                    case _ => false
+                }
+            case LispValue.Float(af) =>
+                match (b) {
+                    case LispValue.Int(bi) => af < Float64(bi)
+                    case LispValue.Float(bf) => af < bf
+                    case _ => false
+                }
+            case _ => false
+        }
+    }
+
+    func compareGT(a: LispValue, b: LispValue): Bool {
+        match (a) {
+            case LispValue.Int(ai) =>
+                match (b) {
+                    case LispValue.Int(bi) => ai > bi
+                    case LispValue.Float(bf) => Float64(ai) > bf
+                    case _ => false
+                }
+            case LispValue.Float(af) =>
+                match (b) {
+                    case LispValue.Int(bi) => af > Float64(bi)
+                    case LispValue.Float(bf) => af > bf
+                    case _ => false
+                }
+            case _ => false
+        }
+    }
+
+    func compareEQ(a: LispValue, b: LispValue): Bool {
+        match (a) {
+            case LispValue.Int(ai) =>
+                match (b) {
+                    case LispValue.Int(bi) => ai == bi
+                    case LispValue.Float(bf) => Float64(ai) == bf
+                    case _ => false
+                }
+            case LispValue.Float(af) =>
+                match (b) {
+                    case LispValue.Int(bi) => af == Float64(bi)
+                    case LispValue.Float(bf) => af == bf
+                    case _ => false
+                }
+            case _ => false
         }
     }
 

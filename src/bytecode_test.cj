@@ -348,6 +348,47 @@ class BytecodeTest {
     }
 
     @TestCase
+    func testSuperInstructions() {
+        // L+C 超指令：局部+常量二元运算（ADD/SUB/MUL）与 if 条件比较跳转（</>/=）
+        let r1 = this.evalWithBytecode("(define (f x) (+ x 1)) (f 41)")
+        match (r1) {
+            case LispValue.Int(i) => @Assert(i == 42)
+            case _ => @Fail("(+ local const) expected 42, got ${r1}")
+        }
+        let r2 = this.evalWithBytecode("(define (g x) (* x 3)) (g 7)")
+        match (r2) {
+            case LispValue.Int(i) => @Assert(i == 21)
+            case _ => @Fail("(* local const) expected 21, got ${r2}")
+        }
+        let r3 = this.evalWithBytecode("(define (h n) (if (< n 3) 100 0)) (h 2)")
+        match (r3) {
+            case LispValue.Int(i) => @Assert(i == 100)
+            case _ => @Fail("cmp LC JF true-path expected 100, got ${r3}")
+        }
+        let r4 = this.evalWithBytecode("(define (i n) (if (> n 3) 100 0)) (i 2)")
+        match (r4) {
+            case LispValue.Int(i) => @Assert(i == 0)
+            case _ => @Fail("cmp LC JF false-path expected 0, got ${r4}")
+        }
+        let r5 = this.evalWithBytecode("(define (j n) (if (= n 3) 1 0)) (j 3)")
+        match (r5) {
+            case LispValue.Int(i) => @Assert(i == 1)
+            case _ => @Fail("cmp LC JF eq expected 1, got ${r5}")
+        }
+    }
+
+    @TestCase
+    func testSuperInstructionFloat() {
+        // 超指令 Float 混合路径（无 Int 快路径时走通用）
+        let result = this.evalWithBytecode("(define (f x) (+ x 1.5)) (f 1)")
+        match (result) {
+            case LispValue.Float(fl) => @Assert(fl == 2.5)
+            case LispValue.Int(i) => @Fail("expected float 2.5, got int ${i}")
+            case _ => @Fail("expected 2.5, got ${result}")
+        }
+    }
+
+    @TestCase
     func testMatchGuardFallsBack() {
         // guard 子句（pattern when guard ...）不支持编译：编译返回 None（回退 AST 保证语义）
         let env = Environment()

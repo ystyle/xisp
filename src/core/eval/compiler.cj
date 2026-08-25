@@ -731,29 +731,89 @@ public class BytecodeCompiler <: Compiler {
     func compileIf(args: LispValue): Bool {
         match (args) {
             case Cons(condCell) =>
-                // 编译条件
-                if (!this.compileExpr(condCell.car)) { return false }
-                match (condCell.cdr) {
-                    case Cons(thenCell) =>
-                        // 条件为 false 时的跳转（暂填 0）
-                        let jifPatch = this.code.size
-                        this.emitWithArg(OP_JUMP_IF_FALSE, 0)
-                        // 编译 then 分支
-                        if (!this.compileExpr(thenCell.car)) { return false }
-                        // then 之后跳过 else（暂填 0）
-                        let jPatch = this.code.size
-                        this.emitWithArg(OP_JUMP, 0)
-                        // 回填 JUMP_IF_FALSE → else 分支起始
-                        this.code[jifPatch + 1] = this.code.size
-                        // 编译 else 分支（如果有）
-                        match (thenCell.cdr) {
-                            case Cons(elseCell) =>
-                                if (!this.compileExpr(elseCell.car)) { return false }
-                            case _ => this.emit(OP_PUSH_NIL)
+                // 特判：条件为 (cmpOp <局部变量> <字面量>) → 比较+跳转单条超指令
+                if (this.tryCmpLC(condCell.car)) {
+                    // tryCmpLC 已发射 [OP_CMP_LC_JF, kind, localIdx, constIdx, target占位]
+                    let cmpPatch = this.code.size - 5
+                    match (condCell.cdr) {
+                        case Cons(thenCell) =>
+                            if (!this.compileExpr(thenCell.car)) { return false }
+                            let jPatch = this.code.size
+                            this.emitWithArg(OP_JUMP, 0)
+                            this.code[cmpPatch + 4] = this.code.size
+                            match (thenCell.cdr) {
+                                case Cons(elseCell) =>
+                                    if (!this.compileExpr(elseCell.car)) { return false }
+                                case _ => this.emit(OP_PUSH_NIL)
+                            }
+                            this.code[jPatch + 1] = this.code.size
+                            true
+                        case _ => false
+                    }
+                } else {
+                    // 编译条件
+                    if (!this.compileExpr(condCell.car)) { return false }
+                    match (condCell.cdr) {
+                        case Cons(thenCell) =>
+                            // 条件为 false 时的跳转（暂填 0）
+                            let jifPatch = this.code.size
+                            this.emitWithArg(OP_JUMP_IF_FALSE, 0)
+                            // 编译 then 分支
+                            if (!this.compileExpr(thenCell.car)) { return false }
+                            // then 之后跳过 else（暂填 0）
+                            let jPatch = this.code.size
+                            this.emitWithArg(OP_JUMP, 0)
+                            // 回填 JUMP_IF_FALSE → else 分支起始
+                            this.code[jifPatch + 1] = this.code.size
+                            // 编译 else 分支（如果有）
+                            match (thenCell.cdr) {
+                                case Cons(elseCell) =>
+                                    if (!this.compileExpr(elseCell.car)) { return false }
+                                case _ => this.emit(OP_PUSH_NIL)
+                            }
+                            // 回填 JUMP → 整个 if 表达式结束
+                            this.code[jPatch + 1] = this.code.size
+                            true
+                        case _ => false
+                    }
+                }
+            case _ => false
+        }
+    }
+
+    /**
+     * 特判 if 条件：(</>/= <局部变量> <字面量>) → 发射 OP_CMP_LC_JF（比较为假则跳）
+     * 成功返回 true（指令已发射，target 为占位）；形式不匹配返回 false（走通用路径）
+     */
+    func tryCmpLC(cond: LispValue): Bool {
+        match (cond) {
+            case Cons(cell) =>
+                let cmpKind = match (cell.car) {
+                    case Symbol(s) where s == "<" => 0
+                    case Symbol(s) where s == ">" => 1
+                    case Symbol(s) where s == "=" => 2
+                    case _ => -1
+                }
+                if (cmpKind < 0) { return false }
+                match (cell.cdr) {
+                    case Cons(firstCell) =>
+                        match (firstCell.cdr) {
+                            case Cons(secondCell) where secondCell.cdr.isNil() =>
+                                match (firstCell.car) {
+                                    case Symbol(name) where this.locals.contains(name) =>
+                                        let val = secondCell.car
+                                        if (let LispValue.Int(_) <- val || let LispValue.Float(_) <- val || let Str(_) <- val) {
+                                            this.emit(OP_CMP_LC_JF)
+                                            this.emit(cmpKind)
+                                            this.emit(this.locals[name])
+                                            this.emit(this.addConst(val))
+                                            this.emit(0)  // target 占位
+                                            true
+                                        } else { false }
+                                    case _ => false
+                                }
+                            case _ => false
                         }
-                        // 回填 JUMP → 整个 if 表达式结束
-                        this.code[jPatch + 1] = this.code.size
-                        true
                     case _ => false
                 }
             case _ => false
@@ -792,6 +852,18 @@ public class BytecodeCompiler <: Compiler {
 
     func compileBinop(args: LispValue, stackOp: Int64): Bool {
         // 左折叠多参数：(+ a b c) → a b ADD c ADD
+        // 二元 (op <局部变量> <字面量>) → 超级指令（省 LOAD/PUSH 分派与栈操作）
+        let superOp = if (stackOp == OP_ADD) { OP_ADD_LC }
+            else if (stackOp == OP_SUB) { OP_SUB_LC }
+            else if (stackOp == OP_MUL) { OP_MUL_LC }
+            else if (stackOp == OP_DIV) { OP_DIV_LC }
+            else { -1 }
+        if (superOp >= 0) {
+            match (this.tryBinopLC(args, superOp)) {
+                case Some(ok) => return ok
+                case None => ()
+            }
+        }
         match (args) {
             case Cons(firstCell) =>
                 if (!this.compileExpr(firstCell.car)) { return false }
@@ -805,6 +877,34 @@ public class BytecodeCompiler <: Compiler {
                 }
                 count >= 2
             case _ => false
+        }
+    }
+
+    /**
+     * 尝试超指令化二元 (局部变量, 字面量) 运算。
+     * 返回 Some(是否成功)——None 表示形式不匹配（走通用路径）
+     */
+    func tryBinopLC(args: LispValue, superOp: Int64): Option<Bool> {
+        match (args) {
+            case Cons(firstCell) =>
+                match (firstCell.cdr) {
+                    case Cons(secondCell) =>
+                        if (!secondCell.cdr.isNil()) { return None }
+                        match (firstCell.car) {
+                            case Symbol(name) =>
+                                if (!this.locals.contains(name)) { return None }
+                                let val = secondCell.car
+                                if (let LispValue.Int(_) <- val || let LispValue.Float(_) <- val || let Str(_) <- val) {
+                                    // (op local const)：发射 [superOp, localIdx, constIdx]
+                                    this.emitWithArg(superOp, this.locals[name])
+                                    this.code.add(this.addConst(val))
+                                    Some(true)
+                                } else { None }
+                            case _ => None
+                        }
+                    case _ => None
+                }
+            case _ => None
         }
     }
 

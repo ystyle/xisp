@@ -48,6 +48,15 @@ let OP_SET_GLOBAL: Int64 = 48
 let OP_CONS: Int64 = 49
 let OP_CONCAT: Int64 = 50
 let OP_APPLY: Int64 = 51
+// 超级指令：局部槽 + 常量二元运算（省 LOAD_LOCAL/PUSH_CONSTANT 分派与栈操作）
+let OP_ADD_LC: Int64 = 52    // localIdx, constIdx — push(local[idx] + const)
+let OP_SUB_LC: Int64 = 53
+let OP_MUL_LC: Int64 = 54
+let OP_DIV_LC: Int64 = 55
+// 比较 + 跳转合一：cond 为 (</>/= local const) 的 if 分支
+// cmpKind, localIdx, constIdx, target — 比较为假则跳
+let OP_CMP_LC_JF: Int64 = 56
+
 let OP_HALT: Int64 = 99
 
 public class CompiledFunction {
