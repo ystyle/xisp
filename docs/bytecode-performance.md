@@ -239,3 +239,31 @@ time ./target/release/bin/ystyle::xisp.cli --with-bytecode-compiler lisp-tests/p
   - 附带修复：VM case-6 LOAD_GLOBAL 用 `this.currentEnv`（此前用参数 env，switchFrame 后环境已切换）；case-7 JIT 调用传闭包环境 `clsEnv`（此前传 currentEnv）
 - **验证**：三模式 500 ✓；独立计数器互不共享 ✓；359/359 单测（+2）；examples 三模式 8→7（剩=宏 member-access/模块导出等改前已知差异）
 - 边界：let 体自身对共享变量的直接读写仍走槽（与 env 不同步）——canonical 场景（闭包间共享）正确
+
+## 16. J5 R 形式启用：寄存器级纯自递归 INT 特化（2026-08-26）
+
+- **目标**：fib(30) ≤4ms（验收线）。C 语言标定：本机 `gcc -O1` fib(30) ≈ 3ms（-O2 被常量折叠作弊，-O0 ≈ 4-5ms）
+- **达成**：进程内 fib(30) **3ms**（单测 `testJitFib30Perf`，MonoTime 实测）；含 CLI 启动的墙钟 18ms（启动基线 17ms——吞吐真实值以进程内为准）。BC 403-425ms → 加速比 **~140x**；perf 套件 fib-direct **63x**（v1 形式 36x）
+
+### 架构（jit_codegen_int_r.cj）
+- **资格**：纯自递归（全局引用全为本函数名）、常量仅 Int/Bool、指令子集、无除法、值栈深度 ≤ 4-k、**自调用 arity == 参数个数**
+- **固定值池映射**：栈位置 i → R_R12+k+i（k=1 → r13-r15）——替代 J4b 的动态 allocVal；所有值一律物化到池寄存器 → 分支合并天然一致（J4b 的"跨调用值池最终不一致"根源）
+- **纯 rax 返回 ABI**：无结果槽、无 rcx 槽指针、无 selfClosureId 运行时检查（静态纯自调用——函数值是模型占位，零指令）
+- **CFG 感知资格扫描**：worklist 标签入口深度唯一（镜像编译期快照语义）；深度冲突 → 不资格
+- **调用**：参数 → rdi/rsi/rdx；`call rel32` 目标 = 偏移 0（函数入口）
+
+### 本轮根因修复（⚠️ 归档，全部在单测覆盖）
+1. **pushReg 对 r8-r15 编码错误**：`0x50 + reg`（reg=12 → 0x5C）落在 pop 编码域（0x58-0x5F）——R prologue 的 5 个 push 全是 pop，帧错乱 → SIGSEGV。正确：`0x50 + (reg & 7)` + REX.B。gdb 反汇编 JIT 页（`x/60i`）+ 字节级 rel32 解码定位
+2. **BIN_LC kind 4-6 丢 cmp**：优化时误删 `cmp lreg, bv`，flag 陈旧（比较结果被上一个 CMP_LC_JF 支配）→ 布尔谓词结果错
+3. **imul 硬编码 `48 0F AF`**：缺 REX.R/B（r13/r14 → 编码成 imul rbp,rsi）
+4. **自调用 arity 缺失**：2 参函数 1 参自调用 → callee 读垃圾寄存器（v1 与 R 同时修——v1 曾因此崩溃）
+5. 栈对齐：4 push + sub8 pad（entry %16=8 → 0，保证 call 前 %16=0）
+
+### 已知边界
+- k≥2 函数因值池容量（4-k）**不存在可自递归的样本**（k=1 时池=3 恰好覆盖 fib 类），R 形式实际覆盖 = 1 参数纯自递归 INT 函数
+- 防御性 bail 桩保留（资格函数仅自调用，属死代码）
+
+### 数据
+- 单测 365→370（R 系列 fib 全值/缺参回退/JIF 条件/布尔结果/fib(30) 计时）
+- examples 三模式 22/22 一致（新增覆盖率：mul 类（square）、闭包混合）
+- perf 15 场景：fib-direct/indirect 63x/61x（26-27ms）；其余与 v1 持平（JIT 栈机器与通用形式共用路径）

@@ -508,4 +508,7 @@
       - 跨函数单程 JIT 正确（503/4/16）；互递归 ping-pong bug → 暂 deopt 保正确
       - 357/357 测试（+2 JitTest）；26 examples 一致；fib 27ms 保持
   - [x] J4 整数特化（INT-spec）：fib 30：27→15ms（~1.8x，资格=纯自递归 INT 函数）；357/357 + 26 examples 一致
-- [ ] J2b 互递归时序 bug ｜J3 闭包捕获｜J4b 寄存器分配（fib ≤4ms 需寄存器级，当前 15ms）｜J5 稳定/文档
+- [x] J3 闭包共享可变捕获（7413fb1）：env-scope 61/62 + 共享扫描器；三模式 500 ✓；359/359 + examples 8→7（改前已知差异）
+- [x] J5 R 形式（寄存器级，9d3a624）：fib(30) **进程内 3ms**（≤4ms 达标；BC ~400ms ≈ 140x）；fib-direct 基准 63x；370/370；examples 22/22 三模式一致
+      - R 形式根因：pushReg r8-r15 编码错（0x50+12=pop 编码域）/ BIN_LC kind4-6 丢 cmp / imul 缺 REX.RB / 自调用 arity 缺参（v1 同修）/ 固定值池映射替代动态 allocVal / 纯 rax ABI
+- [ ] 收尾（可选）：J2b 互递归时序 bug（当前 deopt 保正确）｜R 形式 k≥2 样本（池容量 4-k 使然，仅 k=1 实用）
