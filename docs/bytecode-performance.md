@@ -200,3 +200,12 @@ time ./target/release/bin/ystyle::xisp.cli --with-bytecode-compiler lisp-tests/p
   2. **基准深层场景崩溃**（03-fact 等）：深层 VM↔JIT 混合调用 getEntry 参数损坏（addr nil）——
      待修（下轮优先）
 - examples 三模式：26 中 8 为已知语义差（除法已修 2 个；其余=闭包捕获/模块导出）——BC vs JIT 恒一致 ✓
+
+## 13. 深层混合崩溃的精确边界（2026-08-26，记录待修）
+
+- **触发**：字节码循环内反复调用 JIT 化函数（`(loop L 0)` 内 ×12 `(fact 17)`）——**约 24-33 次 JIT invoke 后崩溃**
+  （L=1 ✓；L=2×12 崩；×7-10/3层 ✓；×11/3层 崩）
+- **现象**：`JitRuntime.getEntry+45` SIGSEGV（addr=0x8）；this=栈址、globalId=0、f 对象有效——
+  疑似 ~30 次 invoke/释放后对象状态（acquireArrayRawData 句柄/entries 缓存/栈）累积损坏
+- 纯 JIT 递归（fib/fact 单次）、纯字节码（200 层）、JIT+bytecode 各单次调用均 ✓
+- 修复方向：invoke 缓冲/句柄生命周期审计（release 语义）、entries 缓存一致性、深层混合帧的寄存器保存
