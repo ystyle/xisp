@@ -18,9 +18,11 @@ foreign func munmap(addr: CPointer<Unit>, length: UIntNative): Int32
 
 // J2：JIT 调用上下文（单线程解释器）
 var jitCurEnv: Environment = Environment()
-// 入口表：closureId → 机器码入口地址（0=未编译）；固定容量保证 raw 指针稳定
+// 入口表：closureId → generic ABI 机器码入口（0=未编译或非 generic 特化）
+//   ——mmap 固定页（非 GC 对象 → raw 指针地址永远稳定，供机器码 imm64 直接使用）
+//   ——仅 generic（16B 槽 ABI）登记：v1/R 特化 ABI 不同，禁止机器码交叉调用
 let JIT_ENTRY_CAP: Int64 = 1024
-var jitEntryTable = Array<Int64>(JIT_ENTRY_CAP) { _ => 0 }
+var jitEntryTablePtr: CPointer<Int64> = CPointer<Int64>()
 // JIT 调试标志（一次读取；热路径避免重复 getVariable）
 var jitDebug: Bool = false
 
@@ -72,15 +74,24 @@ public class JitRuntime {
     var entries: HashMap<Int64, CPointer<Unit>> = HashMap<Int64, CPointer<Unit>>()
     // 寄存器级形式（R-ABI：rdi/rsi/rdx=裸参数，rcx=结果槽）
     var rForms: HashMap<Int64, Bool> = HashMap<Int64, Bool>()
-    static var shared: Option<JitRuntime> = None
+    // v1 INT 特化（8B 槽 ABI、无运行时类型守卫）→ invoke 需 arg 守卫
+    var vForms: HashMap<Int64, Bool> = HashMap<Int64, Bool>()
+    // J2b：机器码 deopt 计数/站点（测试断言交叉调用直连——逐层 deopt 会 ~n 次增长）
+    public var deoptCount: Int64 = 0
+    public var deoptSites: ArrayList<Int64> = ArrayList<Int64>()
+    public static var shared: Option<JitRuntime> = None
 
     public init() {
         JitRuntime.shared = Some(this)
         let dbg = getVariable("XISP_JIT_DEBUG")
         jitDebug = dbg != None
-        // 入口表 raw 指针（固定容量，地址稳定）
-        let handle = unsafe { acquireArrayRawData<Int64>(jitEntryTable) }
-        JitCodegen.entryTablePtr = Int64(unsafe { handle.pointer.toUIntNative() })
+        // 入口表：mmap 固定页（raw 指针，地址稳定；非 GC 对象不随 GC 移动）
+        let base = unsafe { mmap(CPointer<Unit>(), UIntNative(JIT_ENTRY_CAP * 8), 7, 0x22, -1, 0) }
+        if (base.isNull()) {
+            throw Exception("JIT entry table mmap failed")
+        }
+        jitEntryTablePtr = CPointer<Int64>(base)
+        JitCodegen.entryTablePtr = Int64(unsafe { jitEntryTablePtr.toUIntNative() })
         // 全局解析 helper 地址
         let hf: CFunc<(Int64, CPointer<Unit>, Int64) -> Unit> = jitResolveGlobals
         JitCodegen.resolveFnAbs = Int64(unsafe { CPointer<Int8>(hf).toUIntNative() })
@@ -116,9 +127,7 @@ public class JitRuntime {
                 }
                 let entry = this.allocPage(bytes)
                 if (jitDebug) { eprintln("[JIT] R entryaddr=${entry.toUIntNative()}") }
-                if (globalId >= 0 && globalId < JIT_ENTRY_CAP) {
-                    jitEntryTable[globalId] = Int64(entry.toUIntNative())
-                }
+                // R 形式不登记 generic 入口表（ABI 不同，禁止机器码交叉调用）
                 entries[globalId] = entry
                 rForms[globalId] = true
                 return Some(entry)
@@ -145,11 +154,10 @@ public class JitRuntime {
             }
             let entry = this.allocPage(bytes)
             if (jitDebug) { eprintln("[JIT] entryaddr=${entry.toUIntNative()}") }
-            if (globalId >= 0 && globalId < JIT_ENTRY_CAP) {
-                jitEntryTable[globalId] = Int64(entry.toUIntNative())
-            }
+            // v1 INT 特化：不登记 generic 入口表（无类型守卫、8B 槽 ABI → 禁止机器码交叉调用）
             entries[globalId] = entry
             rForms[globalId] = false
+            vForms[globalId] = true
             return Some(entry)
         }
         let codegen = JitCodegen()
@@ -175,7 +183,7 @@ public class JitRuntime {
             }
             let entry = this.allocPage(code)
             if (globalId >= 0 && globalId < JIT_ENTRY_CAP) {
-                jitEntryTable[globalId] = Int64(entry.toUIntNative())
+                unsafe { (jitEntryTablePtr + globalId).write(Int64(entry.toUIntNative())) }
             }
             if (jitDebug) { eprintln("[JIT] entry=${entry.toUIntNative()}") }
             entries[globalId] = entry
@@ -241,6 +249,20 @@ public class JitRuntime {
                     let rret = unsafe { rfptr(a0, a1, a2, CPointer<Unit>()) }
                     return Some(LispValue.Int(rret))
                 }
+                // v1 INT 特化无运行时类型守卫：非 Int 参数 → 回退解释器（保语义；R 桥已在上面守卫）
+                if (vForms.contains(globalId) && vForms[globalId]) {
+                    var intArgs: Bool = true
+                    for (a in args) {
+                        match (a) {
+                            case Int(_) => ()
+                            case _ => intArgs = false
+                        }
+                    }
+                    if (!intArgs) {
+                        if (jitDebug) { eprintln("[JIT] v1 non-int arg → deopt id=${globalId}") }
+                        return None
+                    }
+                }
                 let n = f.localSlots
                 // 缓冲：16B×(n+1)：buf[0]=结果槽；buf[16+i*16]=槽 i
                 let buf = Array<UInt8>(16 * (n + 1)) { _ => 0 }
@@ -272,6 +294,8 @@ public class JitRuntime {
                 let retVal = retPtr.toUIntNative()
                 if (retVal < 1024) {
                     if (jitDebug) { eprintln("[JIT] deopt id=${globalId} site=${retVal}") }
+                    this.deoptCount = this.deoptCount + 1
+                    this.deoptSites.add(Int64(retVal))
                     return None   // deopt → 回退解释器
                 }
                 Some(this.readSlot(buf, -1))

@@ -40,6 +40,25 @@ class JitTest {
         result
     }
 
+    /**
+     * 纯字节码模式求值（JIT 对照基准）
+     */
+    func evalWithBytecode(code: String): LispValue {
+        let env = Environment()
+        BuiltinFunctions.registerAll(env)
+        let evaluator = Evaluator(env)
+        let compiler = BytecodeCompiler()
+        let vm = BytecodeVM()
+        vm.setCompiler(compiler)
+        evaluator.setCompiler(compiler)
+        evaluator.setVM(vm)
+        var result: LispValue = Nil
+        for (expr in Parser.parseFromString(code)) {
+            result = evaluator.eval(expr)
+        }
+        result
+    }
+
     @TestCase
     func testJitFibRecursion() {
         // 自递归全机器码：fib(10) = 55
@@ -86,7 +105,7 @@ class JitTest {
 
     @TestCase
     func testJitMutualRecursionFallback() {
-        // 互递归（g→f 非自调用）→ CALL guard 失败 → 回退 → 语义保真
+        // J2b 互递归：f↔g 交叉调用（entry 表直连，冷启动 1 次 deopt 后全机器码）→ 语义保真
         let result = this.evalWithJit(
             "(define (f n) (if (< n 2) n (g (- n 1)))) (define (g n) (if (< n 2) n (+ (f (- n 1)) 1))) (f 10)")
         match (result) {
@@ -97,13 +116,89 @@ class JitTest {
 
     @TestCase
     func testJitMutualRecursion() {
-        // 互递归（非自调用 → CALL guard deopt → VM 回退级联；语义保真）
+        // J2b 互递归：非自调用 → entry 表交叉调用（warm-up deopt → 直连机器码）
         let result = this.evalWithJit(
             "(define (f n) (if (< n 2) n (g (- n 1)))) (define (g n) (if (< n 2) n (+ (f (- n 1)) 1))) (f 10)")
         match (result) {
             case LispValue.Int(i) => @Assert(i == 5)
             case _ => @Fail("expected 5, got ${result}")
         }
+    }
+
+    @TestCase
+    func testJitMutualRecursionDeep() {
+        // J2b 深度互递归（跨函数直连，非逐层 deopt）：f(500)=250 与 BC 一致
+        let code = "(define (f n) (if (< n 2) n (g (- n 1)))) (define (g n) (if (< n 2) n (+ (f (- n 1)) 1))) (f 500)"
+        let jit = this.evalWithJit(code)
+        let bc = this.evalWithBytecode(code)
+        match (jit) {
+            case LispValue.Int(i) =>
+                match (bc) {
+                    case LispValue.Int(j) => @Assert(i == j && i == 250)
+                    case _ => @Fail("bc result mismatch")
+                }
+            case _ => @Fail("expected Int, got ${jit}")
+        }
+    }
+
+    @TestCase
+    func testJitMutualRecursionCycle3() {
+        // J2b 三函数环 f→g→h→f：跨函数直连正确
+        let code = "(define (f n) (if (< n 3) n (g (- n 1)))) (define (g n) (if (< n 3) n (h (- n 1)))) (define (h n) (if (< n 3) n (+ (f (- n 1)) 1))) (f 30)"
+        let jit = this.evalWithJit(code)
+        let bc = this.evalWithBytecode(code)
+        match (jit) {
+            case LispValue.Int(i) =>
+                match (bc) {
+                    case LispValue.Int(j) => @Assert(i == j)
+                    case _ => @Fail("bc result mismatch")
+                }
+            case _ => @Fail("expected Int, got ${jit}")
+        }
+    }
+
+    @TestCase
+    func testJitV1FloatArgGuard() {
+        // v1 INT 特化无运行时类型守卫：非 Int 参数 → 桥 deopt → 解释器回退（曾静默算错）
+        let code = "(define (g n) (+ n (+ n (+ n (+ n (+ n (+ n n))))))) (define (caller y) (g y)) (caller 1.5)"
+        let jit = this.evalWithJit(code)
+        let bc = this.evalWithBytecode(code)
+        match (jit) {
+            case LispValue.Float(f) =>
+                match (bc) {
+                    case LispValue.Float(g2) => @Assert(f == g2 && f == 10.5)
+                    case _ => @Fail("bc result mismatch")
+                }
+            case _ => @Fail("expected Float, got ${jit}")
+        }
+    }
+
+    @TestCase
+    func testJitMutualRecursionPerf() {
+        // 交叉调用直连证据（确定性）：深度互递归若逐层 deopt，机器码 deopt 计数会 ~n 次
+        let code = "(define (f n) (if (< n 2) n (g (- n 1)))) (define (g n) (if (< n 2) n (f (- n 1)))) (f 200)"
+        let t0 = MonoTime.now()
+        let jit = this.evalWithJit(code)
+        let ms = (MonoTime.now() - t0).toNanoseconds() / 1000000
+        let bc = this.evalWithBytecode(code)
+        match (jit) {
+            case LispValue.Int(i) =>
+                match (bc) {
+                    case LispValue.Int(j) => @Assert(i == j)
+                    case _ => @Fail("bc result mismatch")
+                }
+            case _ => @Fail("expected Int, got ${jit}")
+        }
+        // 机器码 deopt 应仅冷启动 ~1-2 次（逐层 deopt 会 ~200 次）
+        if (let Some(rt) <- JitRuntime.shared) {
+            var sites = StringBuilder("")
+            for (s in rt.deoptSites) {
+                sites.append("${s} ")
+            }
+            println("  [JIT] mutual f(200) in-process: ${ms} ms deopt=${rt.deoptCount} sites=[${sites}]")
+            @Assert(rt.deoptCount <= 2)
+        }
+        @Assert(ms < 1000)
     }
 
     @TestCase

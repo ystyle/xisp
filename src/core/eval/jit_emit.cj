@@ -73,9 +73,11 @@ public class JitEmitter {
         this.buf.add(0x4D); this.buf.add(0x8B); this.buf.add(0x0C); this.buf.add(0xC2)
     }
 
-    // mov r9, [mem] 备用……（当前用 movR9PtrR10X）
+    // mov r11, r9（跨函数入口装载：把 entry 从 r9 移入 r11 供 call r11）
+    //  4D 89 CB = REX.WRB + 89 /r（reg=001 r9 源, rm=011 r11 目标）
+    //  ⚠ 注意：旧编码 4D 89 D9 是 mov r9, r11（方向反——reg 是源）——曾致 call r11 为陈旧 site id
     public func movR11R9(): Unit {
-        this.buf.add(0x4D); this.buf.add(0x89); this.buf.add(0xD9)
+        this.buf.add(0x4D); this.buf.add(0x89); this.buf.add(0xCB)
     }
 
     // mov r/m64, imm32（符号扩展）：REX.W + C7 /0 id

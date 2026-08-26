@@ -412,9 +412,9 @@ public class JitCodegenInt {
         em.movRegRmDisp(R_RDX, R_RBP, -8 * (localSlots + 1))
         let callAt = em.callRel32()
         patches.add((callAt, -1))
-        // 下层回退 → 级联
-        em.b(0x48); em.b(0x85); em.b(0xC0)   // test rax, rax
-        let bail = em.jccRel32(0x84)
+        // 下层返回 <1024（deopt/site id 或 0）→ 级联（恢复帧 + rax=0）
+        em.cmpRmImm32(R_RAX, 1024)
+        let bail = em.jccRel32(0x82)
         bailJumps.add(bail)
         // 结果（16B boxed @ [newRsp+0]）：payload @ [newRsp+8]
         em.movRegRmDisp(R_RAX, R_RSP, 8)

@@ -179,17 +179,25 @@ public class JitCodegen {
             em.patchRel32(at, t)
         }
 
-        // ---- deopt stub ----
+        // ---- deopt stub（慢分支：rax=r11 site id <1024 → 桥/上层识别）----
         let deoptTarget = em.here()
         for ((p, _) in deoptJumps) {
-            em.patchRel32(p, deoptTarget)
-        }
-        for (p in bailJumps) {
             em.patchRel32(p, deoptTarget)
         }
         if (deoptJumps.size > 0) {
             // deopt：恢复帧后返回 siteId（rax=r11，小整数）→ 桥感知 → VM 回退解释器重跑该闭包调用
             em.movRegRm(R_RAX, R_R11)
+            em.movRspRbp()
+            em.popRbp()
+            em.ret()
+        }
+        // ---- bail stub（级联：下层 <1024 → 本帧 rax=0 返回 → 上层/桥继续识别）----
+        let bailTarget = em.here()
+        for (p in bailJumps) {
+            em.patchRel32(p, bailTarget)
+        }
+        if (bailJumps.size > 0) {
+            em.movRmImm32(R_RAX, 0)
             em.movRspRbp()
             em.popRbp()
             em.ret()
@@ -497,6 +505,9 @@ public class JitCodegen {
     //   1. sub rsp, 16*(calleeLocalSlots+1)，新区布局 [result@0][slot0@16]...[slotN-1@16N]
     //   2. 复制 arg_j → slot_j；复制自己的全局槽 → slot_gs（与桥布局一致）
     //   3. call callee；callee 结束写结果到 [rdi-16]=[newRsp+0]
+    // 跨函数路径（J2b：互递归/单程 cross，payload != selfClosureId）：
+    //   r9 = [entryTablePtr + payload*8]（仅 generic ABI 登记）；r9==0（未编译/非 generic）→ deopt 冷启动
+    //   → callee 自解析全局（rsi 无 FLAG）→ call r11
     func emitCall(argCount: Int64, nextIp: Int64): Option<Int64> {
         if (argCount < 2) { return None }
         let n = argCount
@@ -509,12 +520,25 @@ public class JitCodegen {
         em.movRegRmDisp(R_RAX, R_RSP, 16 * k + 8)         // func payload
         em.movRmImm32(R_RCX, this.selfClosureId)
         em.cmpRmReg(R_RAX, R_RCX)
-        // 非自调用 → deopt 回退（跨函数 JIT：单程已验证正确；互递归深层层级仍异常，暂保正确性回退）
-        let slowId = this.slowJcc()
+        let jCross = em.jccRel32(0x85)                    // payload != self → 跨函数路径
+        // ---- 自调用路径 ----
         this.emitFrameAndCall(k, localSlots, false)
-        // 3b. 结果为空（下层 deopt）→ 本帧级联退栈
-        em.b(0x48); em.b(0x85); em.b(0xC0)   // test rax, rax
-        let bail = em.jccRel32(0x84)         // je → deopt stub（延迟回填）
+        let jAfter = em.jmpRel32()
+        // ---- 跨函数路径（J2b）----
+        em.patchRel32(jCross, em.here())
+        // rax = callee payload（closureId）；越界（≥入口表容量）→ deopt 防 OOB 读
+        em.cmpRmImm32(R_RAX, JIT_ENTRY_CAP)
+        let oobPayload = this.slowJae()
+        // 入口表仅 generic ABI 函数登记（mmap 固定页，地址稳定）
+        em.movRmImm64(R_R10, JitCodegen.entryTablePtr)    // r10 = 表基址
+        em.movR9PtrR10X()                                 // r9 = [r10 + rax*8]（callee 入口，0=未编译/非 generic）
+        em.cmpRmImm32(R_R9, 0)
+        let notCompiled = this.slowJe()                   // r9==0 → deopt（VM 编译 callee 后重入 → 下次直连）
+        this.emitFrameAndCall(k, localSlots, true)        // r11 模式：不复制全局槽（callee 自解析）+ call r11
+        em.patchRel32(jAfter, em.here())
+        // 3b. 下层返回 <1024（deopt/site id 或 0）→ 本帧级联退栈（机器码交叉调用后嵌套 deopt 必检）
+        em.cmpRmImm32(R_RAX, 1024)
+        let bail = em.jccRel32(0x82)         // jb → bail stub（延迟回填）
         bailJumps.add(bail)
         // 4. 结果 @ [newRsp+0]
         em.movRegRmDisp(R_RAX, R_RSP, 0)
@@ -604,6 +628,16 @@ public class JitCodegen {
         this.siteSeq = this.siteSeq + 1
         em.movRmImm32(R_R11, id)
         let p = em.jccRel32(0x84)
+        deoptJumps.add((p, id))
+        p
+    }
+
+    // 慢分支：jae（无符号 ≥）→ deopt（OOB 防护等）
+    func slowJae(): Int64 {
+        let id = this.siteSeq
+        this.siteSeq = this.siteSeq + 1
+        em.movRmImm32(R_R11, id)
+        let p = em.jccRel32(0x83)
         deoptJumps.add((p, id))
         p
     }
