@@ -281,7 +281,8 @@ time ./target/release/bin/ystyle::xisp.cli --with-bytecode-compiler lisp-tests/p
   1. **movR11R9 方向反**：`4D 89 D9` 实为 `mov r9, r11`（89 /r 中 reg=源）——`slowJe` 把 site id 装入 r11 后，入口没进 r11，`call r11` = 调用陈旧 site id → **pc=0x3 SIGSEGV**。正确 `4D 89 CB`
   2. **deopt/bail 握手**：旧 `test rax,rax; je bail` 只捕获 rax==0，而 deopt 返回**非零 site id** → 机器码嵌套 deopt 后调用方把 site id 当结果指针读垃圾。改 `cmp rax,1024; jb bail` + bail 桩独立（rax=0 级联返回），deopt 桩保留 site id（诊断）
 - **v1 桥 arg 类型守卫**（潜在正确性 bug）：v1 INT 特化无运行时类型守卫，Float 参数被当 Int 位模式算 → **静默垃圾值**（`(g 1.5)` JIT 曾返回 `-4627448617123184640` vs BC `10.5`）。invoke 桥对 vForms 函数全参校验 Int（非 Int → deopt 回解释器）；R 桥已有同款守卫
-- **数据**：互递归 f(500)=250 与 BC 一致、深度 200 时 deopt 计数 ≤2（`testJitMutualRecursionPerf` 确定性断言）；单测 +5
+- **unbox 绑定模式坑**（Cangjie 语义，❌勿重犯）：`match (tag) { case JIT_TAG_INT => ... }` 中 `JIT_TAG_INT` 是模块级 `let`，在 match 模式里是**绑定模式**（非常量模式——常量模式仅限字面量）→ 恒匹配第一分支，`unbox` 把所有 tag 都解成 Int。曾致 generic 函数返回 Boolean 变 `integer`（`(caller 5)` JIT "integer" vs BC "boolean"）。改 if/else 具名常量比较。同坑暴露 generic 自调用 arity 缺参守卫缺失（`checkSupported` 补齐：自递归函数含 arity != 自身参数数的调用 → 保守拒绝回退 VM；emitCall 自路径再加运行时 deopt 兜底）
+- **数据**：互递归 f(500)=250 与 BC 一致、深度 200 时 deopt 计数 ≤2（`testJitMutualRecursionPerf` 确定性断言）；单测 +5（后 +2 unbox 回归）
 - **边界**：跨函数 callee 经 `jitResolveGlobals` helper 每帧 env.lookup（正确性优先，逐帧 helper 有开销，未来可缓存）；深互递归受 17.3 栈限制
 
 ### 17.2 R 形式 k≥2（jit_codegen_int_r.cj）

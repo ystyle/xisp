@@ -176,6 +176,39 @@ class JitTest {
     }
 
     @TestCase
+    func testJitGenericBoolResult() {
+        // unbox 回归：generic 函数经机器码返回 Boolean → 桥解包保类型
+        // （曾因 match{case JIT_TAG_* =>} 的绑定模式恒走第一分支，把 Bool 错解为 Int）
+        let code = "(define (f x) (if (< x 0) (g x) (> x 0))) (define (g x) x) (define (caller n) (f n)) (caller 5)"
+        let jit = this.evalWithJit(code)
+        let bc = this.evalWithBytecode(code)
+        match (jit) {
+            case LispValue.Boolean(b) =>
+                match (bc) {
+                    case LispValue.Boolean(b2) => @Assert(b == b2 && b)
+                    case _ => @Fail("bc result mismatch")
+                }
+            case _ => @Fail("expected Boolean, got ${jit}")
+        }
+    }
+
+    @TestCase
+    func testJitGenericNilResult() {
+        // unbox 回归：generic 函数经机器码返回 Nil → 桥解包保类型（曾错解为 Int(0)）
+        let code = "(define (f x) (if (< x 0) (g x) nil)) (define (g x) x) (define (caller n) (f n)) (caller 5)"
+        let jit = this.evalWithJit(code)
+        let bc = this.evalWithBytecode(code)
+        match (jit) {
+            case Nil =>
+                match (bc) {
+                    case Nil => @Assert(true)
+                    case _ => @Fail("bc result mismatch")
+                }
+            case _ => @Fail("expected Nil, got ${jit}")
+        }
+    }
+
+    @TestCase
     func testJitMutualRecursionPerf() {
         // 交叉调用直连证据（确定性）：深度互递归若逐层 deopt，机器码 deopt 计数会 ~n 次
         let code = "(define (f n) (if (< n 2) n (g (- n 1)))) (define (g n) (if (< n 2) n (f (- n 1)))) (f 200)"

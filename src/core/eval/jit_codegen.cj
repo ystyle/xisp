@@ -226,6 +226,29 @@ public class JitCodegen {
                 case _ => return false
             }
         }
+        // 自递归函数若含 arity != 自身参数数的调用：缺参自调用会让 callee 读垃圾参数槽
+        // （R/v1 已资格拒缺参；generic 补齐——即便该调用是调不同 arity 的函数，保守拒绝仅失优化不失正确）
+        var isSelfRec: Bool = false
+        for (name in f.globalRefs) {
+            if (name == f.name) { isSelfRec = true }
+        }
+        if (isSelfRec) {
+            var ip: Int64 = 0
+            while (ip < f.code.size) {
+                let op = f.code[ip]; ip++
+                if (op == 7) {
+                    let argCount = if (ip < f.code.size) { f.code[ip] } else { 0 }
+                    if (argCount - 1 != f.params.size) { return false }
+                }
+                let n: Int64 = match (op) {
+                    case 0 | 7 | 10 | 11 | 24 | 25 => 1
+                    case 52 => 3
+                    case 56 => 4
+                    case _ => 0
+                }
+                ip = ip + n
+            }
+        }
         true
     }
 
@@ -522,7 +545,17 @@ public class JitCodegen {
         em.cmpRmReg(R_RAX, R_RCX)
         let jCross = em.jccRel32(0x85)                    // payload != self → 跨函数路径
         // ---- 自调用路径 ----
-        this.emitFrameAndCall(k, localSlots, false)
+        if (k != this.fn.params.size) {
+            // 自调用 arity 缺参：callee 会读垃圾参数槽（R/v1 资格已拒；generic 需运行时守卫——
+            //  曾静默产出 tag=0 垃圾结果，被 unbox 绑定模式掩盖成 Int(0)）
+            let id = this.siteSeq
+            this.siteSeq = this.siteSeq + 1
+            em.movRmImm32(R_R11, id)
+            let jArity = em.jmpRel32()
+            deoptJumps.add((jArity, id))
+        } else {
+            this.emitFrameAndCall(k, localSlots, false)
+        }
         let jAfter = em.jmpRel32()
         // ---- 跨函数路径（J2b）----
         em.patchRel32(jCross, em.here())

@@ -327,14 +327,20 @@ public class JitRuntime {
 
 
     // (tag, payload) → LispValue
+    // ⚠ 勿用 match { case JIT_TAG_INT => ... }：具名 let 在 match 模式里是【绑定模式】（始终匹配第一分支），
+    //   match 会恒走第一个 case 把非 INT 结果错解为 Int（曾致 generic 函数返回 Bool 变 integer）。
+    //   用 if/else 具名常量比较（常量模式仅限字面量）。
     func unbox(tag: Int64, payload: Int64): LispValue {
-        match (tag) {
-            case JIT_TAG_INT => LispValue.Int(payload)
-            case JIT_TAG_FLOAT => LispValue.Float(floatFromBits(payload))
-            case JIT_TAG_BOOL => LispValue.Boolean(payload != 0)
-            case JIT_TAG_NIL => Nil
-            case _ =>
-                LispValue.Error(XispError(ErrorType.RuntimeError, "JIT: unbox unsupported tag ${tag}"))
+        if (tag == JIT_TAG_INT) {
+            LispValue.Int(payload)
+        } else if (tag == JIT_TAG_FLOAT) {
+            LispValue.Float(floatFromBits(payload))
+        } else if (tag == JIT_TAG_BOOL) {
+            LispValue.Boolean(payload != 0)
+        } else if (tag == JIT_TAG_NIL) {
+            Nil
+        } else {
+            LispValue.Error(XispError(ErrorType.RuntimeError, "JIT: unbox unsupported tag ${tag}"))
         }
     }
 }
