@@ -20,6 +20,8 @@ import ystyle::xisp.parser.*
  * 5. R 形式：fib 全系列 / 缺参回退 / JIF 条件 / 布尔结果 / fib(30) 计时 / k=2（sum-to、gcd2）
  * 6. v1 桥 arg 类型守卫（非 Int 参数 → deopt 保语义）
  */
+// JIT 仅 Linux x86-64：其他平台该类整体不编译（JitRuntime 为 stub）
+@When[os == "Linux" && arch == "x86_64"]
 @Test
 class JitTest {
     /**

@@ -18,4 +18,5 @@ docs-site/.vitepress/cache/
 docs/dist/
 
 # IDE artifacts
-.arts/
+.arts/target-win
+target-win

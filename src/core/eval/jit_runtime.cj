@@ -13,17 +13,22 @@ let JIT_TAG_STR: Int64 = 5
 let JIT_TAG_SYM: Int64 = 6
 let JIT_TAG_REF: Int64 = 7
 
+@When[os == "Linux" && arch == "x86_64"]
 foreign func mmap(addr: CPointer<Unit>, length: UIntNative, prot: Int32, flags: Int32, fd: Int32, offset: Int64): CPointer<Unit>
+@When[os == "Linux" && arch == "x86_64"]
 foreign func munmap(addr: CPointer<Unit>, length: UIntNative): Int32
 
-// J2：JIT 调用上下文（单线程解释器）
+// J2：JIT 调用上下文（单线程解释器）；JIT 仅 Linux x86-64
+@When[os == "Linux" && arch == "x86_64"]
 var jitCurEnv: Environment = Environment()
 // rsp 探针（机器码桩，mov rax,rsp;ret）——桥取当前栈指针用
+@When[os == "Linux" && arch == "x86_64"]
 var probeRspPtr: CPointer<Unit> = CPointer<Unit>()
 // 入口表：closureId → generic ABI 机器码入口（0=未编译或非 generic 特化）
 //   ——mmap 固定页（非 GC 对象 → raw 指针地址永远稳定，供机器码 imm64 直接使用）
 //   ——仅 generic（16B 槽 ABI）登记：v1/R 特化 ABI 不同，禁止机器码交叉调用
 let JIT_ENTRY_CAP: Int64 = 1024
+@When[os == "Linux" && arch == "x86_64"]
 var jitEntryTablePtr: CPointer<Int64> = CPointer<Int64>()
 // JIT 调试标志（一次读取；热路径避免重复 getVariable）
 var jitDebug: Bool = false
@@ -33,6 +38,7 @@ var jitDebug: Bool = false
  * 参数：rdi=closureId, rsi=framePtr(callee rbp), rdx=paramCount
  * 语义与 switchFrame 一致：实时 env.lookup；宏保留名字字符串。
  */
+@When[os == "Linux" && arch == "x86_64"]
 @C
 func jitResolveGlobals(closureId: Int64, framePtr: CPointer<Unit>, paramCount: Int64): Unit {
     if (closureId >= 0 && closureId < BytecodeVM.functionTable.size) {
@@ -55,6 +61,7 @@ func jitResolveGlobals(closureId: Int64, framePtr: CPointer<Unit>, paramCount: I
     }
 }
 
+@When[os == "Linux" && arch == "x86_64"]
 func jitBox(v: LispValue): (Int64, Int64) {
     match (v) {
         case Int(x) => (JIT_TAG_INT, x)
@@ -71,6 +78,7 @@ func jitBox(v: LispValue): (Int64, Int64) {
 /**
  * JIT 运行时：页管理、函数登记、解释器↔JIT 桥
  */
+@When[os == "Linux" && arch == "x86_64"]
 public class JitRuntime {
     // globalClosureId(functionTable id) → 机器码入口
     var entries: HashMap<Int64, CPointer<Unit>> = HashMap<Int64, CPointer<Unit>>()
@@ -371,6 +379,23 @@ public class JitRuntime {
             LispValue.Error(XispError(ErrorType.RuntimeError, "JIT: unbox unsupported tag ${tag}"))
         }
     }
+}
+
+
+// 非 Linux x86-64：JIT 禁用 stub（vm.cj 的 shared 为 None → invoke 恒 None → 回退解释器/BC）
+@When[os != "Linux" || arch != "x86_64"]
+public class JitRuntime {
+    public var deoptCount: Int64 = 0
+    public var deoptSites: ArrayList<Int64> = ArrayList<Int64>()
+    public var rFormCount: Int64 = 0
+    public static var shared: Option<JitRuntime> = None
+    public init() {
+        JitRuntime.shared = None
+        eprintln("[JIT] 当前平台非 Linux x86-64，JIT 已禁用（--with-jit 回退字节码/解释器）")
+    }
+    public func hasEntry(globalId: Int64): Bool { false }
+    public func getEntry(globalId: Int64, f: CompiledFunction): Option<CPointer<Unit>> { None }
+    public func invoke(globalId: Int64, f: CompiledFunction, args: ArrayList<LispValue>, env: Environment): Option<LispValue> { None }
 }
 
 func floatBits(v: Float64): Int64 {

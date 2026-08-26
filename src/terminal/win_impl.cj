@@ -46,26 +46,26 @@ foreign func GetConsoleScreenBufferInfo(hConsole: CPointer<Byte>, lpInfo: CPoint
 @When[os == "Windows"]
 public class PlatformTerminal <: Terminal {
     private var rawMode: Bool = false
-    private var stdinHandle: CPointer<Byte> = CPointer<Byte>(0)
-    private var stdoutHandle: CPointer<Byte> = CPointer<Byte>(0)
+    private var stdinHandle: CPointer<Byte> = CPointer<Byte>()
+    private var stdoutHandle: CPointer<Byte> = CPointer<Byte>()
     private var originalMode: UInt32 = 0
 
     public func enableRawMode(): Bool {
         if (this.rawMode) { return true }
-        this.stdinHandle = GetStdHandle(STD_INPUT_HANDLE)
-        this.stdoutHandle = GetStdHandle(STD_OUTPUT_HANDLE)
+        this.stdinHandle = unsafe { GetStdHandle(STD_INPUT_HANDLE) }
+        this.stdoutHandle = unsafe { GetStdHandle(STD_OUTPUT_HANDLE) }
         let modePtr = unsafe { LibC.malloc<UInt32>(count: 1) }
-        if (GetConsoleMode(this.stdinHandle, modePtr) == 0) {
+        if (unsafe { GetConsoleMode(this.stdinHandle, modePtr) } == 0) {
             unsafe { LibC.free(modePtr) }
             return false
         }
         this.originalMode = unsafe { modePtr.read() }
         let newMode = this.originalMode & (!(ENABLE_LINE_INPUT | ENABLE_ECHO_INPUT | ENABLE_PROCESSED_INPUT))
-        SetConsoleMode(this.stdinHandle, newMode)
+        unsafe { SetConsoleMode(this.stdinHandle, newMode) }
         let outModePtr = unsafe { LibC.malloc<UInt32>(count: 1) }
-        if (GetConsoleMode(this.stdoutHandle, outModePtr) != 0) {
+        if (unsafe { GetConsoleMode(this.stdoutHandle, outModePtr) } != 0) {
             let outMode: UInt32 = unsafe { outModePtr.read() }
-            SetConsoleMode(this.stdoutHandle, outMode | ENABLE_VIRTUAL_TERMINAL_PROCESSING | ENABLE_PROCESSED_OUTPUT)
+            unsafe { SetConsoleMode(this.stdoutHandle, outMode | ENABLE_VIRTUAL_TERMINAL_PROCESSING | ENABLE_PROCESSED_OUTPUT) }
         }
         unsafe { LibC.free(outModePtr) }
         unsafe { LibC.free(modePtr) }
@@ -75,7 +75,7 @@ public class PlatformTerminal <: Terminal {
 
     public func disableRawMode(): Bool {
         if (!this.rawMode) { return true }
-        SetConsoleMode(this.stdinHandle, this.originalMode | ENABLE_LINE_INPUT | ENABLE_ECHO_INPUT)
+        unsafe { SetConsoleMode(this.stdinHandle, this.originalMode | ENABLE_LINE_INPUT | ENABLE_ECHO_INPUT) }
         this.rawMode = false
         true
     }
@@ -86,7 +86,7 @@ public class PlatformTerminal <: Terminal {
         let recBuf = unsafe { LibC.malloc<Byte>(count: 20) }
         let numRead = unsafe { LibC.malloc<UInt32>(count: 1) }
         while (true) {
-            if (ReadConsoleInputW(this.stdinHandle, recBuf, 1, numRead) == 0) {
+            if (unsafe { ReadConsoleInputW(this.stdinHandle, recBuf, 1, numRead) } == 0) {
                 unsafe { LibC.free(recBuf); LibC.free(numRead) }
                 return None
             }
@@ -114,7 +114,7 @@ public class PlatformTerminal <: Terminal {
             let ctrlState = ck0 | (ck1 << 8) | (ck2 << 16) | (ck3 << 24)
             let mods = parseWinMods(ctrlState)
             if (uChar != 0) {
-                if (ctrlState & (LEFT_CTRL | RIGHT_CTRL) != 0 && uChar >= 1 && uChar <= 26) {
+                if ((ctrlState & (LEFT_CTRL | RIGHT_CTRL)) != 0 && uChar >= 1 && uChar <= 26) {
                     unsafe { LibC.free(recBuf); LibC.free(numRead) }
                     return Some(KeyEvent(KeyCode.Char(Rune(UInt32(uChar + 0x60))), KeyModifiers(KeyModifiers.CONTROL)))
                 }
@@ -137,11 +137,13 @@ public class PlatformTerminal <: Terminal {
             if (vkCode == 0x2E) { return Some(KeyEvent(KeyCode.Delete, mods)) }
             if (vkCode == 0x2D) { return Some(KeyEvent(KeyCode.Insert, mods)) }
         }
+        // while(true) 不落空，但 Cangjie 类型系统视 while 为 Unit——补一个不可达的 None 满足返回类型
+        None
     }
 
     public func getTerminalSize(): (Int64, Int64) {
         let buf = unsafe { LibC.malloc<Byte>(count: 22) }
-        if (GetConsoleScreenBufferInfo(this.stdoutHandle, buf) == 0) {
+        if (unsafe { GetConsoleScreenBufferInfo(this.stdoutHandle, buf) } == 0) {
             unsafe { LibC.free(buf) }
             return (80, 24)
         }
@@ -165,7 +167,7 @@ public class PlatformTerminal <: Terminal {
 
     public func isTTY(): Bool {
         let modePtr = unsafe { LibC.malloc<UInt32>(count: 1) }
-        let result = GetConsoleMode(this.stdinHandle, modePtr)
+        let result = unsafe { GetConsoleMode(this.stdinHandle, modePtr) }
         unsafe { LibC.free(modePtr) }
         result != 0
     }
@@ -177,8 +179,8 @@ func rb(ptr: CPointer<Byte>, off: Int64): Byte { unsafe { (ptr + off).read() } }
 @When[os == "Windows"]
 func parseWinMods(ctrlState: UInt32): KeyModifiers {
     let mods = KeyModifiers()
-    if (ctrlState & SHIFT_PRESSED != 0) { mods.insert(KeyModifiers.SHIFT) }
-    if (ctrlState & (LEFT_CTRL | RIGHT_CTRL) != 0) { mods.insert(KeyModifiers.CONTROL) }
-    if (ctrlState & (LEFT_ALT | RIGHT_ALT) != 0) { mods.insert(KeyModifiers.ALT) }
+    if ((ctrlState & SHIFT_PRESSED) != 0) { mods.insert(KeyModifiers.SHIFT) }
+    if ((ctrlState & (LEFT_CTRL | RIGHT_CTRL)) != 0) { mods.insert(KeyModifiers.CONTROL) }
+    if ((ctrlState & (LEFT_ALT | RIGHT_ALT)) != 0) { mods.insert(KeyModifiers.ALT) }
     mods
 }

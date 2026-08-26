@@ -521,6 +521,11 @@
         - 实测 sum-to(5000)/互递归 f(3000) 从 SIGSEGV/StackOverflow → 优雅 deopt 正确结果；fib(30) 3ms 无回退
         - 取舍：深递归 deopt 后 VM 顶层重解释 → O(n×预算) 重算（正确，浅递归 0 bail 不受影响）
   - [x] 语义审计（unbox 绑定模式坑 + 大常量 imm32 + R/v1 返回类型，8ff10be + 本轮）：380/380；examples 22/22；perf fib 61.7x 未回退
+  - [x] 三模式性能对比文档（§0）+ JIT 条件编译限定 + terminal Windows 移植修复（本轮）：
+        - 文档：AST/BC/JIT 对比（fib(30) 2.75s/0.40s/3ms；15 场景基准表）
+        - JIT 用 @When[os=="Linux" && arch=="x86_64"] 限定：非 x86 编译 stub（mmap/@C/机器码执行排除），--with-jit 自动降级
+        - 交叉编译验证：cjpm build --target x86_64-pc-windows-gnu 全项目成功（JIT stub 生效、mmap 缺席）
+        - terminal 包 Windows 修复：CPointer(0) 构造 / foreign 调用缺 unsafe / 位运算优先级(a&b)!=0 / while(true) 尾部补 None
         - unbox 用 match{case JIT_TAG_* =>} 恒走第一分支（Cangjie 绑定模式）→ 非 INT 结果错解为 Int → 改 if/else；暴露 generic arity 守卫缺失（checkSupported 保守拒绝 + emitCall deopt 兜底）
         - mov r64,imm32 符号扩展：|常量|>2^31-1 静默错值（3000000000→-1294967296）→ 三形式资格拒绝超范围常量
         - R/v1 返回 Boolean/Nil 被错解为 Int（三模式不一致）→ returnsNonInt CFG 类型跟踪拒绝非 Int 返回，落 generic 保类型
