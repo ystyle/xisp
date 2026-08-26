@@ -340,6 +340,17 @@ public class EnhancedRepl {
         print("\r\n再见！\r\n")
     }
 
+    // 光标前文本的终端显示宽度（CJK/emoji 双宽按 2 算，避免光标偏移）
+    func textWidthBefore(s: String, col: Int64): Int64 {
+        let rs = s.toRuneArray()
+        var w: Int64 = 0
+        let end = if (col < rs.size) { col } else { rs.size }
+        for (i in 0..end) {
+            w = w + runeDisplayWidth(rs[i])
+        }
+        w
+    }
+
     private func renderEditor(): Unit {
         let lines = this.editor.getDisplayLines()
         let cursorRow = this.editor.getCursorRow()
@@ -354,12 +365,12 @@ public class EnhancedRepl {
         if (cursorRow == 0) {
             print("\rxisp> " + this.highlighter.highlightInput(lines[0]))
             print("\u{1b}[K")
-            let pos = 6 + cursorCol
+            let pos = 6 + this.textWidthBefore(lines[0], cursorCol)
             print("\r" + "\u{1b}[" + pos.toString() + "C")
         } else {
             print("\r    ... " + this.highlighter.highlightInput(lines[cursorRow]))
             print("\u{1b}[K")
-            let pos = 8 + cursorCol
+            let pos = 8 + this.textWidthBefore(lines[cursorRow], cursorCol)
             print("\r" + "\u{1b}[" + pos.toString() + "C")
         }
         getStdOut().flush()

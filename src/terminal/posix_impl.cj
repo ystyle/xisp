@@ -1,5 +1,7 @@
 package ystyle::xisp.terminal
 
+import std.collection.ArrayList
+
 @When[os != "Windows"]
 @C
 foreign func tcgetattr(fd: Int32, buf: CPointer<Byte>): Int32
@@ -105,6 +107,10 @@ public class PlatformTerminal <: Terminal {
             this.readPos = this.readPos + tryLen
             return event
         }
+        // 多字节 UTF-8（中文/emoji/重音等）：解码为完整 Rune，跨 read 边界自动补齐（避免拆字）
+        if (b0 >= 0x80) {
+            return this.readUtf8Char()
+        }
         this.readPos = this.readPos + 1
         if (b0 == 0x7F || b0 == 0x08) { return Some(KeyEvent(KeyCode.Backspace, KeyModifiers())) }
         if (b0 == 0x09) { return Some(KeyEvent(KeyCode.Tab, KeyModifiers())) }
@@ -116,6 +122,43 @@ public class PlatformTerminal <: Terminal {
             return Some(KeyEvent(KeyCode.Char(Rune(UInt32(b0))), KeyModifiers()))
         }
         None
+    }
+
+    // 读取一个完整的多字节 UTF-8 字符并解码为 Rune
+    // 半字（序列跨 read 边界）→ 前移缓冲补齐再解码；仍不足/非法 → 替换符 U+FFFD（不拆字不丢字节错位）
+    func readUtf8Char(): ?KeyEvent {
+        let b0: Byte = unsafe { (this.readBuf + this.readPos).read() }
+        let seqLen = utf8SeqLen(b0)
+        if (seqLen == 1) {
+            // 非法引导字节：消费单字节 → 替换符
+            this.readPos = this.readPos + 1
+            return Some(KeyEvent(KeyCode.Char(Rune(0xFFFD)), KeyModifiers()))
+        }
+        if (this.readPos + seqLen > this.readLen) {
+            // 缓冲内序列不完整（跨 read 边界）→ 前移补齐一次
+            if (this.readPos == 0 && this.readLen < 64) {
+                let remaining = this.readLen
+                for (i in 0..remaining) {
+                    let val: Byte = unsafe { (this.readBuf + this.readPos + i).read() }
+                    unsafe { (this.readBuf + i).write(val) }
+                }
+                let more = Int64(unsafe { read(STDIN_FD, this.readBuf + remaining, UIntNative(64 - remaining)) })
+                this.readLen = remaining + more
+                this.readPos = 0
+            }
+            if (this.readPos + seqLen > this.readLen) {
+                // 仍不足（EOF/流中断）：消费引导字节 → 替换符
+                this.readPos = this.readPos + 1
+                return Some(KeyEvent(KeyCode.Char(Rune(0xFFFD)), KeyModifiers()))
+            }
+        }
+        let seq = ArrayList<Byte>()
+        for (i in 0..seqLen) {
+            seq.add(unsafe { (this.readBuf + this.readPos + i).read() })
+        }
+        let r = decodeUtf8Rune(seq)
+        this.readPos = this.readPos + seqLen
+        Some(KeyEvent(KeyCode.Char(r), KeyModifiers()))
     }
 
     public func getTerminalSize(): (Int64, Int64) {
