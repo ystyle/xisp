@@ -20,3 +20,6 @@ docs/dist/
 # IDE artifacts
 .arts/target-win
 target-win
+
+# VSCode debug config dir
+.arts/
