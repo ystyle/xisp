@@ -28,6 +28,11 @@ public class JitCodegen {
     // J2：跨函数调用/全局解析（由 JitRuntime.init 注入）
     public static var entryTablePtr: Int64 = 0
     public static var resolveFnAbs: Int64 = 0
+    // 深递归栈守卫：机器码调用点前 cmp rsp, [budgetCell] → deopt（防原生栈溢出 SIGSEGV）
+    // budgetCell = 每次 invoke 由桥更新（当前 rsp - 预算），per-invoke 自适应
+    public static var budgetCellAddr: Int64 = 0
+    // R 形式 bail 标志单元（mmap 页，绝对地址烘焙；R 返回裸 Int 不能用 <1024 级联约定）
+    public static var bailCellAddr: Int64 = 0
 
     static let R_RAX: Int64 = 0
     static let R_RCX: Int64 = 1
@@ -540,6 +545,12 @@ public class JitCodegen {
         let n = argCount
         let k = n - 1
         let localSlots = this.fn.localSlots
+        // 深递归栈守卫：rsp 低于预算单元 → deopt（防原生栈溢出 SIGSEGV；generic 走 site-id 级联）
+        if (JitCodegen.budgetCellAddr != 0) {
+            em.movRmImm64(R_R10, JitCodegen.budgetCellAddr)
+            em.cmpRegRmBase(R_RSP, R_R10)
+            let stBail = this.slowJb()
+        }
         em.movRegRmDisp(R_RAX, R_RSP, 16 * k)             // func tag @ [rsp+16k]
         em.movRmImm32(R_RCX, JIT_TAG_REF)
         em.cmpRmReg(R_RAX, R_RCX)
@@ -675,6 +686,16 @@ public class JitCodegen {
         this.siteSeq = this.siteSeq + 1
         em.movRmImm32(R_R11, id)
         let p = em.jccRel32(0x83)
+        deoptJumps.add((p, id))
+        p
+    }
+
+    // 慢分支：jb（无符号 <）→ deopt（深递归栈守卫）
+    func slowJb(): Int64 {
+        let id = this.siteSeq
+        this.siteSeq = this.siteSeq + 1
+        em.movRmImm32(R_R11, id)
+        let p = em.jccRel32(0x82)
         deoptJumps.add((p, id))
         p
     }

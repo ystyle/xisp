@@ -18,6 +18,8 @@ foreign func munmap(addr: CPointer<Unit>, length: UIntNative): Int32
 
 // J2：JIT 调用上下文（单线程解释器）
 var jitCurEnv: Environment = Environment()
+// rsp 探针（机器码桩，mov rax,rsp;ret）——桥取当前栈指针用
+var probeRspPtr: CPointer<Unit> = CPointer<Unit>()
 // 入口表：closureId → generic ABI 机器码入口（0=未编译或非 generic 特化）
 //   ——mmap 固定页（非 GC 对象 → raw 指针地址永远稳定，供机器码 imm64 直接使用）
 //   ——仅 generic（16B 槽 ABI）登记：v1/R 特化 ABI 不同，禁止机器码交叉调用
@@ -87,16 +89,27 @@ public class JitRuntime {
         JitRuntime.shared = Some(this)
         let dbg = getVariable("XISP_JIT_DEBUG")
         jitDebug = dbg != None
-        // 入口表：mmap 固定页（raw 指针，地址稳定；非 GC 对象不随 GC 移动）
-        let base = unsafe { mmap(CPointer<Unit>(), UIntNative(JIT_ENTRY_CAP * 8), 7, 0x22, -1, 0) }
+        // 入口表 + 两个控制单元：mmap 固定页（raw 指针地址稳定，供机器码 imm64 直接使用）
+        // 布局：jitEntryTablePtr[0..JIT_ENTRY_CAP) = generic 入口；
+        //       [JIT_ENTRY_CAP]   = R bail 标志（机器码置位，R 桥读取）
+        //       [JIT_ENTRY_CAP+1] = 栈预算单元（桥每次 invoke 更新，机器码调用点前读取）
+        let base = unsafe { mmap(CPointer<Unit>(), UIntNative((JIT_ENTRY_CAP + 2) * 8), 7, 0x22, -1, 0) }
         if (base.isNull()) {
             throw Exception("JIT entry table mmap failed")
         }
         jitEntryTablePtr = CPointer<Int64>(base)
         JitCodegen.entryTablePtr = Int64(unsafe { jitEntryTablePtr.toUIntNative() })
+        JitCodegen.bailCellAddr = Int64(unsafe { (jitEntryTablePtr + JIT_ENTRY_CAP).toUIntNative() })
+        JitCodegen.budgetCellAddr = Int64(unsafe { (jitEntryTablePtr + JIT_ENTRY_CAP + 1).toUIntNative() })
         // 全局解析 helper 地址
         let hf: CFunc<(Int64, CPointer<Unit>, Int64) -> Unit> = jitResolveGlobals
         JitCodegen.resolveFnAbs = Int64(unsafe { CPointer<Int8>(hf).toUIntNative() })
+        // rsp 探针桩：mov rax, rsp; ret（48 89 E0 C3）
+        var probeBytes = ArrayList<UInt8>()
+        probeBytes.add(0x48); probeBytes.add(0x89); probeBytes.add(0xE0); probeBytes.add(0xC3)
+        let probeEntry = this.allocPage(probeBytes)
+        probeRspPtr = probeEntry
+
 
     }
 
@@ -226,6 +239,12 @@ public class JitRuntime {
                 return None
             case Some(entryPtr) =>
                 jitCurEnv = env
+                // 深递归栈守卫（per-invoke）：预算单元 = 当前 rsp - 48KB——机器码调用点前 cmp rsp,[cell]
+                // 探针实测用户代码栈底在顶层调用下方 ~125KB，48KB 预算留 ~77KB 安全；
+                // 深解释器嵌套调用 JIT 时当前 rsp 更低 → 预算自动收窄，仍安全
+                let bpr: CFunc<() -> Int64> = CFunc<() -> Int64>(probeRspPtr)
+                let bcur = unsafe { bpr() }
+                unsafe { (jitEntryTablePtr + JIT_ENTRY_CAP + 1).write(bcur - 48 * 1024) }
                 // R 形式桥（J5）：rdi/rsi/rdx = 裸 Int 参数，返回值 rax = payload
                 // （资格函数仅自调用、仅 Int 值——无 tag/槽校验；4 参 rcx 保留占位）
                 if (rForms.contains(globalId) && rForms[globalId]) {
@@ -249,7 +268,16 @@ public class JitRuntime {
                         }
                     }
                     let rfptr: CFunc<(Int64, Int64, Int64, CPointer<Unit>) -> Int64> = CFunc<(Int64, Int64, Int64, CPointer<Unit>) -> Int64>(entryPtr)
+                    // 深递归栈守卫：复位 bail 标志 → 调机器码 → 若 bail（R 帧撞栈限返回 0）→ deopt 回解释器
+                    // （R 返回裸 Int，不能用 <1024 级联约定；用 mmap 标志单元旁路）
+                    unsafe { (jitEntryTablePtr + JIT_ENTRY_CAP).write(0) }
                     let rret = unsafe { rfptr(a0, a1, a2, CPointer<Unit>()) }
+                    if (unsafe { (jitEntryTablePtr + JIT_ENTRY_CAP).read() } != 0) {
+                        if (jitDebug) { eprintln("[JIT] R bail → deopt id=${globalId}") }
+                        this.deoptCount = this.deoptCount + 1
+                        this.deoptSites.add(-1)
+                        return None
+                    }
                     return Some(LispValue.Int(rret))
                 }
                 // v1 INT 特化无运行时类型守卫：非 Int 参数 → 回退解释器（保语义；R 桥已在上面守卫）

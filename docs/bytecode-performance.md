@@ -262,7 +262,7 @@ time ./target/release/bin/ystyle::xisp.cli --with-bytecode-compiler lisp-tests/p
 ### 已知边界
 - k≥2 值池容量 4-k 偏窄——**J6 扩展（rbx 入池 + phantom 函数值）后 k=2 已实用**（见 §17）；k=3 池=2 < 自调用需求 ≥3 恒不资格
 - 防御性 bail 桩保留（资格函数仅自调用，属死代码）
-- **深机器码递归受宿主栈限制**：主线程仅映射 ~135KB 栈（R 帧 48B → 约 2600 层上限，超出 SIGSEGV）；BC 帧切换不受此限（深递归用 VM 寄存器栈）。见 §17.3
+- **深机器码递归受宿主栈限制**：**已由栈守卫修复**（§17.3）——调用点前 rsp 预算检查，超限 deopt 回解释器（不再 SIGSEGV）；BC 帧切换不受此限
 
 ### 数据
 - 单测 365→370（R 系列 fib 全值/缺参回退/JIF 条件/布尔结果/fib(30) 计时）
@@ -285,7 +285,7 @@ time ./target/release/bin/ystyle::xisp.cli --with-bytecode-compiler lisp-tests/p
 - **imm32 符号扩展大常量坑**（三形式通用）：`mov r64, imm32` 符号扩展 bit31，|Int 常量| > 2^31-1 被静默破坏（`3000000000` 变 `-1294967296`，R/v1/generic 全受影响）。资格检查补齐：常量超出 `[-2^31, 2^31-1]` → 拒绝编译回退解释器（未来可换 movabs）
 - **R/v1 返回类型不一致**（`returnsNonInt` 资格检查）：R/v1 是 INT 特化（纯 rax/INT 标签返回），返回 Boolean/Nil/函数值会被错解为 Int（`(b n)` 返回 `(> n 0)` 得 Int(1) vs BC Boolean）。CFG 类型跟踪（镜像资格扫描）：任一 RETURN 栈顶为非 Int（BOOL/NIL/PHANTOM/MIXED）→ 拒绝落 generic（generic 经 unbox 修复正确返回类型）。CALL 返回 = 函数自身返回类型（合并时兼容任意）；条件比较（CMP_STACK 被 JIF 消费）不污染返回
 - **数据**：互递归 f(500)=250 与 BC 一致、深度 200 时 deopt 计数 ≤2（`testJitMutualRecursionPerf` 确定性断言）；单测 +5（后 +2 unbox 回归）
-- **边界**：跨函数 callee 经 `jitResolveGlobals` helper 每帧 env.lookup（正确性优先，逐帧 helper 有开销，未来可缓存）；深互递归受 17.3 栈限制
+- **边界**：跨函数 callee 经 `jitResolveGlobals` helper 每帧 env.lookup（正确性优先，逐帧 helper 有开销，未来可缓存）；深递归已由 §17.3 栈守卫处理（deopt 回解释器）
 
 ### 17.2 R 形式 k≥2（jit_codegen_int_r.cj）
 
@@ -296,9 +296,15 @@ time ./target/release/bin/ystyle::xisp.cli --with-bytecode-compiler lisp-tests/p
 - **k=3 不可行（文档化）**：池=2 < 自调用需求 ≥3（3 参数 + phantom 函数值 = 3 寄存器）→ 任何含自调用的 k=3 函数恒不资格
 - **数据**：`testJitRFormK2SumTo`（sum-to(2000,0)=2001000 与 BC 一致 + rFormCount≥1 断言）、`testJitRFormK2Gcd`（gcd2(48,36)=12）；单测 374→376；examples 22/22；perf fib 60.7x/60.6x（未回退）
 
-### 17.3 深机器码递归宿主栈限制（既有约束，本轮明确）
+### 17.3 深机器码递归宿主栈限制 → 栈守卫修复（2026-08-26）
 
-- **现象**：R 形式深递归 ~2600 层 SIGSEGV（`(sum-to 2800 0)` 崩、2600 正常）；k=1 自递归 g(3000) 同崩——与 k≥2 无关，帧大小未变（48B/帧）
-- **根因**：主线程 `[stack]` 映射仅 **~135KB**（rlimit 8MB 但运行时只映射 0x21000）；48B × ~2800 = 135KB
-- **对照**：BC 帧切换用 VM 寄存器栈（不涨宿主栈，深递归仅受内存约束）——同源码 JIT 崩而 BC 正常
-- **待办（未来）**：机器码深度计数 + 超限 deopt（干净回退而非 SIGSEGV）；或运行时放大主线程栈映射
+- **原现象**：R 形式深递归 ~2600 层 SIGSEGV（`(sum-to 2800 0)` 崩、2600 正常）；k=1 自递归 g(3000) 同崩——与 k≥2 无关，帧大小未变（48B/帧）
+- **原根因**：用户代码执行线程的原生栈有限（运行时映射随用随长，深递归耗尽）；48B × ~2800 = 135KB 撞栈。BC 帧切换用 VM 寄存器栈不受此限（同源码 JIT 崩而 BC 正常）
+- **修复（本轮，栈守卫）**：机器码每个调用点前 `cmp rsp, [预算单元]; jb deopt/bail`——
+  - **预算单元（mmap 页）**：桥每次 invoke 更新为 `当前 rsp - 48KB`（探针实测），per-invoke 自适应（深解释器嵌套调用 JIT 时 rsp 更低 → 预算自动收窄，仍安全）；已实测用户代码栈底在顶层调用下方 ~125KB，48KB 预算留 ~77KB 安全
+  - **R 形式走 bail 标志旁路**：R 返回裸 Int（0/1/2 等合法小值 <1024），**不能用 generic/v1 的 `<1024` 级联约定**（会误判合法小结果）；改用 mmap bail 标志单元（机器码置位 → 桥检查 → deopt 回解释器），中间帧以垃圾值继续算术（R 无除法/内存访问，安全），桥整体 deopt
+  - generic/v1 直接走既有 site-id/rax=0 级联
+  - **rsp 探针**：4 字节机器码桩 `mov rax,rsp; ret`（48 89 E0 C3），桥取当前栈指针——规避了 pthread_getattr_np 在本运行时的 59GB 地址错位（用户代码跑在非主线程，pthread 报主线程栈）
+- **成果**：`(sum-to 5000 0)`=12502500、互递归 f(3000)=1 **均优雅 deopt 回解释器（原 SIGSEGV/StackOverflowError）**；fib(30) 3ms 无回退、perf 60.9x、examples 22/22
+- **已知取舍**：深递归 deopt 后 VM 从调用顶层重解释，R 形式重算预算段 → O(n×预算) 重算（正确但深递归慢；浅递归 0 bail 不受影响）
+- **历史探索（归档）**：pthread_getattr_np 取栈界在 Cangjie 运行时线程错位（返回 ~59GB 外的栈）；fixed-imm64 烘焙 limit 在深解释器嵌套时预算收窄导致 deopt 风暴（2962 次）——故改 per-invoke 预算单元

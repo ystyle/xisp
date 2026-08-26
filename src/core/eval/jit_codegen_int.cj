@@ -396,6 +396,13 @@ public class JitCodegenInt {
         em.cmpRmReg(R_RAX, R_RCX)
         let slowId = em.jccRel32(0x85)
         slowJumps.add(slowId)
+        // 深递归栈守卫：rsp 低于预算单元 → bail（防原生栈溢出 SIGSEGV；rax=0 级联）
+        if (JitCodegen.budgetCellAddr != 0) {
+            em.movRmImm64(R_R10, JitCodegen.budgetCellAddr)
+            em.cmpRegRmBase(R_RSP, R_R10)
+            let stBail = em.jccRel32(0x82)
+            bailJumps.add(stBail)
+        }
         // 帧缓冲（16B stride）：result@[newRsp+0]；slot_j payload@[newRsp+16(j+1)+8]
         // FB = round16(16*(k+1) + 8n)：覆盖帧 + 栈项，保持调用点 16B 对齐
         let fb = ((16 * (k + 1) + 8 * n + 15) / 16) * 16

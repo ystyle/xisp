@@ -269,10 +269,12 @@ public class JitCodegenIntR {
             em.patchRel32(at, t)
         }
 
-        // ---- bail 桩（非自调用 → rax=0 级联；资格函数仅自调用，防御性死代码）----
+        // ---- bail 桩（深递归栈守卫撞限 → 置 R bail 标志 + rax=0；桥感知 → deopt 回解释器）----
         if (bailJumps.size > 0) {
             let stub = em.here()
             for (p in bailJumps) { em.patchRel32(p, stub) }
+            em.movRmImm64(R_R10, JitCodegen.bailCellAddr)   // 冷路径：置 mmap 标志单元
+            em.movByteRmDispImm8(R_R10, 0, 1)               // mov byte [r10], 1
             em.movRmImm32(R_RAX, 0)
             em.popReg(R_R15); em.popReg(R_R14); em.popReg(R_R13); em.popReg(R_R12); em.popReg(R_RBX)
             em.ret()
@@ -549,6 +551,14 @@ public class JitCodegenIntR {
         }
         for (i in 0..n) {
             this.popV(valStack)
+        }
+        // 深递归栈守卫：rsp 低于预算单元 → bail（置 R bail 标志，桥感知 deopt → 解释器接管）
+        // R 返回裸 Int（0/1/2 等合法小值 <1024），不能用 <1024 级联约定——故走标志单元旁路
+        if (JitCodegen.budgetCellAddr != 0) {
+            em.movRmImm64(R_R10, JitCodegen.budgetCellAddr)
+            em.cmpRegRmBase(R_RSP, R_R10)
+            let bail = em.jccRel32(0x82)   // jb（无符号 rsp < 预算）
+            bailJumps.add(bail)
         }
         // 自调用 rel32：target = 偏移 0（函数入口）
         let callAt = em.callRel32()

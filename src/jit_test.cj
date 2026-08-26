@@ -345,6 +345,43 @@ class JitTest {
     }
 
     @TestCase
+    func testJitDeepRecursionDeopt() {
+        // 深递归栈守卫：R 形式深递归超预算 → deopt 回解释器（曾原生栈溢出 SIGSEGV 崩溃）
+        let code = "(define (sum-to n acc) (if (= n 0) acc (sum-to (- n 1) (+ acc n)))) (sum-to 4000 0)"
+        let jit = this.evalWithJit(code)
+        let bc = this.evalWithBytecode(code)
+        match (jit) {
+            case LispValue.Int(i) =>
+                match (bc) {
+                    case LispValue.Int(j) => @Assert(i == j && i == 8002000)
+                    case _ => @Fail("bc result mismatch")
+                }
+            case _ => @Fail("expected Int, got ${jit}")
+        }
+        // 守卫生效证据：至少一次机器码 deopt（非崩溃）
+        if (let Some(rt) <- JitRuntime.shared) {
+            println("  [JIT] deep sum-to(4000) deopt=${rt.deoptCount}")
+            @Assert(rt.deoptCount >= 1)
+        }
+    }
+
+    @TestCase
+    func testJitDeepMutualRecursionDeopt() {
+        // 深递归栈守卫：generic 互递归深递归 → deopt 回解释器（曾 StackOverflowError 崩溃）
+        let code = "(define (f n) (if (< n 2) n (g (- n 1)))) (define (g n) (if (< n 2) n (f (- n 1)))) (f 3000)"
+        let jit = this.evalWithJit(code)
+        let bc = this.evalWithBytecode(code)
+        match (jit) {
+            case LispValue.Int(i) =>
+                match (bc) {
+                    case LispValue.Int(j) => @Assert(i == j && i == 1)
+                    case _ => @Fail("bc result mismatch")
+                }
+            case _ => @Fail("expected Int, got ${jit}")
+        }
+    }
+
+    @TestCase
     func testJitRFormJifCond() {
         // IF 条件走 JUMP_IF_FALSE（op11）路径：条件为参数本身
         let result = this.evalWithJit(

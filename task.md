@@ -515,7 +515,11 @@
   - [x] J2b 互递归（入口表直连 + 冷启动 deopt）：f↔g 深度互递归全机器码（deopt 计数 ≤2）；376/376；examples 22/22；fib 60.7x 未回退
         - 根因归档：movR11R9 方向反（4D 89 D9=mov r9,r11，call r11 用陈旧 site id → pc=0x3）/ deopt-bail 握手（test rax,rax 漏检非零 id → 改 cmp rax,1024; jb bail + 独立 bail 桩）/ v1 桥缺 arg 类型守卫（Float 静默垃圾值）
   - [x] R 形式 k≥2（rbx 入池容量 5-k + phantom 函数值）：sum-to/gcd2 类 k=2 尾递归累加器 R 形式正确；k=3 池=2 < 需求 3 恒不可行（文档化）
-  - [x] 深机器码递归宿主栈限制明确（~135KB 栈 → ~2600 R 帧上限，超出 SIGSEGV；BC 帧切换不受限）——待办：深度计数 + 超限 deopt
+  - [x] 深机器码递归宿主栈限制修复（栈守卫：per-invoke rsp 预算单元 + R bail 标志旁路 + rsp 探针桩）：
+        - 机器码调用点前 cmp rsp,[预算单元]; jb deopt/bail；预算=桥实测 rsp-48KB（~125KB 可用留 ~77KB 安全）
+        - R 返回裸 Int 不能用 <1024 级联（合法小值误判）→ mmap bail 标志旁路；generic/v1 走既有级联
+        - 实测 sum-to(5000)/互递归 f(3000) 从 SIGSEGV/StackOverflow → 优雅 deopt 正确结果；fib(30) 3ms 无回退
+        - 取舍：深递归 deopt 后 VM 顶层重解释 → O(n×预算) 重算（正确，浅递归 0 bail 不受影响）
   - [x] 语义审计（unbox 绑定模式坑 + 大常量 imm32 + R/v1 返回类型，8ff10be + 本轮）：380/380；examples 22/22；perf fib 61.7x 未回退
         - unbox 用 match{case JIT_TAG_* =>} 恒走第一分支（Cangjie 绑定模式）→ 非 INT 结果错解为 Int → 改 if/else；暴露 generic arity 守卫缺失（checkSupported 保守拒绝 + emitCall deopt 兜底）
         - mov r64,imm32 符号扩展：|常量|>2^31-1 静默错值（3000000000→-1294967296）→ 三形式资格拒绝超范围常量

@@ -118,6 +118,13 @@ public class JitEmitter {
         this.buf.add(UInt8(0xC0 + 8 * (b & 7) + (a & 7)))
     }
 
+    // cmp reg, [base]：REX.W + 3B /r（reg 为比较对象，base 为内存基址，disp=0；深递归栈守卫用）
+    public func cmpRegRmBase(reg: Int64, base: Int64): Unit {
+        this.rexW(base, reg)
+        this.buf.add(0x3B)
+        this.buf.add(UInt8(0x00 + ((reg & 7) << 3) + (base & 7)))
+    }
+
     // cmp r/m64, imm32：REX.W + 81 /7 id
     public func cmpRmImm32(rm: Int64, imm: Int64): Unit {
         this.rexW(rm, 0)
@@ -171,6 +178,21 @@ public class JitEmitter {
         this.rexW(base, src)
         this.buf.add(0x89)
         this.emitModrm(base, disp, src)
+    }
+
+    // mov byte [base + disp], imm8：C6 /0（bail 标志置位等；disp 仅支持 0/-128..127）
+    public func movByteRmDispImm8(base: Int64, disp: Int64, imm: Int64): Unit {
+        if (base >= 8) { this.buf.add(0x41) }   // REX.B
+        this.buf.add(0xC6)
+        if (disp == 0 && base != 4) {
+            this.buf.add(UInt8(0x00 + (base & 7)))
+            this.buf.add(UInt8(imm & 0xFF))
+        } else {
+            // mod=01（disp8）
+            this.buf.add(UInt8(0x40 + (base & 7)))
+            this.buf.add(UInt8(disp & 0xFF))
+            this.buf.add(UInt8(imm & 0xFF))
+        }
     }
 
     // 通用 modrm 发射（带 reg 字段；之后自动补 SIB/disp 字节）
