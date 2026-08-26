@@ -260,10 +260,42 @@ time ./target/release/bin/ystyle::xisp.cli --with-bytecode-compiler lisp-tests/p
 5. 栈对齐：4 push + sub8 pad（entry %16=8 → 0，保证 call 前 %16=0）
 
 ### 已知边界
-- k≥2 函数因值池容量（4-k）**不存在可自递归的样本**（k=1 时池=3 恰好覆盖 fib 类），R 形式实际覆盖 = 1 参数纯自递归 INT 函数
+- k≥2 值池容量 4-k 偏窄——**J6 扩展（rbx 入池 + phantom 函数值）后 k=2 已实用**（见 §17）；k=3 池=2 < 自调用需求 ≥3 恒不资格
 - 防御性 bail 桩保留（资格函数仅自调用，属死代码）
+- **深机器码递归受宿主栈限制**：主线程仅映射 ~135KB 栈（R 帧 48B → 约 2600 层上限，超出 SIGSEGV）；BC 帧切换不受此限（深递归用 VM 寄存器栈）。见 §17.3
 
 ### 数据
 - 单测 365→370（R 系列 fib 全值/缺参回退/JIF 条件/布尔结果/fib(30) 计时）
 - examples 三模式 22/22 一致（新增覆盖率：mul 类（square）、闭包混合）
 - perf 15 场景：fib-direct/indirect 63x/61x（26-27ms）；其余与 v1 持平（JIT 栈机器与通用形式共用路径）
+
+## 17. J6 增量：J2b 互递归交叉调用 + R 形式 k≥2（2026-08-26）
+
+### 17.1 J2b：互递归/跨函数机器码直连（jit_codegen.cj + jit_runtime.cj）
+
+- **动机**：J2 以来跨函数调用一律 deopt（互递归每层边界都回解释器，O(n) 次 deopt + 逐层重解释）。本轮启用**入口表直连**：
+  - emitCall 非自路径：`jne cross` → `mov r10, <entryTablePtr>`（mmap 固定页，imm64 烘焙）→ `mov r9, [r10 + payload*8]` → `r9==0`（未编译/非 generic）→ **冷启动 deopt** → `emitFrameAndCall(r11Mode=true)` → `call r11`
+  - 冷启动语义：callee 未编译时 deopt 一次 → VM 编译 callee → 重入后该边**永久直连**；互递归实测仅 1-2 次 deopt（每闭包对一条边）后 f↔g 全机器码
+- **入口表 mmap 固定页**（非 GC 对象 → 地址稳定，替代原 Array+acquireArrayRawData 的 GC 移动隐患）；**仅 generic ABI（16B 槽）登记**——v1（8B 槽、无类型守卫）/R（裸寄存器 ABI）特化禁止机器码交叉调用（ABI 不兼容 → 读垃圾）
+- **两个根因**（J5 同族编码错误，均单测归档）：
+  1. **movR11R9 方向反**：`4D 89 D9` 实为 `mov r9, r11`（89 /r 中 reg=源）——`slowJe` 把 site id 装入 r11 后，入口没进 r11，`call r11` = 调用陈旧 site id → **pc=0x3 SIGSEGV**。正确 `4D 89 CB`
+  2. **deopt/bail 握手**：旧 `test rax,rax; je bail` 只捕获 rax==0，而 deopt 返回**非零 site id** → 机器码嵌套 deopt 后调用方把 site id 当结果指针读垃圾。改 `cmp rax,1024; jb bail` + bail 桩独立（rax=0 级联返回），deopt 桩保留 site id（诊断）
+- **v1 桥 arg 类型守卫**（潜在正确性 bug）：v1 INT 特化无运行时类型守卫，Float 参数被当 Int 位模式算 → **静默垃圾值**（`(g 1.5)` JIT 曾返回 `-4627448617123184640` vs BC `10.5`）。invoke 桥对 vForms 函数全参校验 Int（非 Int → deopt 回解释器）；R 桥已有同款守卫
+- **数据**：互递归 f(500)=250 与 BC 一致、深度 200 时 deopt 计数 ≤2（`testJitMutualRecursionPerf` 确定性断言）；单测 +5
+- **边界**：跨函数 callee 经 `jitResolveGlobals` helper 每帧 env.lookup（正确性优先，逐帧 helper 有开销，未来可缓存）；深互递归受 17.3 栈限制
+
+### 17.2 R 形式 k≥2（jit_codegen_int_r.cj）
+
+- **值池扩展**：rbx 入池（callee-saved，prologue/epilogue 5 push/pop，40B → 调用点 %16==0 免 pad）→ 池 = `[rbx, R_R12+k..R_R15]`，容量 **5-k**
+- **phantom 函数值**：自函数全局装载（emitLoadLocal 全局分支）**不占池寄存器**（emitCall 的函数值是静态已知占位）——寄存器按**非 phantom 计数**静态分配 → k=2 自调用只需 2 个参数寄存器
+- **资格扫描深度模型对齐**：LOAD_LOCAL 全局(phantom) 深度+0、CALL 净 `-argCount+2`、CMP_STACK -1、NOT 0、容量 5-k；顺带修复 `case 4 | 11` 遮蔽（op11 的 jif 合并逻辑原为死代码）
+- **成果**：k=2 尾递归累加器类可用——`sum-to`（参数含 BIN_STACK `(+ acc n)`）与 `gcd2`（嵌套 if + BIN_STACK 参数）均 R 形式编译正确
+- **k=3 不可行（文档化）**：池=2 < 自调用需求 ≥3（3 参数 + phantom 函数值 = 3 寄存器）→ 任何含自调用的 k=3 函数恒不资格
+- **数据**：`testJitRFormK2SumTo`（sum-to(2000,0)=2001000 与 BC 一致 + rFormCount≥1 断言）、`testJitRFormK2Gcd`（gcd2(48,36)=12）；单测 374→376；examples 22/22；perf fib 60.7x/60.6x（未回退）
+
+### 17.3 深机器码递归宿主栈限制（既有约束，本轮明确）
+
+- **现象**：R 形式深递归 ~2600 层 SIGSEGV（`(sum-to 2800 0)` 崩、2600 正常）；k=1 自递归 g(3000) 同崩——与 k≥2 无关，帧大小未变（48B/帧）
+- **根因**：主线程 `[stack]` 映射仅 **~135KB**（rlimit 8MB 但运行时只映射 0x21000）；48B × ~2800 = 135KB
+- **对照**：BC 帧切换用 VM 寄存器栈（不涨宿主栈，深递归仅受内存约束）——同源码 JIT 崩而 BC 正常
+- **待办（未来）**：机器码深度计数 + 超限 deopt（干净回退而非 SIGSEGV）；或运行时放大主线程栈映射

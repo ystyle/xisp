@@ -16,7 +16,9 @@ import ystyle::xisp.parser.*
  * 1. 递归直接调用（fib）全机器码执行 + 正确性
  * 2. 未支持指令/常量（Str 常量）→ 函数级回退解释器（语义保真）
  * 3. 运行时类型 guard 失败 → deopt 回 VM 解释器重跑（语义保真）
- * 4. 互递归（非自调用）→ CALL guard 失败 → 回退（语义保真）
+ * 4. 互递归（J2b）→ 入口表交叉调用直连（冷启动 deopt 后全机器码；deopt 计数断言）
+ * 5. R 形式：fib 全系列 / 缺参回退 / JIF 条件 / 布尔结果 / fib(30) 计时 / k=2（sum-to、gcd2）
+ * 6. v1 桥 arg 类型守卫（非 Int 参数 → deopt 保语义）
  */
 @Test
 class JitTest {
@@ -261,6 +263,46 @@ class JitTest {
         match (result) {
             case LispValue.Int(i) => @Assert(i == 99)
             case _ => @Fail("expected 99, got ${result}")
+        }
+    }
+
+    @TestCase
+    func testJitRFormK2SumTo() {
+        // k≥2：k=2 尾递归累加器（参数含 BIN_STACK 表达式）→ R 形式寄存器级路径
+        let code = "(define (sum-to n acc) (if (= n 0) acc (sum-to (- n 1) (+ acc n)))) (sum-to 2000 0)"
+        let jit = this.evalWithJit(code)
+        let bc = this.evalWithBytecode(code)
+        match (jit) {
+            case LispValue.Int(i) =>
+                match (bc) {
+                    case LispValue.Int(j) => @Assert(i == j && i == 2001000)
+                    case _ => @Fail("bc result mismatch")
+                }
+            case _ => @Fail("expected Int, got ${jit}")
+        }
+        // 确定性断言：k=2 函数确实走 R 形式（非 v1/generic 兜底）
+        if (let Some(rt) <- JitRuntime.shared) {
+            println("  [JIT] k=2 sum-to R-form count=${rt.rFormCount}")
+            @Assert(rt.rFormCount >= 1)
+        }
+    }
+
+    @TestCase
+    func testJitRFormK2Gcd() {
+        // k≥2：k=2 嵌套 if + BIN_STACK 参数（gcd 减法版）→ R 形式
+        let code = "(define (gcd2 a b) (if (= a b) a (if (< a b) (gcd2 a (- b a)) (gcd2 (- a b) b)))) (gcd2 48 36)"
+        let jit = this.evalWithJit(code)
+        let bc = this.evalWithBytecode(code)
+        match (jit) {
+            case LispValue.Int(i) =>
+                match (bc) {
+                    case LispValue.Int(j) => @Assert(i == j && i == 12)
+                    case _ => @Fail("bc result mismatch")
+                }
+            case _ => @Fail("expected Int, got ${jit}")
+        }
+        if (let Some(rt) <- JitRuntime.shared) {
+            @Assert(rt.rFormCount >= 1)
         }
     }
 

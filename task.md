@@ -511,4 +511,8 @@
 - [x] J3 闭包共享可变捕获（7413fb1）：env-scope 61/62 + 共享扫描器；三模式 500 ✓；359/359 + examples 8→7（改前已知差异）
 - [x] J5 R 形式（寄存器级，9d3a624）：fib(30) **进程内 3ms**（≤4ms 达标；BC ~400ms ≈ 140x）；fib-direct 基准 63x；370/370；examples 22/22 三模式一致
       - R 形式根因：pushReg r8-r15 编码错（0x50+12=pop 编码域）/ BIN_LC kind4-6 丢 cmp / imul 缺 REX.RB / 自调用 arity 缺参（v1 同修）/ 固定值池映射替代动态 allocVal / 纯 rax ABI
-- [ ] 收尾（可选）：J2b 互递归时序 bug（当前 deopt 保正确）｜R 形式 k≥2 样本（池容量 4-k 使然，仅 k=1 实用）
+- [x] J6 收尾（748774c + 本轮）：J2b 互递归交叉调用 + R 形式 k≥2
+  - [x] J2b 互递归（入口表直连 + 冷启动 deopt）：f↔g 深度互递归全机器码（deopt 计数 ≤2）；376/376；examples 22/22；fib 60.7x 未回退
+        - 根因归档：movR11R9 方向反（4D 89 D9=mov r9,r11，call r11 用陈旧 site id → pc=0x3）/ deopt-bail 握手（test rax,rax 漏检非零 id → 改 cmp rax,1024; jb bail + 独立 bail 桩）/ v1 桥缺 arg 类型守卫（Float 静默垃圾值）
+  - [x] R 形式 k≥2（rbx 入池容量 5-k + phantom 函数值）：sum-to/gcd2 类 k=2 尾递归累加器 R 形式正确；k=3 池=2 < 需求 3 恒不可行（文档化）
+  - [x] 深机器码递归宿主栈限制明确（~135KB 栈 → ~2600 R 帧上限，超出 SIGSEGV；BC 帧切换不受限）——待办：深度计数 + 超限 deopt

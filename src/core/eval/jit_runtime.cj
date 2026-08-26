@@ -79,6 +79,8 @@ public class JitRuntime {
     // J2b：机器码 deopt 计数/站点（测试断言交叉调用直连——逐层 deopt 会 ~n 次增长）
     public var deoptCount: Int64 = 0
     public var deoptSites: ArrayList<Int64> = ArrayList<Int64>()
+    // J5/k≥2：R 形式编译计数（测试断言 k=2 函数确实走寄存器级路径，而非 v1/generic 兜底）
+    public var rFormCount: Int64 = 0
     public static var shared: Option<JitRuntime> = None
 
     public init() {
@@ -130,6 +132,7 @@ public class JitRuntime {
                 // R 形式不登记 generic 入口表（ABI 不同，禁止机器码交叉调用）
                 entries[globalId] = entry
                 rForms[globalId] = true
+                this.rFormCount = this.rFormCount + 1
                 return Some(entry)
             }
         }
