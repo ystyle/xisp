@@ -8,40 +8,40 @@
 ; ========== 文件写入测试 ==========
 (newline)
 (println ">>> 测试 1: 文件写入")
-(define write-result (cangjie::write-file "test_output.txt" "Hello from Xisp!\nThis is a test file."))
+(define write-result (cangjie::write-file "/tmp/test_output.txt" "Hello from Xisp!\nThis is a test file."))
 (println "  写入结果:" write-result)
 
 ; ========== 文件读取测试 ==========
 (newline)
 (println ">>> 测试 2: 文件读取")
-(define file-content (cangjie::read-file "test_output.txt"))
+(define file-content (cangjie::read-file "/tmp/test_output.txt"))
 (println "  文件内容:")
 (println "  " file-content)
 
 ; ========== 文件追加测试 ==========
 (newline)
 (println ">>> 测试 3: 文件追加")
-(define append-result (cangjie::append-file "test_output.txt" "\nAppended text!"))
+(define append-result (cangjie::append-file "/tmp/test_output.txt" "\nAppended text!"))
 (println "  追加结果:" append-result)
 
 ; ========== 重新读取验证追加 ==========
 (newline)
 (println ">>> 测试 4: 读取追加后的内容")
-(define updated-content (cangjie::read-file "test_output.txt"))
+(define updated-content (cangjie::read-file "/tmp/test_output.txt"))
 (println "  更新后的内容:")
 (println "  " updated-content)
 
 ; ========== 文件存在性检查 ==========
 (newline)
 (println ">>> 测试 5: 文件存在性检查")
-(println "  test_output.txt 存在?" (cangjie::exists? "test_output.txt"))
+(println "  test_output.txt 存在?" (cangjie::exists? "/tmp/test_output.txt"))
 (println "  nonexistent.txt 存在?" (cangjie::exists? "nonexistent.txt"))
 
 ; ========== 判断文件/目录 ==========
 (newline)
 (println ">>> 测试 6: 判断文件类型")
-(println "  test_output.txt 是文件?" (cangjie::file? "test_output.txt"))
-(println "  test_output.txt 是目录?" (cangjie::directory? "test_output.txt"))
+(println "  test_output.txt 是文件?" (cangjie::file? "/tmp/test_output.txt"))
+(println "  test_output.txt 是目录?" (cangjie::directory? "/tmp/test_output.txt"))
 (println "  . 是目录?" (cangjie::directory? "."))
 (println "  . 是文件?" (cangjie::file? "."))
 

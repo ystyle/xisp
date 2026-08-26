@@ -17,8 +17,8 @@
 
 (newline)
 (println "2. 文件写入:")
-(println "  (cangjie::write-file \"output.txt\" \"Hello from Lisp!\")")
-(define write-result (cangjie::write-file "output.txt" "Hello from Lisp!"))
+(println "  (cangjie::write-file \"/tmp/output.txt\" \"Hello from Lisp!\")")
+(define write-result (cangjie::write-file "/tmp/output.txt" "Hello from Lisp!"))
 (println "  结果:" write-result)
 
 ; ========== std.fs 模块测试 ==========
