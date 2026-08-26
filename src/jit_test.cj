@@ -209,6 +209,40 @@ class JitTest {
     }
 
     @TestCase
+    func testJitBigConstFallback() {
+        // imm32 符号扩展回归：|Int 常量| > 2^31-1 → JIT 拒绝编译回退解释器（曾静默错值：
+        // 3000000000 经 mov r64,imm32 符号扩展成 -1294967296）
+        let pos = "(define (f n) (if (< n 1) 3000000000 (f (- n 1)))) (f 1)"
+        let jitPos = this.evalWithJit(pos)
+        let bcPos = this.evalWithBytecode(pos)
+        match (jitPos) {
+            case LispValue.Int(i) =>
+                match (bcPos) {
+                    case LispValue.Int(j) => @Assert(i == j && i == 3000000000)
+                    case _ => @Fail("bc result mismatch")
+                }
+            case _ => @Fail("expected Int, got ${jitPos}")
+        }
+        let neg = "(define (f n) (if (< n 1) -3000000000 (f (- n 1)))) (f 1)"
+        let jitNeg = this.evalWithJit(neg)
+        let bcNeg = this.evalWithBytecode(neg)
+        match (jitNeg) {
+            case LispValue.Int(i) =>
+                match (bcNeg) {
+                    case LispValue.Int(j) => @Assert(i == j && i == -3000000000)
+                    case _ => @Fail("bc result mismatch")
+                }
+            case _ => @Fail("expected Int, got ${jitNeg}")
+        }
+        // 边界内常量仍应走 JIT（R 形式快路径不受影响）：2^31-1 应正确
+        let edge = "(define (f n) (if (< n 1) 2147483647 (f (- n 1)))) (f 1)"
+        match (this.evalWithJit(edge)) {
+            case LispValue.Int(i) => @Assert(i == 2147483647)
+            case _ => @Fail("expected Int, got ${this.evalWithJit(edge)}")
+        }
+    }
+
+    @TestCase
     func testJitMutualRecursionPerf() {
         // 交叉调用直连证据（确定性）：深度互递归若逐层 deopt，机器码 deopt 计数会 ~n 次
         let code = "(define (f n) (if (< n 2) n (g (- n 1)))) (define (g n) (if (< n 2) n (f (- n 1)))) (f 200)"
@@ -279,12 +313,34 @@ class JitTest {
 
     @TestCase
     func testJitRFormBoolResult() {
-        // 布尔谓词结果（BIN_LC kind 4-6 → 0/1 池值）贯穿返回
-        let result = this.evalWithJit(
-            "(define (b n) (if (< n 2) (> n 0) (b (- n 1)))) (b 5)")
-        match (result) {
-            case LispValue.Int(i) => @Assert(i == 1)
-            case _ => @Fail("expected 1, got ${result}")
+        // 返回类型一致性：R/v1 是 INT 特化，bool 返回函数被拒（returnsNonInt）→ 落 generic 返回 Boolean
+        // （曾 R 形式把 (> n 0) 结果当 Int(1) 返回，与 BC/AST 的 Boolean(true) 不一致）
+        let code = "(define (b n) (if (< n 2) (> n 0) (b (- n 1)))) (b 5)"
+        let jit = this.evalWithJit(code)
+        let bc = this.evalWithBytecode(code)
+        match (jit) {
+            case LispValue.Boolean(x) =>
+                match (bc) {
+                    case LispValue.Boolean(y) => @Assert(x == y && x)
+                    case _ => @Fail("bc result mismatch")
+                }
+            case _ => @Fail("expected Boolean, got ${jit}")
+        }
+    }
+
+    @TestCase
+    func testJitNilReturnFallback() {
+        // 返回类型一致性：nil 返回函数（R 曾把 nil 当 Int(0)）→ 落 generic 返回 Nil
+        let code = "(define (q n) (if (< n 1) nil (q (- n 1)))) (q 3)"
+        let jit = this.evalWithJit(code)
+        let bc = this.evalWithBytecode(code)
+        match (jit) {
+            case Nil =>
+                match (bc) {
+                    case Nil => @Assert(true)
+                    case _ => @Fail("bc result mismatch")
+                }
+            case _ => @Fail("expected Nil, got ${jit}")
         }
     }
 

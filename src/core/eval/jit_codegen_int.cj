@@ -36,13 +36,18 @@ public class JitCodegenInt {
 
     public static func isEligible(f: CompiledFunction): Bool {
         if (f.localSlots > 64) { return false }   // 大帧栈溢出防护
+        // 返回类型检查：v1 是 INT 特化（结果恒标 INT），返回 Boolean/Nil/函数值会被错解为 Int
+        if (JitCodegen.returnsNonInt(f)) { return false }
         // 仅自递归：所有全局引用必须是本函数自身（INT 特化不能处理非自调用——慢桩会返回 0 破坏语义）
         for (name in f.globalRefs) {
             if (name != f.name) { return false }
         }
         for (c in f.constants) {
             match (c) {
-                case Int(_) | Boolean(_) => ()
+                case Int(v) =>
+                    // imm32 符号扩展：仅 [-2^31, 2^31-1] 常量可正确装载（mov r64, imm32 符号扩展 bit31）
+                    if (v < -2147483648 || v > 2147483647) { return false }
+                case Boolean(_) => ()
                 case _ => return false
             }
         }

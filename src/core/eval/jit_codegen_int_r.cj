@@ -53,9 +53,15 @@ public class JitCodegenIntR {
         for (name in f.globalRefs) {
             if (name != f.name) { return false }
         }
+        // 返回类型检查：R 是 INT 特化（纯 rax），返回 Boolean/Nil/函数值会被错解为 Int（三模式不一致）
+        if (JitCodegen.returnsNonInt(f)) { return false }
         for (c in f.constants) {
             match (c) {
-                case Int(_) | Boolean(_) => ()
+                case Int(v) =>
+                    // imm32 符号扩展：仅 [-2^31, 2^31-1] 常量可正确装载（mov r64, imm32 符号扩展 bit31）
+                    // 超出 → 回退解释器（曾静默错值：3000000000 变 -1294967296）
+                    if (v < -2147483648 || v > 2147483647) { return false }
+                case Boolean(_) => ()
                 case _ => return false
             }
         }

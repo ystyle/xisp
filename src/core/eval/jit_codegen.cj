@@ -222,7 +222,11 @@ public class JitCodegen {
         }
         for (c in f.constants) {
             match (c) {
-                case Int(_) | Boolean(_) => ()
+                case Int(v) =>
+                    // imm32 符号扩展：仅 [-2^31, 2^31-1] 常量可正确装载（mov r64, imm32 符号扩展 bit31）
+                    // 超出 → 回退解释器（曾静默错值：3000000000 变 -1294967296）
+                    if (v < -2147483648 || v > 2147483647) { return false }
+                case Boolean(_) => ()
                 case _ => return false
             }
         }
@@ -677,5 +681,153 @@ public class JitCodegen {
 
     func fixSlow(ps: Array<Int64>): Unit {
         ()   // 已由 slowJcc/slowJe 登记
+    }
+
+    // ==================== R/v1 资格补充：返回类型检查 ====================
+    // R/v1 是 INT 特化（纯 rax/INT 标签返回）：返回 Boolean/Nil/函数值会被错解为 Int
+    // （三模式不一致，例：R 形式 (b n) 返回 (> n 0) 得到 Int(1)，BC/AST 为 Boolean(true)）。
+    // 类型跟踪镜像资格扫描的 CFG worklist：任一 RETURN 栈顶为非 Int → true（拒绝，回退 generic）。
+    static let T_INT: Int64 = 0
+    static let T_BOOL: Int64 = 1
+    static let T_NIL: Int64 = 2
+    static let T_PHANTOM: Int64 = 3
+    static let T_CALL: Int64 = 4
+    static let T_MIXED: Int64 = 5
+
+    public static func returnsNonInt(f: CompiledFunction): Bool {
+        let k = f.params.size
+        let code = f.code
+        let labelTypes = HashMap<Int64, ArrayList<Int64>>()
+        let pending = ArrayList<(Int64, ArrayList<Int64>)>()
+        pending.add((0, ArrayList<Int64>()))
+        while (pending.size > 0) {
+            let (startIp, startTypes) = pending[pending.size - 1]
+            pending.remove((pending.size - 1)..pending.size)
+            var ip: Int64 = startIp
+            var types = JitCodegen.copyTypes(startTypes)
+            var advancing = true
+            while (advancing && ip < code.size) {
+                let op = code[ip]; ip++
+                let n: Int64 = match (op) {
+                    case 0 | 7 | 10 | 11 | 24 | 25 => 1
+                    case 52 => 3
+                    case 56 => 4
+                    case _ => 0
+                }
+                match (op) {
+                    case 0 =>
+                        let idx = if (ip < code.size) { code[ip] } else { -1 }
+                        if (idx >= 0 && idx < f.constants.size) {
+                            match (f.constants[idx]) {
+                                case Boolean(_) => types.add(T_BOOL)
+                                case _ => types.add(T_INT)
+                            }
+                        } else { types.add(T_INT) }
+                    case 1 =>
+                        types.add(T_NIL)
+                    case 2 | 3 =>
+                        types.add(T_BOOL)
+                    case 4 =>
+                        if (types.size > 0) { types.remove((types.size - 1)..types.size) }
+                    case 7 =>
+                        let argCount = if (ip < code.size) { code[ip] } else { 0 }
+                        for (i in 0..argCount) {
+                            if (types.size > 0) { types.remove((types.size - 1)..types.size) }
+                        }
+                        types.add(T_CALL)
+                    case 8 | 9 | 12 =>
+                        if (types.size >= 2) {
+                            types.remove((types.size - 1)..types.size)
+                            types.remove((types.size - 1)..types.size)
+                        }
+                        types.add(T_INT)
+                    case 14 | 15 | 16 =>
+                        if (types.size >= 2) {
+                            types.remove((types.size - 1)..types.size)
+                            types.remove((types.size - 1)..types.size)
+                        }
+                        types.add(T_BOOL)
+                    case 17 =>
+                        if (types.size > 0) { types[types.size - 1] = T_BOOL }
+                    case 23 =>
+                        if (types.size > 0) { types.add(types[types.size - 1]) }
+                    case 24 =>
+                        let idx = if (ip < code.size) { code[ip] } else { -1 }
+                        if (idx < k) { types.add(T_INT) } else { types.add(T_PHANTOM) }
+                    case 25 =>
+                        if (types.size > 0) { types.remove((types.size - 1)..types.size) }
+                    case 10 =>
+                        let target = if (ip < code.size) { code[ip] } else { -1 }
+                        if (target >= 0) { JitCodegen.mergeTypes(labelTypes, pending, target, types) }
+                        advancing = false
+                    case 11 =>
+                        let target = if (ip < code.size) { code[ip] } else { -1 }
+                        if (types.size > 0) { types.remove((types.size - 1)..types.size) }
+                        if (target >= 0) { JitCodegen.mergeTypes(labelTypes, pending, target, types) }
+                    case 52 =>
+                        let kind = if (ip < code.size) { code[ip] } else { 0 }
+                        let constIdx = if (ip + 2 < code.size) { code[ip + 2] } else { -1 }
+                        var isBool = kind >= 4
+                        if (!isBool && constIdx >= 0 && constIdx < f.constants.size) {
+                            match (f.constants[constIdx]) {
+                                case Boolean(_) => isBool = true
+                                case _ => ()
+                            }
+                        }
+                        types.add(if (isBool) { T_BOOL } else { T_INT })
+                    case 56 => ()
+                    case 43 | 99 =>
+                        if (types.size > 0) {
+                            let top = types[types.size - 1]
+                            if (top == T_BOOL || top == T_NIL || top == T_PHANTOM || top == T_MIXED) { return true }
+                        }
+                        advancing = false
+                    case _ => ()
+                }
+                ip = ip + n
+            }
+            if (advancing && types.size > 0) {
+                // 代码自然结束 = 隐式 RETURN（VM 语义：栈顶即结果）
+                let top = types[types.size - 1]
+                if (top == T_BOOL || top == T_NIL || top == T_PHANTOM || top == T_MIXED) { return true }
+            }
+        }
+        false
+    }
+
+    static func copyTypes(ts: ArrayList<Int64>): ArrayList<Int64> {
+        let c = ArrayList<Int64>()
+        for (t in ts) { c.add(t) }
+        c
+    }
+
+    static func mergeTypes(labelTypes: HashMap<Int64, ArrayList<Int64>>, pending: ArrayList<(Int64, ArrayList<Int64>)>, target: Int64, incoming: ArrayList<Int64>): Unit {
+        if (!labelTypes.contains(target)) {
+            labelTypes[target] = JitCodegen.copyTypes(incoming)
+            pending.add((target, JitCodegen.copyTypes(incoming)))
+        } else {
+            let existing = labelTypes[target]
+            if (existing.size != incoming.size) {
+                // 深度冲突（资格扫描已拒；防御性全部置 MIXED → 保守拒绝）
+                var mixed = ArrayList<Int64>()
+                for (i in 0..incoming.size) { mixed.add(JitCodegen.T_MIXED) }
+                labelTypes[target] = mixed
+                pending.add((target, JitCodegen.copyTypes(mixed)))
+            } else {
+                var changed = false
+                var merged = ArrayList<Int64>()
+                for (i in 0..existing.size) {
+                    // CALL = 函数自身返回类型（兼容任意：与对方合并解析为对方）
+                    if (existing[i] == incoming[i]) { merged.add(existing[i]) }
+                    else if (existing[i] == JitCodegen.T_CALL) { merged.add(incoming[i]) }
+                    else if (incoming[i] == JitCodegen.T_CALL) { merged.add(existing[i]) }
+                    else { merged.add(JitCodegen.T_MIXED); changed = true }
+                }
+                if (changed) {
+                    labelTypes[target] = merged
+                    pending.add((target, JitCodegen.copyTypes(merged)))
+                }
+            }
+        }
     }
 }

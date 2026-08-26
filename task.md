@@ -516,3 +516,7 @@
         - 根因归档：movR11R9 方向反（4D 89 D9=mov r9,r11，call r11 用陈旧 site id → pc=0x3）/ deopt-bail 握手（test rax,rax 漏检非零 id → 改 cmp rax,1024; jb bail + 独立 bail 桩）/ v1 桥缺 arg 类型守卫（Float 静默垃圾值）
   - [x] R 形式 k≥2（rbx 入池容量 5-k + phantom 函数值）：sum-to/gcd2 类 k=2 尾递归累加器 R 形式正确；k=3 池=2 < 需求 3 恒不可行（文档化）
   - [x] 深机器码递归宿主栈限制明确（~135KB 栈 → ~2600 R 帧上限，超出 SIGSEGV；BC 帧切换不受限）——待办：深度计数 + 超限 deopt
+  - [x] 语义审计（unbox 绑定模式坑 + 大常量 imm32 + R/v1 返回类型，8ff10be + 本轮）：380/380；examples 22/22；perf fib 61.7x 未回退
+        - unbox 用 match{case JIT_TAG_* =>} 恒走第一分支（Cangjie 绑定模式）→ 非 INT 结果错解为 Int → 改 if/else；暴露 generic arity 守卫缺失（checkSupported 保守拒绝 + emitCall deopt 兜底）
+        - mov r64,imm32 符号扩展：|常量|>2^31-1 静默错值（3000000000→-1294967296）→ 三形式资格拒绝超范围常量
+        - R/v1 返回 Boolean/Nil 被错解为 Int（三模式不一致）→ returnsNonInt CFG 类型跟踪拒绝非 Int 返回，落 generic 保类型
