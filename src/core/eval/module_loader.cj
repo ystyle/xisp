@@ -271,9 +271,11 @@ public class ModuleLoader <: Loader {
                 true  // 继续遍历
             })
         } catch (e: FSException) {
-            // 目录不存在或无法访问，返回空列表
+            // 目录不存在或无法访问，返回空列表（留痕：否则整包的 .lisp 文件被静默丢弃，表现为"空包"）
+            eprintln("[xisp] 列出模块目录文件失败，目录 '${directory}': ${e.toString()}")
         } catch (e: Exception) {
-            // 其他异常，返回空列表
+            // 其他异常，返回空列表（同上，必须留痕）
+            eprintln("[xisp] 列出模块目录文件失败，目录 '${directory}': ${e.toString()}")
         }
 
         files

@@ -212,9 +212,11 @@ public class DependencyResolver {
                 }
             }
         } catch (e: FSException) {
-            // 目录不存在或无法访问，返回空列表
+            // 目录不存在或无法访问，返回空列表（留痕：否则该搜索路径下的组织被静默跳过，只会报"找不到模块"）
+            eprintln("[xisp] 列出组织目录失败，搜索路径 '${searchPath}': ${e.toString()}")
         } catch (e: Exception) {
-            // 其他异常，返回空列表
+            // 其他异常，返回空列表（同上，必须留痕）
+            eprintln("[xisp] 列出组织目录失败，搜索路径 '${searchPath}': ${e.toString()}")
         }
 
         orgs
@@ -323,9 +325,11 @@ public class DependencyResolver {
                     }
                 }
             } catch (e: FSException) {
-                // 目录不存在或无法访问，继续下一个搜索路径
+                // 目录不存在或无法访问，继续下一个搜索路径（留痕：否则该路径下的版本被静默跳过，解析只能报"版本不满足"）
+                eprintln("[xisp] 列出可用版本失败，目录 '${orgPath}': ${e.toString()}")
             } catch (e: Exception) {
-                // 其他异常，继续下一个搜索路径
+                // 其他异常，继续下一个搜索路径（同上，必须留痕）
+                eprintln("[xisp] 列出可用版本失败，目录 '${orgPath}': ${e.toString()}")
             }
         }
 
