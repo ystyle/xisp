@@ -40,7 +40,12 @@ public class HistoryManager {
             }
             savedCount = entries.size
             currentIndex = entries.size
-        } catch (_: Error) {}
+        } catch (e: Error) {
+            // 注意：Error 与 Exception 是并列的两个基类，这里只兜住致命 Error
+            // （OutOfMemoryError/StackOverflowError/InternalError 等），文件类异常会继续向上抛。
+            // 留痕：否则历史加载被致命错误打断时，用户只看到"历史是空的"
+            eprintln("[xisp] 读取历史文件失败 '${path}': ${e.toString()}")
+        }
     }
 
     /**
@@ -57,7 +62,11 @@ public class HistoryManager {
             }
             file.close()
             savedCount = entries.size
-        } catch (_: Error) {}
+        } catch (e: Error) {
+            // 注意：Error 与 Exception 是并列的两个基类，这里只兜住致命 Error，文件类异常会继续向上抛。
+            // 留痕：否则历史写入被致命错误打断、文件只写了一半时无从得知
+            eprintln("[xisp] 写入历史文件失败 '${path}': ${e.toString()}")
+        }
     }
 
     /**

@@ -288,8 +288,12 @@ public class FileSystemSource <: ModuleSource {
 
                         true
                     })
-                } catch (_: FSException) {
-                } catch (_: Exception) {
+                } catch (e: FSException) {
+                    // 留痕：否则该模块的文件被静默跳过，表现为"模块里什么都没有"
+                    eprintln("[xisp] 列出模块文件失败，模块 '${moduleName}': ${e.toString()}")
+                } catch (e: Exception) {
+                    // 同上，必须留痕
+                    eprintln("[xisp] 列出模块文件失败，模块 '${moduleName}': ${e.toString()}")
                 }
 
                 sort(files)
