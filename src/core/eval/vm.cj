@@ -11,7 +11,18 @@ public interface VM {
     func execute(code: CompiledCode, env: Environment): LispValue
     // 直接调用编译闭包（AST 侧高阶回调进 VM 执行）
     func callClosure(id: Int64, args: ArrayList<LispValue>, env: Environment): LispValue
+    /**
+     * 设置协作式中断检查回调。默认空实现：不支持中止的实现方无需改动。
+     */
+    func setInterruptChecker(checker: () -> Bool): Unit {}
 }
+
+/**
+ * 字节码派发循环的中断检查间隔（指令条数）。
+ * 检查回调本身可能涉及原子读与闭包调用，故不逐条检查；1000 条指令的
+ * 延迟在微秒量级，对中断响应没有可感知影响。
+ */
+const VM_INTERRUPT_CHECK_INTERVAL: Int64 = 1000
 
 /**
  * 字节码虚拟机
@@ -28,6 +39,8 @@ public class BytecodeVM <: VM {
     var envStack: ArrayList<Environment> = ArrayList<Environment>()
     // 字节码编译器（供回退 AST 的子求值器使用，让 AST 边缘的子表达式仍可再编译进 VM）
     var compiler: Option<Compiler> = None
+    // 协作式中断检查回调（None = 不检查，热路径零额外开销）
+    var interruptChecker: ?(() -> Bool) = None
     // globalRefs 解析缓存：按编译函数 identity（从 0 连续）索引的数组缓存——
     // 免哈希查找；条目为 (解析环境, 环境版本, 值列表)
     static var globalRefCache: ArrayList<(Environment, Int64, ArrayList<LispValue>)> = ArrayList<(Environment, Int64, ArrayList<LispValue>)>()
@@ -44,6 +57,30 @@ public class BytecodeVM <: VM {
     }
 
     /**
+     * 设置协作式中断检查回调。见 {@link ystyle::xisp.core.eval.Evaluator.setInterruptChecker}。
+     */
+    public func setInterruptChecker(checker: () -> Bool): Unit {
+        this.interruptChecker = Some(checker)
+    }
+
+    /**
+     * 当前是否应中断。未设置检查回调时恒为 false。
+     */
+    func isInterrupted(): Bool {
+        match (this.interruptChecker) {
+            case Some(checker) => checker()
+            case None => false
+        }
+    }
+
+    /**
+     * 构造中断中止的错误值（与 AST 路径同一条消息，宿主可统一识别）。
+     */
+    func interruptError(): LispValue {
+        LispValue.Error(XispError(ErrorType.RuntimeError, INTERRUPTED_MESSAGE))
+    }
+
+    /**
      * 创建子求值器（AST 回退路径）。
      * 注意：AST 求值器的局部变量（let/match/参数绑定）不在编译帧槽中，
      * 若注入编译器，子表达式编译后会把它们当作全局引用查找而导致
@@ -51,7 +88,13 @@ public class BytecodeVM <: VM {
      * 编译上下文内的函数调用仍经帧切换/或编译产物自身的调用链接入 VM。
      */
     func makeSubEvaluator(env: Environment): Evaluator {
-        Evaluator(env)
+        let sub = Evaluator(env)
+        // 子求值器承载 AST 回退路径的求值，必须继承中断检查，否则回退后无法中止
+        match (this.interruptChecker) {
+            case Some(checker) => sub.setInterruptChecker(checker)
+            case None => ()
+        }
+        sub
     }
 
     public func execute(code: CompiledCode, env: Environment): LispValue {
@@ -205,9 +248,20 @@ public class BytecodeVM <: VM {
         var ip: Int64 = 0
         var currentFunc = func_
         var running = true
+        // 中断检查计数：派发循环是执行热点，逐条调用检查回调代价过高
+        var opCounter: Int64 = 0
 
         while (running) {
             while (ip < currentFunc.code.size && running) {
+                // 中断检查点（4/4）：字节码路径不经过 AST 的 eval 入口，
+                // 长循环与深递归必须在这里也能停下。
+                opCounter = opCounter + 1
+                if (opCounter >= VM_INTERRUPT_CHECK_INTERVAL) {
+                    opCounter = 0
+                    if (this.isInterrupted()) {
+                        return this.interruptError()
+                    }
+                }
                 let op = currentFunc.code[ip]
                 ip++
                 match (op) {

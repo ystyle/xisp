@@ -14,6 +14,11 @@ extend Evaluator {
      *   （AST 局部变量不在编译帧槽中，子表达式编译后按全局引用会产生 UnboundVariable）
      */
     public func eval(expr: LispValue): LispValue {
+        // 中断检查点（1/4）：所有表达式求值都经过这里，是覆盖面最广的一处。
+        // 未设置检查回调时 isInterrupted() 是常数 false，无额外开销。
+        if (this.isInterrupted()) {
+            return this.interruptError()
+        }
         let isRoot = this.evalDepth == 0
         this.evalDepth = this.evalDepth + 1
         var result: LispValue = Nil
@@ -283,7 +288,16 @@ extend Evaluator {
                         case _ => ()
                     }
                 }
-                f(args)
+                // 中断检查点（2/4）：宿主函数可以长时间阻塞（等锁、等外部事件），
+                // 求值器无法打断它，但必须保证它返回后立刻有机会停下。
+                if (this.isInterrupted()) {
+                    return this.injectStack(this.interruptError())
+                }
+                let nativeOut = f(args)
+                if (this.isInterrupted()) {
+                    return this.injectStack(this.interruptError())
+                }
+                nativeOut
             case Closure(_, _) =>
                 let args = this.evalArguments(rest)
                 for (arg in args) {

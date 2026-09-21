@@ -254,6 +254,28 @@ public class LispInterpreter {
     }
 
     /**
+     * 设置协作式中断检查回调。
+     *
+     * 设置后，求值热路径会调用它；返回 true 时当前求值以
+     * `Error(RuntimeError, INTERRUPTED_MESSAGE)` 中止。宿主借此实现
+     * 「超时/取消时真正停止求值」，而不是仅放弃等待。
+     *
+     * 检查回调应保持廉价（如读一个原子布尔），它会被高频调用。
+     *
+     * @param checker 返回 true 表示应停止求值
+     */
+    public func setInterruptChecker(checker: () -> Bool): Unit {
+        this.evaluator.setInterruptChecker(checker)
+    }
+
+    /**
+     * 清除中断检查回调。
+     */
+    public func clearInterruptChecker(): Unit {
+        this.evaluator.clearInterruptChecker()
+    }
+
+    /**
      * 设置超时
      */
     public func setTimeout(timeout: Option<Duration>): Unit {

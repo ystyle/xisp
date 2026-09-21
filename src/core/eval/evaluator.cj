@@ -5,6 +5,14 @@ import ystyle::xisp.types.*
 import std.collection.ArrayList
 
 /**
+ * 中断中止时产生的错误消息。
+ *
+ * 求值与中断都以「错误值」表达（而非抛异常），因此宿主靠这条固定消息
+ * 区分「被中断」与「脚本自身的运行时错误」。AST 与字节码两条路径共用。
+ */
+public const INTERRUPTED_MESSAGE: String = "evaluation interrupted"
+
+/**
  * 求值器 - Lisp 表达式求值
  */
 public class Evaluator {
@@ -14,6 +22,7 @@ public class Evaluator {
     var funcChecker: ?((String) -> Bool) = None  // 函数权限检查回调
     var pathChecker: ?((String, Bool) -> Bool) = None  // 路径权限检查回调
     var moduleLoadChecker: ?(() -> Bool) = None  // 模块加载权限检查回调
+    var interruptChecker: ?(() -> Bool) = None  // 协作式中断检查回调（None = 不检查）
     var macroExpandDepth: Int64 = 0  // 宏展开深度
     var maxMacroExpandDepth: Int64 = 100  // 最大宏展开深度
     var inMacroExpandCall: Bool = false  // 是否在 macroexpand/macroexpand-all 调用中（不执行展开后的结果）
@@ -60,6 +69,11 @@ public class Evaluator {
      */
     public func setVM(v: VM) {
         this.vm = Some(v)
+        // 若中断检查已先于 VM 设置启用，补投给新 VM（配置顺序不应影响中断是否生效）
+        match (this.interruptChecker) {
+            case Some(checker) => v.setInterruptChecker(checker)
+            case None => ()
+        }
     }
 
     // 调用栈追踪
@@ -157,5 +171,50 @@ public class Evaluator {
      */
     public func setModuleLoadChecker(checker: () -> Bool): Unit {
         this.moduleLoadChecker = Some(checker)
+    }
+
+    /**
+     * 设置协作式中断检查回调。
+     *
+     * 设置后，求值热路径（表达式入口、参数求值、高阶函数迭代、字节码指令派发、
+     * 宿主函数调用边界）会调用它；返回 true 时求值以
+     * `Error(RuntimeError, INTERRUPTED_MESSAGE)` 中止。
+     *
+     * 默认不设置，热路径零额外开销——需要中断能力的宿主显式开启。
+     * 检查回调应保持廉价（如读一个原子布尔），它会被高频调用。
+     *
+     * @param checker 返回 true 表示应停止求值
+     */
+    public func setInterruptChecker(checker: () -> Bool): Unit {
+        this.interruptChecker = Some(checker)
+        // 字节码路径不经 AST 入口，需同步到 VM（未设置 VM 时由 setVM 补投）
+        match (this.vm) {
+            case Some(v) => v.setInterruptChecker(checker)
+            case None => ()
+        }
+    }
+
+    /**
+     * 清除中断检查回调，回到不检查状态。
+     */
+    public func clearInterruptChecker(): Unit {
+        this.interruptChecker = None
+    }
+
+    /**
+     * 当前是否应中断求值。未设置检查回调时恒为 false。
+     */
+    public func isInterrupted(): Bool {
+        match (this.interruptChecker) {
+            case Some(checker) => checker()
+            case None => false
+        }
+    }
+
+    /**
+     * 构造中断中止的错误值。消息固定为 INTERRUPTED_MESSAGE，便于宿主识别。
+     */
+    func interruptError(): LispValue {
+        LispValue.Error(XispError(ErrorType.RuntimeError, INTERRUPTED_MESSAGE))
     }
 }

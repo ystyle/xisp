@@ -132,6 +132,11 @@ extend Evaluator {
             var current: LispValue = lst
 
             while (!current.isNil()) {
+                // 中断检查点（3/4）：高阶函数的迭代体每轮检查一次，
+                // 长列表或回调本身耗时的场景可及时停下。
+                if (this.isInterrupted()) {
+                    return this.interruptError()
+                }
                 if (let Cons(currCell) <- current) {
                     let args = ArrayList<LispValue>()
                     args.add(currCell.car)
@@ -179,6 +184,10 @@ extend Evaluator {
             var current: LispValue = lst
 
             while (!current.isNil()) {
+                // 中断检查点（3/4）：同 map，filter 的迭代体也要能停下。
+                if (this.isInterrupted()) {
+                    return this.interruptError()
+                }
                 if (let Cons(currCell) <- current) {
                     let args = ArrayList<LispValue>()
                     args.add(currCell.car)
@@ -245,6 +254,10 @@ extend Evaluator {
             var current: LispValue = lst
 
             while (!current.isNil()) {
+                // 中断检查点（3/4）：同 map，reduce 的迭代体也要能停下。
+                if (this.isInterrupted()) {
+                    return this.interruptError()
+                }
                 if (let Cons(currCell) <- current) {
                     let args = ArrayList<LispValue>()
                     args.add(acc)

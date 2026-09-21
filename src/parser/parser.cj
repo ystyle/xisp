@@ -20,11 +20,46 @@ public class Parser {
     private var pos: Int64
 
     /**
+     * 严格模式：未闭合的括号/向量/哈希字面量记为语法错误，
+     * 而不是静默补全为完整表达式。默认关闭——REPL 的连续输入
+     * 与既有调用方依赖宽松行为。
+     */
+    private var strict: Bool = false
+
+    /**
+     * 严格模式下记录的首个语法错误。非空表示本次解析未完整覆盖输入。
+     */
+    private var syntaxError: Option<XispError> = None
+
+    /**
      * 构造函数
      */
     public init(tokens: ArrayList<Token>) {
         this.tokens = tokens
         this.pos = 0
+    }
+
+    /**
+     * 启用或关闭严格模式。见 {@link strict}。
+     */
+    public func setStrict(strict: Bool): Unit {
+        this.strict = strict
+    }
+
+    /**
+     * 严格模式下记录的首个语法错误；未出错或非严格模式时为 None。
+     */
+    public func getSyntaxError(): Option<XispError> {
+        this.syntaxError
+    }
+
+    /**
+     * 记录语法错误（仅首次，保持最早的出错位置）。
+     */
+    private func recordSyntaxError(message: String): Unit {
+        if (this.strict && this.syntaxError.isNone()) {
+            this.syntaxError = Some(XispError(ErrorType.SyntaxError, message))
+        }
     }
 
     /**
@@ -173,6 +208,7 @@ public class Parser {
         // 处理词法错误
         if (let Token.Error(msg) <- token) {
             this.advance()  // 消费 Error token
+            this.recordSyntaxError(msg)
             return LispValue.Error(XispError(ErrorType.SyntaxError, msg))
         }
 
@@ -226,6 +262,9 @@ public class Parser {
             // 消费外层的 RightParen（parseListBody 只负责解析内容，不消费外层的括号）
             if (this.peek() == Token.RightParen) {
                 this.advance()
+            } else {
+                // 输入在这里结束：宽松模式静默补全，严格模式记为语法错误
+                this.recordSyntaxError("Syntax error: unexpected end of input, expected ')'")
             }
             result
         }
@@ -248,6 +287,7 @@ public class Parser {
             consValue(first, Nil)
         } else if (this.peek() == Token.EOF) {
             // 防止无限递归：到达输入末尾时停止
+            this.recordSyntaxError("Syntax error: unexpected end of input, expected ')'")
             consValue(first, Nil)
         } else {
             // 递归解析剩余元素
@@ -271,6 +311,8 @@ public class Parser {
 
         if (this.peek() == Token.VectorEnd) {
             this.advance()  // 消费 VectorEnd ]
+        } else {
+            this.recordSyntaxError("Syntax error: unexpected end of input, expected ']'")
         }
 
         // 创建 (cangjie::vector elem1 elem2 ...)
@@ -315,6 +357,8 @@ public class Parser {
 
         if (this.peek() == Token.HashMapEnd) {
             this.advance()  // 消费 HashMapEnd }
+        } else {
+            this.recordSyntaxError("Syntax error: unexpected end of input, expected '}'")
         }
 
         // 创建 (hashmap (quote key1) val1 (quote key2) val2 ...)
@@ -356,6 +400,8 @@ public class Parser {
 
         if (this.peek() == Token.HashMapEnd) {
             this.advance()  // 消费 HashMapEnd }
+        } else {
+            this.recordSyntaxError("Syntax error: unexpected end of input, expected '}'")
         }
 
         // 创建 (cangjie::hashset elem1 elem2 ...)
@@ -380,7 +426,8 @@ public class Parser {
         let exprs = ArrayList<LispValue>()
         var i = 0
 
-        while (this.peek() != Token.EOF) {
+        // 严格模式下一旦记录到语法错误就停止：继续解析只会堆积残缺表达式
+        while (this.peek() != Token.EOF && this.syntaxError.isNone()) {
             let expr = this.parseExpression()
             exprs.add(expr)
             i = i + 1
@@ -409,5 +456,42 @@ public class Parser {
         } else {
             Nil
         }
+    }
+
+    /**
+     * 严格解析：把「输入不完整」作为错误报告，而不是静默补全。
+     *
+     * 宽松解析（{@link parseFromString}）会补全未闭合的括号
+     * （`(+ 1` → `(+ 1)`）并把未闭合字符串的剩余输入当作内容——
+     * 这对 REPL 的连续输入是必要的，但宿主执行模型生成的代码时，
+     * 静默补全意味着**残缺程序会照常运行**，错误直到行为异常才暴露。
+     *
+     * @param input 源代码
+     * @return 表达式列表与语法错误；error 非空时应整体拒绝 exprs
+     */
+    public static func parseChecked(input: String): ParseOutcome {
+        let lexer = Lexer(input)
+        lexer.setStrict(true)
+        let tokens = lexer.tokenize()
+        let parser = Parser(tokens)
+        parser.setStrict(true)
+        let exprs = parser.parse()
+        ParseOutcome(exprs, parser.getSyntaxError())
+    }
+}
+
+/**
+ * 一次解析的结果。
+ *
+ * `error` 非空表示输入不完整或存在语法错误；此时 `exprs` 只含出错前
+ * 成功解析的表达式，调用方应当整体拒绝，不要执行残缺结果。
+ */
+public struct ParseOutcome {
+    public let exprs: ArrayList<LispValue>
+    public let error: Option<XispError>
+
+    public init(exprs: ArrayList<LispValue>, error: Option<XispError>) {
+        this.exprs = exprs
+        this.error = error
     }
 }

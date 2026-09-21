@@ -21,11 +21,25 @@ public class Lexer {
     private var pos: Int64
 
     /**
+     * 严格模式：未闭合的字符串字面量产出 Error token，
+     * 而不是把剩余输入一律当作字符串内容。
+     * 默认关闭——REPL 的连续输入依赖宽松行为。
+     */
+    private var strict: Bool = false
+
+    /**
      * 构造函数
      */
     public init(input: String) {
         this.runeArray = input.toRuneArray()
         this.pos = 0
+    }
+
+    /**
+     * 启用或关闭严格模式。见 {@link strict}。
+     */
+    public func setStrict(strict: Bool): Unit {
+        this.strict = strict
     }
 
     /**
@@ -200,9 +214,11 @@ public class Lexer {
         this.advance()  // 跳过开始的 '"'
 
         var result = ""
+        var closed = false
         while (let Some(r) <- this.peek()) {
             if (r == r'"') {
                 this.advance()  // 跳过结束的 '"'
+                closed = true
                 break
             }
 
@@ -230,6 +246,10 @@ public class Lexer {
             }
         }
 
+        if (!closed && this.strict) {
+            // 未闭合：把剩余输入当成字符串内容是静默的错误接受，严格模式下显式报错
+            return Token.Error("Syntax error: unterminated string literal")
+        }
         Token.String(result)
     }
 
@@ -243,10 +263,12 @@ public class Lexer {
 
         var parts = ArrayList<String>()
         var hasInterpolation = false
+        var closed = false
 
         while (let Some(r) <- this.peek()) {
             if (r == r'"') {
                 this.advance()  // 跳过结束的 '"'
+                closed = true
                 break
             }
 
@@ -321,6 +343,9 @@ public class Lexer {
 
         // 将所有部分组合成一个特殊标记的字符串
         // 格式: ::INTERPOLATE::part1::#{expr1}::part2::#{expr2}::part3
+        if (!closed && this.strict) {
+            return Token.Error("Syntax error: unterminated interpolated string literal")
+        }
         var combined = "::INTERPOLATE::"
         for (i in 0..parts.size) {
             combined += parts[i]
