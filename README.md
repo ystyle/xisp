@@ -3,7 +3,7 @@
 > 仓颉嵌入式 Lisp 脚本语言
 
 [![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
-[![Version](https://img.shields.io/badge/version-0.4.0-green.svg)](https://github.com/ystyle/xisp)
+[![Version](https://img.shields.io/badge/version-0.4.1-green.svg)](https://github.com/ystyle/xisp)
 [![Cangjie](https://img.shields.io/badge/Cangjie-1.1.0-orange.svg)](https://cangjie-lang.cn/)
 ![star](https://atomgit.com/ystyle/xisp/star/badge.svg)
 
@@ -350,5 +350,5 @@ class Point <: LispDeserializable<Point> {
 
 ---
 
-**版本**: 0.4.0
+**版本**: 0.4.1
 **最后更新**: 2026-08-26

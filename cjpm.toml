@@ -3,14 +3,19 @@
   name = "xisp"
   organization = "ystyle"
   description = "星枢 - 仓颉嵌入式 Lisp 脚本语言"
-  version = "0.4.0"
+  version = "0.4.1"
   target-dir = ""
   script-dir = ""
   output-type = "static"
   compile-option = "-O2 --static -Woff unused"
   override-compile-option = ""
   link-option = ""
-  include =["src"]
+  include = ["src", "LICENSE"]
+  # 锚定到包根：`examples` 不加 `/` 会连 src/examples 一起排除，
+  # 而 src/examples 被 cjpm.toml 的 package-configuration 引用，缺了消费方构建会失败。
+  exclude = ["/docs", "/docs-site", "/examples", "/lisp-tests", "/temp-docs", "/scripts",
+             "/AGENTS.md", "/CLAUDE.md", "/task.md", "/test.sh", "/config.json",
+             "/test_parse_multiline.cj.macrocall"]
   license = ["MIT"]
   authors = ["ystyle"]
   repository = "https://gitcode.com/ystyle/xisp"
