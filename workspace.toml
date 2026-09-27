@@ -1,0 +1,19 @@
+# cjpm 工作区产品清单：`cjpm ws` 读取的单一来源。
+# 工具：https://atomgit.com/ystyle/cjpm-ws （cjpm ws init / check / sync / bump / publish / tag）
+#
+# 一个 [workspace] 视为一个产品：已发布成员共用 version（lockstep），任一成员有实质变更即
+# 整产品推进一个版本，零改动成员随之发版；测试/示例包（*_tests / *_examples）不参与、不发布。
+
+[workspace.package]
+  version = "0.5.0"
+
+# 共享外部依赖（多个成员共用的外部依赖写在这里，版本一处维护）
+# [workspace.dependencies]
+#   "org::name" = "x.y.z"
+
+# 参与发布的成员；members 留空 = 自动（workspace members 里除 *_tests / *_examples 之外的全部）
+[workspace.publish]
+  members = []
+  # 全部成员参与发布：cli 也可分发——中心仓是源码发布，
+  # 消费方用 `cjpm install ystyle::xisp_cli-<version>` 安装
+  exclude = []

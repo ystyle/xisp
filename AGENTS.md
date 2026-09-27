@@ -54,7 +54,7 @@ git branch -D feat/功能名
 cjpm build
 
 # 运行
-./target/release/bin/ystyle::xisp.cli
+./target/release/bin/ystyle::xisp_cli
 
 # 测试
 cjpm test
@@ -66,20 +66,31 @@ cjpm clean
 
 ## 项目结构
 
+cjpm 工作区（`[workspace]`）：每个成员是独立发布的包。模块划分与依赖方向见
+`docs/plans/2026-09-27-workspace-modularization.md`。
+
 ```
 .
+├── cjpm.toml        # [workspace] 成员清单
+├── workspace.toml   # cjpm-ws 产品清单（统一版本 / 发布范围）
+├── core/            # 模块 ystyle::xisp —— 解释器 / 内建 / 模块系统 / 桥接（零外部依赖）
+│   └── src/{types,parser,core,bridge}/ + interpreter.cj + options.cj
+├── terminal/        # 模块 ystyle::xisp_terminal —— 终端能力（零 Lisp 依赖）
+├── repl/            # 模块 ystyle::xisp_repl —— REPL；会话入口 runRepl / runSimpleRepl
+├── cli/             # 模块 ystyle::xisp_cli —— 命令行入口（不发布）
+├── xisp_examples/   # 模块 ystyle::xisp_examples —— 仓颉示例（不发布）
+├── xisp_tests/      # 模块 ystyle::xisp_tests —— 契约 / 集成测试（不发布）
 ├── docs/            # 设计文档、语法手册、集成指南
-├── examples/        # Lisp 示例文件
+├── docs-site/       # VitePress 用户文档
+├── examples/        # Lisp 示例文件（.lisp）
 ├── lisp-tests/      # Lisp 集成测试
-├── temp-*/          # Lisp 临时测试文件
-├── src/             # 仓颉源码
-│   ├── bridge/      # 仓颉互操作桥接
-│   ├── cli/         # 命令行入口
-│   ├── core/        # 核心求值器、宏、模块
-│   ├── parser/      # 词法/语法分析器
-│   ├── repl/        # 交互式 REPL
-│   └── types/       # 类型系统
 ├── task.md          # 任务进度管理
 ├── AGENTS.md        # 本文件
-├── CLAUDE.md        # 旧版（已废弃）
+└── CLAUDE.md        # 旧版（已废弃）
 ```
+
+**测试归属**：白盒测试与被测包同目录（可访问该包 `internal`）；
+只用 public API 的契约测试与跨模块集成测试放 `xisp_tests/`。
+
+**多包命令**：版本一致性闸门 `cjpm ws check`（workspace 内的本地依赖不校验版本号）；
+单个成员构建 `cjpm build -m <member>`。

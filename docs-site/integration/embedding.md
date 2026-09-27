@@ -88,19 +88,24 @@ CLI 的 `./xisp script.lisp` 与 `./xisp -c "(+ 1 2)"` 内部即基于 `evalFile
 
 ## 启动 REPL
 
+REPL 入口在独立模块 `ystyle::xisp_repl`：核心包不依赖 REPL / 终端，宿主按需依赖。
+
 ```cangjie
+import ystyle::xisp.*
+import ystyle::xisp_repl.*
+
 let interpreter = LispInterpreter([withStdLib()])
 
-// 增强版 REPL（推荐），返回 Int64
-let code = interpreter.runREPL()
+// 增强版 REPL（含行编辑 / 补全 / 高亮 / 历史），返回 Int64
+let code = runRepl(interpreter)
 
 // 简易版 REPL
-interpreter.runSimpleREPL()
+runSimpleRepl(interpreter)
 ```
 
-- `runREPL(): Int64` 启动 `EnhancedRepl`，支持横幅、`import` 等增强交互。
-- `runSimpleREPL(): Int64` 启动基础 `Repl`。
-- 两者都可通过 `setShowBanner(false)` 或 `withQuietMode()` 关闭横幅。
+- `runRepl(interp): Int64`（`ystyle::xisp_repl`）启动 `EnhancedRepl`。
+- `runSimpleRepl(interp): Int64`（`ystyle::xisp_repl`）启动基础 `Repl`。
+- 两者都可通过 `withQuietMode()` 关闭横幅。
 
 ---
 
@@ -224,8 +229,8 @@ main() {
 | `eval` | `func eval(code: String): LispValue` | 求值代码，返回最后一个结果；沙箱下走独立线程并受超时控制 |
 | `evalMultiple` | `func evalMultiple(code: String): LispValue` | 顺序求值，打印错误后继续执行 |
 | `evalFile` | `func evalFile(filePath: String): LispValue` | 执行脚本文件，支持相对导入 |
-| `runREPL` | `func runREPL(): Int64` | 启动增强版 REPL |
-| `runSimpleREPL` | `func runSimpleREPL(): Int64` | 启动简易版 REPL |
+| `runRepl` | `func runRepl(interp: LispInterpreter): Int64` | 启动增强版 REPL（`ystyle::xisp_repl` 模块函数） |
+| `runSimpleRepl` | `func runSimpleRepl(interp: LispInterpreter): Int64` | 启动简易版 REPL（`ystyle::xisp_repl` 模块函数） |
 | `call` | `func call<T>(funcName, args: Array<T>): LispValue where T <: LispConvertible` | 反向调用 Lisp 函数 |
 | `getEnvironment` | `func getEnvironment(): Environment` | 获取顶层环境 |
 | `reset` | `func reset(): Unit` | 重置环境与求值器（保留配置字段） |

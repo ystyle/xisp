@@ -12,6 +12,7 @@
 - ✅ M3.5: 模块系统基础
 - 🚧 M4: 高级特性和完善
 - ✅ M4.9: ModuleSource 模块数据源抽象
+- ✅ M5: 工作区化拆分（阶段 1）
 
 ---
 
@@ -529,3 +530,39 @@
         - unbox 用 match{case JIT_TAG_* =>} 恒走第一分支（Cangjie 绑定模式）→ 非 INT 结果错解为 Int → 改 if/else；暴露 generic arity 守卫缺失（checkSupported 保守拒绝 + emitCall deopt 兜底）
         - mov r64,imm32 符号扩展：|常量|>2^31-1 静默错值（3000000000→-1294967296）→ 三形式资格拒绝超范围常量
         - R/v1 返回 Boolean/Nil 被错解为 Int（三模式不一致）→ returnsNonInt CFG 类型跟踪拒绝非 Int 返回，落 generic 保类型
+
+---
+
+## M5: 工作区化拆分（阶段 1）✅
+
+把单模块包拆成 6 个 cjpm 工作区成员，让嵌入式宿主不再被 REPL / CLI / 示例拖累。
+
+| 目录 | 模块 | 包 | 发布 |
+|---|---|---|---|
+| `core/` | `xisp` | `ystyle::xisp.*`（**不变**） | ✅ |
+| `terminal/` | `xisp_terminal` | `ystyle::xisp_terminal` | ✅ |
+| `repl/` | `xisp_repl` | `ystyle::xisp_repl` | ✅ |
+| `cli/` | `xisp_cli` | `ystyle::xisp_cli` | ❌ 可执行包 |
+| `xisp_examples/` | `xisp_examples` | `ystyle::xisp_examples.*` | ❌ |
+| `xisp_tests/` | `xisp_tests` | `ystyle::xisp_tests` | ❌ |
+
+**要点**
+
+- [x] core 模块名保持 `xisp` → `ystyle::xisp.*` 包名不变，下游消费者的 import 几乎零改动
+- [x] `runREPL` / `runSimpleREPL` 从 `LispInterpreter` 移出，改由 `xisp_repl` 提供 `runRepl` / `runSimpleRepl`
+- [x] **core 变成零外部依赖**：`XISP_VERSION` 与 banner 一并移到 `xisp_repl`
+      （`cjpminfo` 需 ≥1.2.1：1.2.0 在工作区下从 PWD 定位清单，命中根的 `[workspace]` → `@ModuleVer` 展开成空串）
+- [x] 测试两层：包内白盒测试跟源码目录（可测该包 `internal`）；16 个 root 包测试迁入 `xisp_tests`（只用 public API）
+- [x] cjpm-ws 接入：`workspace.toml`（产品版本 0.5.0，`xisp_cli` 排除发布），`cjpm ws check` 通过
+- [x] 构建 CI：`.github/workflows/ci.yml`（cjpm-ws 闸门 + build + test）
+
+**验证**：`cjpm build` 通过；`cjpm test` **427 / 427**；产物 `ystyle::xisp_cli` + 10 个 examples 可执行件；
+冒烟 `(println (+ 1 2))` → `3`；CLI / REPL banner 版本号显示 0.5.0。
+
+**设计**：`docs/plans/2026-09-27-workspace-modularization.md`
+（阶段 2 `bytecode_kit` / 阶段 3 `xisp_jit` 已规划，见该文档 §3.2 / §3.3 与 `2026-08-25-bytecode-fw-design.md`）
+
+**待收口**：跨仓 `atelier/cli` 的 4 处 `ystyle::xisp.terminal.*` → `ystyle::xisp_terminal.*`（并升 0.5.0）；
+`cordis_xisp` 仅升版本。
+
+**完成时间**: 2026-09-28

@@ -142,7 +142,7 @@ types  ←  parser  ←  core.module  ←  core.eval  ←  core.builtin  ←  br
 | **有外部依赖**（stdx / FFI / C 工具链） | **拆 cjpm 模块** | net/http、tls、compress |
 | 平台特化（`rwx` / 平台 syscall） | **拆 cjpm 模块** + `@When` | jit、terminal |
 
-### 3.1 阶段 1：5 个成员（低风险，解决"被 REPL/CLI/示例拖累"）
+### 3.1 阶段 1：6 个成员（低风险，解决"被 REPL/CLI/示例拖累"）
 
 **关键技巧：core 的模块名仍然叫 `xisp`。**
 模块名 = root 包名，只要它不变，`ystyle::xisp.*` 全部保持不变 → **两个消费者的 import 一行都不用改**
@@ -154,7 +154,8 @@ types  ←  parser  ←  core.module  ←  core.eval  ←  core.builtin  ←  br
 | `terminal/` | `xisp_terminal` | `ystyle::xisp_terminal` | 终端能力（零 Lisp 依赖，atelier 已当通用库用） | 537 | ✅ |
 | `repl/` | `xisp_repl` | `ystyle::xisp_repl` | REPL / 行编辑 / 补全 / 高亮 / 历史 + `runRepl()` | 1363 | ✅ |
 | `cli/` | `xisp_cli` | `ystyle::xisp_cli` | `main` | 223 | ❌ 可执行包不上中心仓 |
-| `examples/` | `xisp_examples` | `ystyle::xisp_examples.*` | 仓颉示例（原 `src/examples`） | 1419 | ❌ |
+| `xisp_examples/` | `xisp_examples` | `ystyle::xisp_examples.*` | 仓颉示例（原 `src/examples`）。目录名**不叫 `examples/`**：仓库根已有 Lisp 示例目录 `examples/`（`.lisp`），重名会冲突 | 1419 | ❌ |
+| `xisp_tests/` | `xisp_tests` | `ystyle::xisp_tests` | 契约 / 集成测试（原 root 包的 16 个测试文件迁入） | — | ❌ |
 
 > `xisp` 的 13733 行**含**阶段 2/3 才拆出去的字节码（3322）与 JIT（2608）；两者拆出后核心约 7803 行。
 
@@ -172,6 +173,21 @@ xisp_examples ──────→ xisp（+ 各能力域）
 阶段 1 的**唯一 API 破坏**：`LispInterpreter.runREPL()` / `runSimpleREPL()` 移出 core
 （`interpreter.cj:9` 是 core 对 `repl` 的唯一依赖，`:741`/`:750` 是唯一用法），
 改由 `xisp_repl` 提供会话入口。两个消费者都没用这两个方法。
+
+#### 3.1.1 测试组织（两层）
+
+| 层 | 位置 | 能测什么 |
+|---|---|---|
+| **包内白盒测试** | 与被测包同目录（如 `core/src/parser/parser_test.cj`） | 该包的 `internal` —— 仓颉 `internal` 是**包级**（当前包及子包） |
+| **契约 / 集成测试** | `xisp_tests` 独立模块 | 只用 public API；跨模块集成（阶段 2/3 的 BC / JIT 集成测试也归这里） |
+
+搬迁时实测：原 root 包的 16 个测试文件迁入 `xisp_tests` **只需改 `package` 声明 + 补一行 `import ystyle::xisp.*`**
+（它们本来就是宿主视角的契约测试——抽查与试编译都确认只用 public API）。
+
+`xisp_tests` / `xisp_examples` 以 `*_tests` / `*_examples` 结尾，被 cjpm-ws **自动排除发布**。
+
+> 为什么阶段 2 的 BC 集成测试**不能**跟 `bytecode_kit` 走：kit 的验收标准是"零 xisp 依赖"
+> （08-25 §3.4），而 `bytecode_test.cj` / `jit_test.cj` 依赖 `Evaluator` / `LispValue`。
 
 ### 3.2 阶段 2：拆出 `ystyle::bytecode_kit`（解决"BC 恒定编入"）
 
@@ -451,15 +467,15 @@ cjpm ws bundle / publish / tag
 4. 测试随包走（`*_test.cj` 留在各自模块内）；
 5. 各成员 `cjpm.toml`：补 `organization`、`name`、版本、`include`/`exclude`；
    把原 `[package.package-configuration]` 里的 executable 条目迁到 `xisp_examples`；
-6. 改包声明：`ystyle::xisp.repl` → `ystyle::xisp_repl`、`.terminal` → `ystyle::xisp_terminal`、
+6. 改包声明：`ystyle::xisp_repl` → `ystyle::xisp_repl`、`.terminal` → `ystyle::xisp_terminal`、
    `.cli` → `ystyle::xisp_cli`、`.examples.*` → `ystyle::xisp_examples.*`；**core 侧包名不动**；
 7. 把 `runREPL` / `runSimpleREPL` 从 `LispInterpreter` 移到 `xisp_repl`；
 8. stdx 的 `bin-dependencies` **留到引入第一个能力域模块（`xisp_net`）时，由该成员自己写全平台那份**
    —— 不要只写在 workspace 根（成员目录内 bundle/publish 不读根，见 §5.2 实测二）。
    阶段 1 各成员都不引 stdx，本步暂不动；
 9. `cjpm build` + `cjpm test`（workspace 全量）跑绿；
-10. 更新 README / docs-site 中的产物路径（`ystyle::xisp.cli` → `ystyle::xisp_cli`，8 处引用）
-    与 `src/examples/` 路径；
+10. 更新 README / docs-site 中的产物路径（`ystyle::xisp_cli` → `ystyle::xisp_cli`，8 处引用）
+    与 `xisp_examples/src/` 路径；
 11. 补构建 CI：`cjpm ws check` + `cjpm build` + `cjpm test`；
 12. 合入 master，走 `cjpm ws bump 0.5.0` → `cjpm ws bundle` → 私有仓预演 → 中心仓。
 
@@ -470,7 +486,7 @@ cjpm ws bundle / publish / tag
 | 仓库 | 改动 |
 |---|---|
 | `cordis-cj/cordis_xisp` | 无（`ystyle::xisp.*` 包名不变）；升级依赖版本至 `0.5.0` |
-| `atelier/cli` | `ystyle::xisp.terminal.*` → `ystyle::xisp_terminal.*`（`tui.cj:3`、`md_render.cj:4`、`tui_test.cj:14`、`tui_activity_test.cj:15`）；升级 `0.5.0` |
+| `atelier/cli` | `ystyle::xisp_terminal.*` → `ystyle::xisp_terminal.*`（`tui.cj:3`、`md_render.cj:4`、`tui_test.cj:14`、`tui_activity_test.cj:15`）；升级 `0.5.0` |
 
 ---
 
@@ -500,6 +516,31 @@ cjpm ws bundle / publish / tag
    阶段 3 完成后进一步不含 JIT 符号（2608 行）；
 4. `cjpm ws check` 在 CI 中作为闸门生效；
 5. `atelier` / `cordis_xisp` 升级后构建通过。
+
+### 9.1 阶段 1 实施记录（2026-09-28）
+
+| 项 | 结果 |
+|---|---|
+| 成员 | `core`(xisp) · `terminal`(xisp_terminal) · `repl`(xisp_repl) · `cli`(xisp_cli) · `xisp_examples` · `xisp_tests` |
+| 构建 | `cjpm build` 通过 |
+| 测试 | `cjpm test` **427 / 427 通过**（含迁入 `xisp_tests` 的 16 个契约测试） |
+| 产物 | `ystyle::xisp_cli` + `ystyle::xisp_examples.*` 共 11 个可执行件；冒烟 `(println (+ 1 2))` → `3` |
+| lockstep | `cjpm ws check` 通过（发布成员 `xisp` / `xisp_terminal` / `xisp_repl` 均为 v0.5.0，拓扑序 xisp → xisp_terminal → xisp_repl） |
+| CI | 新增 `.github/workflows/ci.yml`（cjpm-ws 闸门 + build + test） |
+
+**实施中的两个决策 / 发现**：
+
+1. **core 变成零外部依赖**：`@ModuleVer` 的版本常量原本在 `types` 包，core 因此依赖 `cjpminfo`；
+   但版本号只有界面用途（4 个使用点里 3 处在 repl / cli），故把 `XISP_VERSION` 与 banner 一并移到
+   `xisp_repl`，core 去掉 `cjpminfo` → **依赖清零**（§8 Q3 提前解决）。
+   - **cjpminfo 必须 ≥ 1.2.1**：1.2.0 只从 `PWD` 定位清单，workspace 下会命中根的
+     `[workspace]` `cjpm.toml`（无 `[package]` 段）→ `@ModuleVer` 展开成**空串**；
+     1.2.1 改用 cjc 的 `-p` 定位"当前正在编译的包"。
+2. **`LispInterpreter.printBanner()` 不再保留**：banner 文本与版本号都归界面模块，
+   core 只留 `shouldShowBanner()`（配置查询）。
+
+**待收口**：跨仓 `atelier/cli` 的 4 处 `ystyle::xisp_terminal.*` → `ystyle::xisp_terminal.*`（并升 0.5.0），
+`cordis_xisp` 仅升版本；README / docs-site 里的产物路径（`ystyle::xisp_cli` → `ystyle::xisp_cli`）。
 
 ---
 

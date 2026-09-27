@@ -1,0 +1,18 @@
+[package]
+  cjc-version = "1.0.0"
+  name = "xisp_cli"
+  organization = "ystyle"
+  description = "星枢命令行入口"
+  version = "0.5.0"
+  output-type = "executable"
+  compile-option = "-O2 --static -Woff unused"
+  override-compile-option = ""
+  link-option = ""
+  include = ["/src"]
+  license = ["MIT"]
+  authors = ["ystyle"]
+  repository = "https://gitcode.com/ystyle/xisp"
+
+[dependencies]
+  "ystyle::xisp" = "0.5.0"
+  "ystyle::xisp_repl" = "0.5.0"

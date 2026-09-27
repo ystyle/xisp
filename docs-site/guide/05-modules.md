@@ -36,7 +36,7 @@ cjpm build
 后续运行示例时，用 `XISP_PATH` 指向教学模块目录：
 
 ```bash
-XISP_PATH=./examples/05-modules/modules_demo ./target/release/bin/ystyle::xisp.cli script.lisp
+XISP_PATH=./examples/05-modules/modules_demo ./target/release/bin/ystyle::xisp_cli script.lisp
 ```
 
 ---
@@ -61,7 +61,7 @@ modules_demo/
 
 ```bash
 XISP_PATH=./examples/05-modules/modules_demo \
-  ./target/release/bin/ystyle::xisp.cli \
+  ./target/release/bin/ystyle::xisp_cli \
   examples/05-modules/modules_demo/demo.lisp
 ```
 
@@ -237,7 +237,7 @@ myapp/
 ### 步骤 5：运行
 
 ```bash
-XISP_PATH=./myapp ./target/release/bin/ystyle::xisp.cli test.lisp
+XISP_PATH=./myapp ./target/release/bin/ystyle::xisp_cli test.lisp
 ```
 
 ::: tip XISP_PATH 搜索路径

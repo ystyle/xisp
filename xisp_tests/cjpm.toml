@@ -1,0 +1,17 @@
+[package]
+  cjc-version = "1.0.0"
+  name = "xisp_tests"
+  organization = "ystyle"
+  description = "星枢契约 / 集成测试：只用 public API 验证语言行为（不发布）"
+  version = "0.5.0"
+  output-type = "static"
+  compile-option = "-O2 -Woff unused"
+  override-compile-option = ""
+  link-option = ""
+  include = ["/src"]
+  license = ["MIT"]
+  authors = ["ystyle"]
+  repository = "https://gitcode.com/ystyle/xisp"
+
+[dependencies]
+  "ystyle::xisp" = "0.5.0"

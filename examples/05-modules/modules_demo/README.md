@@ -43,7 +43,7 @@ modules_demo/
 运行演示时需设置 `XISP_PATH`：
 
 ```bash
-XISP_PATH=./examples/05-modules/modules_demo ./target/release/bin/ystyle::xisp.cli examples/05-modules/modules_demo/demo.lisp
+XISP_PATH=./examples/05-modules/modules_demo ./target/release/bin/ystyle::xisp_cli examples/05-modules/modules_demo/demo.lisp
 ```
 
 ## 演示内容

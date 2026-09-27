@@ -20,10 +20,10 @@
 
 ```bash
 # 基础演示（需先设置搜索路径）
-XISP_PATH=./examples/05-modules/modules_demo ./target/release/bin/ystyle::xisp.cli examples/05-modules/01_basic_demo.lisp
+XISP_PATH=./examples/05-modules/modules_demo ./target/release/bin/ystyle::xisp_cli examples/05-modules/01_basic_demo.lisp
 
 # 完整示例
-XISP_PATH=./examples/05-modules/modules_demo ./target/release/bin/ystyle::xisp.cli examples/05-modules/modules_demo/demo.lisp
+XISP_PATH=./examples/05-modules/modules_demo ./target/release/bin/ystyle::xisp_cli examples/05-modules/modules_demo/demo.lisp
 ```
 
 ## 📖 模块系统基础

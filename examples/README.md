@@ -7,7 +7,7 @@
 ### 5 分钟快速体验
 
 ```bash
-./target/release/bin/ystyle::xisp.cli examples/01-basics/01_quick_start.lisp
+./target/release/bin/ystyle::xisp_cli examples/01-basics/01_quick_start.lisp
 ```
 
 你将快速了解 Xisp 的核心特性：
@@ -205,13 +205,13 @@
 ### 运行单个文件
 
 ```bash
-./target/release/bin/ystyle::xisp.cli examples/01-basics/01_quick_start.lisp
+./target/release/bin/ystyle::xisp_cli examples/01-basics/01_quick_start.lisp
 ```
 
 ### REPL 交互式学习
 
 ```bash
-./target/release/bin/ystyle::xisp.cli
+./target/release/bin/ystyle::xisp_cli
 ```
 
 在 REPL 中导入并运行文件：
@@ -225,7 +225,7 @@ xisp> (import "examples/01-basics/02_tutorial.lisp")
 ```bash
 # 运行所有基础教程
 for file in examples/01-basics/*.lisp; do
-    ./target/release/bin/ystyle::xisp.cli "$file"
+    ./target/release/bin/ystyle::xisp_cli "$file"
 done
 ```
 
@@ -302,11 +302,11 @@ done
 
 ### 仓颉示例程序
 
-仓颉示例程序位于 `src/examples/` 目录：
+仓颉示例程序位于 `xisp_examples/src/` 目录：
 
 ```bash
 # 查看可用示例
-ls src/examples/
+ls xisp_examples/src/
 
 # 编译
 cjpm build

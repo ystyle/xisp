@@ -1,59 +1,8 @@
-[package]
-  cjc-version = "1.0.0"
-  name = "xisp"
-  organization = "ystyle"
-  description = "星枢 - 仓颉嵌入式 Lisp 脚本语言"
-  version = "0.4.1"
-  target-dir = ""
-  script-dir = ""
-  output-type = "static"
-  compile-option = "-O2 --static -Woff unused"
+[workspace]
+  members = ["core", "terminal", "repl", "cli", "xisp_examples", "xisp_tests"]
+  build-members = ["core", "terminal", "repl", "cli", "xisp_examples", "xisp_tests"]
+  test-members = ["core", "terminal", "repl", "cli", "xisp_examples", "xisp_tests"]
+  compile-option = ""
   override-compile-option = ""
   link-option = ""
-  include = ["src", "LICENSE"]
-  # 锚定到包根：`examples` 不加 `/` 会连 src/examples 一起排除，
-  # 而 src/examples 被 cjpm.toml 的 package-configuration 引用，缺了消费方构建会失败。
-  exclude = ["/docs", "/docs-site", "/examples", "/lisp-tests", "/temp-docs", "/scripts",
-             "/AGENTS.md", "/CLAUDE.md", "/task.md", "/test.sh", "/config.json",
-             "/test_parse_multiline.cj.macrocall"]
-  license = ["MIT"]
-  authors = ["ystyle"]
-  repository = "https://gitcode.com/ystyle/xisp"
-
-[dependencies]
-"cjpminfo" = "1.2.0"
-
-[test-dependencies]
-
-[package.package-configuration."ystyle::xisp.cli"]
-output-type = "executable"
-
-[package.package-configuration."ystyle::xisp.examples.extension_demo"]
-output-type = "executable"
-
-[package.package-configuration."ystyle::xisp.examples.test_destruct"]
-output-type = "executable"
-
-[package.package-configuration."ystyle::xisp.examples.test_pipeline"]
-output-type = "executable"
-
-[package.package-configuration."ystyle::xisp.examples.options_usage"]
-output-type = "executable"
-
-[package.package-configuration."ystyle::xisp.examples.modern_syntax"]
-output-type = "executable"
-
-[package.package-configuration."ystyle::xisp.examples.sandbox_demo"]
-output-type = "executable"
-
-[package.package-configuration."ystyle::xisp.examples.match_demo"]
-output-type = "executable"
-
-[package.package-configuration."ystyle::xisp.examples.guard_test"]
-output-type = "executable"
-
-[package.package-configuration."ystyle::xisp.examples.quick_test"]
-output-type = "executable"
-
-[package.package-configuration."ystyle::xisp.examples.modules_demo"]
-output-type = "executable"
+  target-dir = ""

@@ -25,9 +25,9 @@
 # 编译
 cjpm build 
 # 运行可执行包
-cjpm run --name ystyle::xisp.examples.match_demo
+cjpm run --name ystyle::xisp_examples.match_demo
 # 手动执行，先查看 target/release/bin 目录有哪些可执行文件
-./target/release/bin/ystyle::xisp.cli
+./target/release/bin/ystyle::xisp_cli
 
 # 运行所有测试
 cjpm test 
@@ -41,30 +41,7 @@ cjpm clean
 ```
 
 ### 项目结构
-```shell
-.
-├── cjpm.lock
-├── cjpm.toml
-├── docs                             # 文档目录
-│   ├── integration                  # 仓颉嵌入式使用手册
-│   ├── modules.md                   # xisp 模块文档
-│   ├── README.md                    # 文档目录
-│   ├── syntax                       # xisp 实现的语法手册
-│   └── unicode                      # unicode 支持说明
-├── examples                         # 用户示例文件
-├── lisp-tests                       # lisp 测试文件，用于仓颉的单元测试
-├── README.md
-├── src                              # 仓颉代码目录
-│   ├── bridge
-│   ├── cli
-│   ├── core
-│   ├── examples                     # 仓颉示例
-│   ├── parser
-│   ├── repl
-│   └── types
-├── target                           # 编译结果
-├── task.md
-├── temp-test                        # 临时测试-不提交git
-├── temp-docs                        # 临时文档-不提交git
-├── UNICODE_SUPPORT.md
-```
+
+> 已改为 cjpm 工作区（`core` / `terminal` / `repl` / `cli` / `xisp_examples` / `xisp_tests`），
+> 结构以 `AGENTS.md` 与 `docs/plans/2026-09-27-workspace-modularization.md` 为准。
+

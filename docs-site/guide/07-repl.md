@@ -10,16 +10,16 @@ Xisp 提供增强型 REPL（交互式环境），支持多行编辑、历史记�
 
 ```shell
 # 启动增强型 REPL（默认，需要 TTY）
-./target/release/bin/ystyle::xisp.cli
+./target/release/bin/ystyle::xisp_cli
 
 # 启动简单 REPL（非 TTY 环境自动回落）
-./target/release/bin/ystyle::xisp.cli --simple-repl
+./target/release/bin/ystyle::xisp_cli --simple-repl
 
 # 直接执行代码
-./target/release/bin/ystyle::xisp.cli -c '(+ 1 2 3)'
+./target/release/bin/ystyle::xisp_cli -c '(+ 1 2 3)'
 
 # 执行脚本文件
-./target/release/bin/ystyle::xisp.cli script.lisp
+./target/release/bin/ystyle::xisp_cli script.lisp
 ```
 
 ::: tip 栈深度配置

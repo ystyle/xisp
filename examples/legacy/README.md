@@ -18,7 +18,7 @@ Xisp 支持**完整的中文编程**，包括中文关键字和 Unicode 变量�
 
 ```bash
 # 1. 启动 REPL
-./target/release/bin/ystyle::xisp.cli
+./target/release/bin/ystyle::xisp_cli
 
 # 2. 启用中文关键字
 xisp> ,lang zh

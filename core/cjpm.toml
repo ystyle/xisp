@@ -1,0 +1,15 @@
+[package]
+  cjc-version = "1.0.0"
+  name = "xisp"
+  organization = "ystyle"
+  description = "星枢 - 仓颉嵌入式 Lisp 脚本语言（核心：解释器 / 内建 / 模块系统 / 桥接）"
+  version = "0.5.0"
+  output-type = "static"
+  compile-option = "-O2 -Woff unused"
+  override-compile-option = ""
+  link-option = ""
+  # 锚定到包根：未锚定的 `src` 会匹配任意层级的同名目录，把子目录内容一并打进制品
+  include = ["/src"]
+  license = ["MIT"]
+  authors = ["ystyle"]
+  repository = "https://gitcode.com/ystyle/xisp"

@@ -40,16 +40,16 @@ cjpm build
 
 ```bash
 # 启动 REPL
-./target/release/bin/ystyle::xisp.cli
+./target/release/bin/ystyle::xisp_cli
 
 # 运行 Lisp 脚本
-./target/release/bin/ystyle::xisp.cli examples/tutorial.lisp
+./target/release/bin/ystyle::xisp_cli examples/tutorial.lisp
 ```
 
 ## 示例代码
 
 ```shell
-❯ ./target/release/bin/ystyle::xisp.cli
+❯ ./target/release/bin/ystyle::xisp_cli
 ╔═══════════════════════════════════════════════════════════╗
 ║           星枢 - 仓颉嵌入式 Lisp 脚本语言                   ║
 ║                   版本 0.1.0 - MVP                        ║
@@ -83,10 +83,10 @@ Lisp 脚本示例位于 `examples/` 目录，按难度和学习路径组织：
 **快速开始**:
 ```bash
 # 5分钟快速体验
-./target/release/bin/ystyle::xisp.cli examples/01-basics/01_quick_start.lisp
+./target/release/bin/ystyle::xisp_cli examples/01-basics/01_quick_start.lisp
 
 # 完整基础教程
-./target/release/bin/ystyle::xisp.cli examples/01-basics/02_tutorial.lisp
+./target/release/bin/ystyle::xisp_cli examples/01-basics/02_tutorial.lisp
 ```
 
 **完整学习路径**: 查看 [examples/README.md](examples/README.md)
@@ -95,18 +95,18 @@ Lisp 脚本示例位于 `examples/` 目录，按难度和学习路径组织：
 
 ### 仓颉嵌入式示例（Cangjie）
 
-仓颉代码示例位于 `src/examples/` 目录，展示如何在仓颉项目中嵌入和使用 Xisp：
+仓颉代码示例位于 `xisp_examples/src/` 目录，展示如何在仓颉项目中嵌入和使用 Xisp：
 
 | 示例 | 说明 | 运行方式 |
 |------|------|----------|
-| [选项系统](src/examples/options_usage/) | 解释器选项配置 | `cjpm run --name options_usage` |
-| [沙箱系统](src/examples/sandbox_demo/) | 安全沙箱使用 | `cjpm run --name sandbox_demo` |
-| [扩展功能演示](src/examples/extension_demo/) | LispConvertible/LispDeserializable 接口和双向转换 | `cjpm run --name extension_demo` |
-| [模式匹配](src/examples/match_demo/) | 模式匹配测试 | `cjpm run --name match_demo` |
-| [现代化语法](src/examples/modern_syntax/) | 现代语法测试 | `cjpm run --name modern_syntax` |
-| [解构绑定](src/examples/test_destruct/) | 解构绑定测试 | `cjpm run --name test_destruct` |
-| [管道操作符](src/examples/test_pipeline/) | 管道操作符测试 | `cjpm run --name test_pipeline` |
-| [守卫条件](src/examples/guard_test/) | 守卫条件测试 | `cjpm run --name guard_test` |
+| [选项系统](xisp_examples/src/options_usage/) | 解释器选项配置 | `cjpm run --name ystyle::xisp_examples.options_usage` |
+| [沙箱系统](xisp_examples/src/sandbox_demo/) | 安全沙箱使用 | `cjpm run --name ystyle::xisp_examples.sandbox_demo` |
+| [扩展功能演示](xisp_examples/src/extension_demo/) | LispConvertible/LispDeserializable 接口和双向转换 | `cjpm run --name ystyle::xisp_examples.extension_demo` |
+| [模式匹配](xisp_examples/src/match_demo/) | 模式匹配测试 | `cjpm run --name ystyle::xisp_examples.match_demo` |
+| [现代化语法](xisp_examples/src/modern_syntax/) | 现代语法测试 | `cjpm run --name ystyle::xisp_examples.modern_syntax` |
+| [解构绑定](xisp_examples/src/test_destruct/) | 解构绑定测试 | `cjpm run --name ystyle::xisp_examples.test_destruct` |
+| [管道操作符](xisp_examples/src/test_pipeline/) | 管道操作符测试 | `cjpm run --name ystyle::xisp_examples.test_pipeline` |
+| [守卫条件](xisp_examples/src/guard_test/) | 守卫条件测试 | `cjpm run --name ystyle::xisp_examples.guard_test` |
 
 **更多详情**: 查看 [docs-site/integration/bridge.md](docs-site/integration/bridge.md) - 桥接层 API 文档
 
@@ -200,7 +200,7 @@ main() {
 }
 ```
 
-**示例代码**: [src/examples/options_usage/main.cj](src/examples/options_usage/)
+**示例代码**: [xisp_examples/src/options_usage/main.cj](xisp_examples/src/options_usage/)
 **详细文档**: [docs-site/integration/options.md](docs-site/integration/options.md)
 
 ---
@@ -345,7 +345,7 @@ class Point <: LispDeserializable<Point> {
 
 - [仓颉语言官网](https://cangjie-lang.cn/)
 - [示例代码](examples/) - Lisp 脚本示例
-- [仓颉示例](src/examples/) - 仓颉代码示例
+- [仓颉示例](xisp_examples/src/) - 仓颉代码示例
 - [任务追踪](task.md) - 开发进度
 
 ---

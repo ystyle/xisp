@@ -195,8 +195,8 @@ eval "$(cjvs env zsh)" && cjpm build -j 16
 bash lisp-tests/perf/run.sh 5
 
 # 手动单场景对比
-time ./target/release/bin/ystyle::xisp.cli lisp-tests/perf/01-fib-direct.lisp
-time ./target/release/bin/ystyle::xisp.cli --with-bytecode-compiler lisp-tests/perf/01-fib-direct.lisp
+time ./target/release/bin/ystyle::xisp_cli lisp-tests/perf/01-fib-direct.lisp
+time ./target/release/bin/ystyle::xisp_cli --with-bytecode-compiler lisp-tests/perf/01-fib-direct.lisp
 ```
 
 > 提示：毫秒级结果含进程启动 ~15ms；放大 k 或轮数可得更稳定数据。

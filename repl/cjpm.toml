@@ -1,0 +1,21 @@
+[package]
+  cjc-version = "1.0.0"
+  name = "xisp_repl"
+  organization = "ystyle"
+  description = "星枢交互式 REPL：行编辑 / 补全 / 高亮 / 历史"
+  version = "0.5.0"
+  output-type = "static"
+  compile-option = "-O2 -Woff unused"
+  override-compile-option = ""
+  link-option = ""
+  include = ["/src"]
+  license = ["MIT"]
+  authors = ["ystyle"]
+  repository = "https://gitcode.com/ystyle/xisp"
+
+[dependencies]
+  "ystyle::xisp" = "0.5.0"
+  "ystyle::xisp_terminal" = "0.5.0"
+  # 版本号（@ModuleVer）与 banner：界面模块自己的外部依赖
+  # 需 ≥1.2.1：1.2.0 只从 PWD 定位清单，工作区下会读到根的 [workspace]（无 [package]）而取到空串
+  "cjpminfo" = "1.2.1"

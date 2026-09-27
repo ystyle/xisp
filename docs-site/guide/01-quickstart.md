@@ -17,7 +17,7 @@ cjpm build
 编译产物：
 
 ```
-./target/release/bin/ystyle::xisp.cli
+./target/release/bin/ystyle::xisp_cli
 ```
 
 也可以使用符号链接（已配置）：
@@ -30,13 +30,13 @@ cjpm build
 
 ```bash
 # 启动 REPL
-./target/release/bin/ystyle::xisp.cli
+./target/release/bin/ystyle::xisp_cli
 
 # 运行 Lisp 脚本
-./target/release/bin/ystyle::xisp.cli script.lisp
+./target/release/bin/ystyle::xisp_cli script.lisp
 
 # 直接执行代码
-./target/release/bin/ystyle::xisp.cli -c "(+ 1 2 3)"
+./target/release/bin/ystyle::xisp_cli -c "(+ 1 2 3)"
 ```
 
 ::: tip 栈深度配置
@@ -44,7 +44,7 @@ cjpm build
 - `XISP_MAX_STACK_DEPTH=<N>`：环境变量方式设置（默认 1000）
 
 ```bash
-./target/release/bin/ystyle::xisp.cli --stack-depth 5000 script.lisp
+./target/release/bin/ystyle::xisp_cli --stack-depth 5000 script.lisp
 ```
 :::
 
