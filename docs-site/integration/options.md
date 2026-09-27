@@ -14,7 +14,8 @@ let interpreter = LispInterpreter([
 ])
 ```
 
-本文档覆盖 `src/options.cj` 中全部选项函数。
+本文档覆盖核心（`core/src/options.cj`）与可选后端模块（`xisp_bc/src/backend.cj`）提供的全部选项函数。
+核心**不含**字节码 / JIT 选项——它们随 [模块与依赖](modules) 所述的后端模块提供。
 
 ---
 
@@ -118,6 +119,38 @@ interpreter.eval("(import \"./utils.lisp\")")
 // 嵌入场景：默认 ModuleMode，禁止文件导入
 let embedded = LispInterpreter([withModuleMode()])
 ```
+
+---
+
+## 字节码与 JIT（可选后端）
+
+这两项选项由可选模块 `ystyle::xisp_bc` 提供（核心不含），使用前需先依赖它：
+
+```toml
+[dependencies]
+  "ystyle::xisp_bc" = "0.5.0"
+```
+
+| 选项 | 说明 |
+|------|------|
+| `withBytecodeCompiler()` | 启用字节码编译器：支持的表达式编译为字节码执行，不支持的自动回退 AST |
+| `withJit()` | 启用 JIT（**叠在字节码之上**，需同时开字节码）；未支持的指令 / 类型按函数级回退解释器 |
+
+```cangjie
+import ystyle::xisp.*
+import ystyle::xisp_bc.*
+
+// 只启用字节码
+let bc = LispInterpreter([withBytecodeCompiler()])
+
+// 字节码 + JIT（仅 Linux x86-64，其它平台自动降级为字节码）
+let jit = LispInterpreter([withBytecodeCompiler(), withJit()])
+```
+
+::: tip 不依赖后端就没有这些代码
+不依赖 `ystyle::xisp_bc` 的宿主，产物中不含字节码与 JIT 代码；
+其 `ExecutionBackend` 接缝保持未注入状态，全程 AST 解释。
+:::
 
 ---
 
@@ -249,9 +282,14 @@ paths.eval("(cangjie::write-file \"/etc/passwd\" \"hack\")")      // 拒绝
 | `withAllowedPaths` | `Array<String>` | 无限制 | `setAllowedPaths` |
 | `withNoModuleLoad` | 无 | 允许加载 | `blockModuleLoad` |
 | `withAllowedModulePaths` | `Array<String>` | 无限制 | `setAllowedPaths` |
+| `withBytecodeCompiler` ★ | 无 | 未启用（AST 解释） | `setExecutionBackend` |
+| `withJit` ★ | 无 | 未启用 | `JitRuntime()` |
+
+★ 由可选模块 `ystyle::xisp_bc` 提供，核心不含。
 
 ## 参见
 
 - [嵌入解释器](embedding) - `LispInterpreter` 基本用法
 - [沙箱](sandbox) - 沙箱选项的机制与最佳实践
 - [桥接](bridge) - 标准库桥接函数与自定义函数注册
+- [模块与依赖](modules) - 7 个成员模块、依赖方向与按需依赖

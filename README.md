@@ -11,13 +11,14 @@
 
 Xisp（星枢）是一个用仓颉（Cangjie）语言编写的嵌入式 Lisp 解释器，具有以下特点：
 
-- ✨ **纯仓颉实现** - 无需外部依赖
+- ✨ **纯仓颉实现** - 核心零外部依赖（不依赖任何第三方包）
 - 🎯 **图灵完备** - 支持函数式编程
 - 📦 **嵌入式友好** - 可轻松集成到仓颉项目
 - 🚀 **高性能** - 基于仓颉原生性能；可选字节码编译器（`--with-bytecode-compiler`，
   调用密集场景较 AST 解释最高 **14x** 加速），可选 **JIT 机器码**（`--with-jit`，**仅 Linux x86-64**，
   经 `@When[os == "Linux" && arch == "x86_64"]` 条件编译限定，其他平台自动回退字节码），
-  fib 类递归较 BC 最高 **60x**、较 AST 约 **920x**，详见 `docs/bytecode-performance.md`）
+  fib 类递归较 BC 最高 **60x**、较 AST 约 **920x**，详见 `docs/bytecode-performance.md`。
+  **字节码与 JIT 位于可选模块 `ystyle::xisp_bc`**，不依赖它的宿主不会引入这部分代码）
 - 🔐 **安全沙箱** - 限制文件访问和函数调用权限
 - 🎨 **强大的宏系统** - 元编程能力，扩展语法
 - 📚 **模块化支持** - 代码组织和复用
@@ -31,6 +32,8 @@ Xisp（星枢）是一个用仓颉（Cangjie）语言编写的嵌入式 Lisp 解
 - [仓颉 SDK](https://cangjie-lang.cn/) 1.1.0+
 
 ### 编译
+
+仓库根即 cjpm 工作区根，一条命令构建全部成员：
 
 ```bash
 cjpm build
@@ -46,13 +49,48 @@ cjpm build
 ./target/release/bin/ystyle::xisp_cli examples/tutorial.lisp
 ```
 
+## 模块结构
+
+Xisp 以 cjpm 工作区组织，7 个成员模块**按需依赖**：
+
+| 模块 | 包 | 内容 | 依赖 |
+|---|---|---|---|
+| `core/` | `ystyle::xisp` | AST 解释器 / 内建 / 模块系统 / 桥接 | **无**（零外部依赖） |
+| `xisp_bc/` | `ystyle::xisp_bc` | 字节码编译器 / 寄存器栈 VM / JIT（可选后端） | `xisp` |
+| `terminal/` | `ystyle::xisp_terminal` | 终端能力（raw mode、字符宽度） | 无 |
+| `repl/` | `ystyle::xisp_repl` | 交互式 REPL | `xisp`、`xisp_terminal` |
+| `cli/` | `ystyle::xisp_cli` | 命令行入口（可执行） | `xisp`、`xisp_repl`、`xisp_bc` |
+| `xisp_examples/` | `ystyle::xisp_examples.*` | 仓颉侧示例（不发布） | `xisp`、`xisp_repl` |
+| `xisp_tests/` | `ystyle::xisp_tests` | 契约 / 集成测试（不发布） | `xisp`、`xisp_bc` |
+
+作为库嵌入时按需依赖：
+
+```toml
+[dependencies]
+  "ystyle::xisp" = "0.5.0"           # 核心：解释器 / 内建 / 桥接
+  # "ystyle::xisp_repl" = "0.5.0"    # 需要交互式 REPL 时
+  # "ystyle::xisp_bc" = "0.5.0"      # 需要字节码 / JIT 时
+```
+
+**核心（`ystyle::xisp`）不含字节码与 JIT 代码**——不依赖 `xisp_bc` 的宿主，产物里就没有这部分
+（JIT 的可写可执行内存路径也不会出现在该进程中）。
+
+构建与校验：
+
+```bash
+cjpm build            # 构建全部成员（在工作区根执行）
+cjpm test             # 运行全部成员的测试
+cjpm build -m core    # 只构建核心（-m 指定成员）
+cjpm ws check         # 版本一致性闸门（多包产品共用版本号）
+```
+
 ## 示例代码
 
 ```shell
 ❯ ./target/release/bin/ystyle::xisp_cli
 ╔═══════════════════════════════════════════════════════════╗
 ║           星枢 - 仓颉嵌入式 Lisp 脚本语言                   ║
-║                   版本 0.1.0 - MVP                        ║
+║                   版本 0.5.0                              ║
 ╚═══════════════════════════════════════════════════════════╝
 xisp> (print "你好，仓颉")
 "你好，仓颉"

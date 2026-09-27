@@ -1,6 +1,6 @@
 # 仓颉桥接与互操作
 
-Xisp 桥接层（`src/bridge/`）提供 Lisp 与仓颉之间的**双向互操作**：
+Xisp 桥接层（`core/src/bridge/`）提供 Lisp 与仓颉之间的**双向互操作**：
 
 - **仓颉 → Lisp**：注册桥接函数、标准库桥接（文件 I/O、文件系统）
 - **Lisp → 仓颉**：`call<T>()` 反向调用 Lisp 函数，`asInt()` 等提取结果
@@ -150,7 +150,7 @@ interpreter.call("constant", [])   // 无参调用
 
 ### LispValue 枚举
 
-`LispValue`（`src/types/types.cj`）是桥接的核心数据类型，主要变体：
+`LispValue`（`core/src/types/types.cj`）是桥接的核心数据类型，主要变体：
 
 | 变体 | 对应仓颉类型 |
 |------|-------------|

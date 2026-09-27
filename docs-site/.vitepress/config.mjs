@@ -53,6 +53,7 @@ export default defineConfig({
           text: '集成',
           items: [
             { text: '嵌入解释器', link: '/integration/embedding' },
+            { text: '模块与依赖', link: '/integration/modules' },
             { text: '选项系统', link: '/integration/options' },
             { text: '沙箱', link: '/integration/sandbox' },
             { text: '桥接', link: '/integration/bridge' },

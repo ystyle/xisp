@@ -10,6 +10,8 @@
 
 ### 编译
 
+仓库根即 cjpm 工作区根，一条命令构建全部成员：
+
 ```bash
 cjpm build
 ```
@@ -25,6 +27,11 @@ cjpm build
 ```bash
 ./xisp
 ```
+
+::: tip 模块结构
+Xisp 由 7 个模块组成（核心 / 字节码后端 / 终端 / REPL / CLI / 示例 / 测试）。
+作为**库**嵌入时按需依赖即可，见 [模块与依赖](../integration/modules)。
+:::
 
 ### 运行
 

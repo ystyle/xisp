@@ -1,6 +1,16 @@
 # 嵌入解释器
 
-将 Xisp 嵌入到仓颉程序中，核心入口是 `LispInterpreter` 类（`src/interpreter.cj`）。通过它可以在仓颉中执行 Lisp 代码、加载脚本、启动 REPL，以及反向调用 Lisp 函数。
+将 Xisp 嵌入到仓颉程序中，核心入口是 `LispInterpreter` 类（`core/src/interpreter.cj`）。通过它可以在仓颉中执行 Lisp 代码、加载脚本、启动 REPL，以及反向调用 Lisp 函数。
+
+Xisp 以 cjpm 工作区组织（7 个成员模块），**按需依赖**：只要表达式求值能力就只依赖核心，
+要 REPL 或字节码 / JIT 再各自追加。详见 [模块与依赖](modules)。
+
+```toml
+[dependencies]
+  "ystyle::xisp" = "0.5.0"           # 核心：解释器 / 内建 / 桥接（零外部依赖）
+  # "ystyle::xisp_repl" = "0.5.0"    # 需要交互式 REPL 时
+  # "ystyle::xisp_bc" = "0.5.0"      # 需要字节码 / JIT 时
+```
 
 ---
 
