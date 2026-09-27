@@ -1,7 +1,7 @@
 [workspace]
-  members = ["core", "terminal", "repl", "cli", "xisp_examples", "xisp_tests"]
-  build-members = ["core", "terminal", "repl", "cli", "xisp_examples", "xisp_tests"]
-  test-members = ["core", "terminal", "repl", "cli", "xisp_examples", "xisp_tests"]
+  members = ["core", "xisp_bc", "terminal", "repl", "cli", "xisp_examples", "xisp_tests"]
+  build-members = ["core", "xisp_bc", "terminal", "repl", "cli", "xisp_examples", "xisp_tests"]
+  test-members = ["core", "xisp_bc", "terminal", "repl", "cli", "xisp_examples", "xisp_tests"]
   compile-option = ""
   override-compile-option = ""
   link-option = ""

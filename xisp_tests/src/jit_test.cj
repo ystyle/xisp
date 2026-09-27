@@ -1,6 +1,7 @@
 package ystyle::xisp_tests
 
 import ystyle::xisp.*
+import ystyle::xisp_bc.*
 
 import std.unittest.*
 import std.unittest.testmacro.*
@@ -33,11 +34,7 @@ class JitTest {
         let env = Environment()
         BuiltinFunctions.registerAll(env)
         let evaluator = Evaluator(env)
-        let compiler = BytecodeCompiler()
-        let vm = BytecodeVM()
-        vm.setCompiler(compiler)
-        evaluator.setCompiler(compiler)
-        evaluator.setVM(vm)
+        evaluator.setExecutionBackend(BytecodeExecutionBackend())
         JitRuntime()
         var result: LispValue = Nil
         for (expr in Parser.parseFromString(code)) {
@@ -53,11 +50,7 @@ class JitTest {
         let env = Environment()
         BuiltinFunctions.registerAll(env)
         let evaluator = Evaluator(env)
-        let compiler = BytecodeCompiler()
-        let vm = BytecodeVM()
-        vm.setCompiler(compiler)
-        evaluator.setCompiler(compiler)
-        evaluator.setVM(vm)
+        evaluator.setExecutionBackend(BytecodeExecutionBackend())
         var result: LispValue = Nil
         for (expr in Parser.parseFromString(code)) {
             result = evaluator.eval(expr)
@@ -296,11 +289,7 @@ class JitTest {
         let bc = Environment()
         BuiltinFunctions.registerAll(bc)
         let evaluator = Evaluator(bc)
-        let compiler = BytecodeCompiler()
-        let vm = BytecodeVM()
-        vm.setCompiler(compiler)
-        evaluator.setCompiler(compiler)
-        evaluator.setVM(vm)
+        evaluator.setExecutionBackend(BytecodeExecutionBackend())
         var r2: LispValue = Nil
         for (expr in Parser.parseFromString("(define (ev x a) (if (< x 1) a (ev (- x a)))) (ev 20 3)")) {
             r2 = evaluator.eval(expr)
@@ -470,11 +459,7 @@ class JitTest {
         let bc = Environment()
         BuiltinFunctions.registerAll(bc)
         let evaluator = Evaluator(bc)
-        let compiler = BytecodeCompiler()
-        let vm = BytecodeVM()
-        vm.setCompiler(compiler)
-        evaluator.setCompiler(compiler)
-        evaluator.setVM(vm)
+        evaluator.setExecutionBackend(BytecodeExecutionBackend())
         var r2: LispValue = Nil
         for (expr in Parser.parseFromString("(define (f x y) (let ((s (+ x y))) (* s 2))) (f 3 4)")) {
             r2 = evaluator.eval(expr)

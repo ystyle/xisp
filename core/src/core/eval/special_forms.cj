@@ -464,7 +464,12 @@ extend Evaluator {
     /**
      * 特殊形式：begin
      */
-    func evalBegin(expr: LispValue): LispValue {
+    /**
+     * 顺序求值一组表达式（begin 语义）
+     *
+     * 公开给字节码后端：VM 执行宏 / 过程体回退 AST 时按 begin 语义求值。
+     */
+    public func evalBegin(expr: LispValue): LispValue {
         if (let Cons(cell) <- expr) {
             // 单表达式快速路径
             match (cell.cdr) {

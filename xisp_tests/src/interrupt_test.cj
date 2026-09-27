@@ -1,6 +1,7 @@
 package ystyle::xisp_tests
 
 import ystyle::xisp.*
+import ystyle::xisp_bc.*
 
 import std.unittest.*
 import std.unittest.testmacro.*

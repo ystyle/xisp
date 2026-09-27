@@ -13,6 +13,7 @@
 - 🚧 M4: 高级特性和完善
 - ✅ M4.9: ModuleSource 模块数据源抽象
 - ✅ M5: 工作区化拆分（阶段 1）
+- ✅ M6: 字节码后端拆分（阶段 2）
 
 ---
 
@@ -564,5 +565,28 @@
 
 **待收口**：跨仓 `atelier/cli` 的 4 处 `ystyle::xisp.terminal.*` → `ystyle::xisp_terminal.*`（并升 0.5.0）；
 `cordis_xisp` 仅升版本。
+
+**完成时间**: 2026-09-28
+
+---
+
+## M6: 字节码后端拆分（阶段 2）✅
+
+把字节码编译器 / 寄存器栈 VM / JIT 从核心拆成**可选后端模块**：宿主不依赖它，就不会引入这部分代码。
+
+**形态**：新成员 `xisp_bc`（依赖核心）；**IR 留在核心**（`CompiledCode` / `CompiledFunction` / `OP_*`）
+作为核心与后端之间的协议；核心定义 `ExecutionBackend` 接口，后端实现并注入。
+
+**要点**
+
+- [x] 接缝 `ExecutionBackend`（`compile` / `execute` / `callClosure` / `setInterruptChecker`）：核心侧仅 **6 处**引用点
+- [x] 注入点 `LispInterpreter.setExecutionBackend`；`withBytecodeCompiler()` / `withJit()` 移入 `xisp_bc`
+- [x] JIT 与 VM **同模块** → 不需要跨模块执行钩子（`JitRuntime.shared` / `functionTable` 均为模块内访问）
+- [x] `OP_*` 常量加 `public`（IR 是协议）；`Evaluator.evalBegin` 加 `public`（VM 回退 AST 时按 begin 语义求值）
+- [x] 破坏性变更：`setCompiler` / `setVM` → `setExecutionBackend`；两个选项的 import 来源变为 `ystyle::xisp_bc`
+- [x] 通用 kit（`bytecode_kit`）留作演进：需 IR 泛型化 + VM 指令语义外置（139 条指令 / ~470 行值语义方法）
+
+**验证**：`cjpm build` 通过；`cjpm test` **427/427**；`cjpm ws check` 通过（拓扑序 `xisp → xisp_bc → …`）；
+只依赖 `ystyle::xisp` 的探针产物中 `Bytecode:` / JIT 字面量均为 **0**（CLI 对照 1 / 5）。
 
 **完成时间**: 2026-09-28

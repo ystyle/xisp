@@ -445,17 +445,13 @@ public class LispInterpreter {
     }
 
     /**
-     * 设置编译器
+     * 注入字节码执行后端
+     *
+     * 需要字节码能力的宿主自行依赖实现模块（`ystyle::xisp_bc`）并注入；
+     * 不注入时全程走 AST 解释，核心不依赖任何字节码实现。
      */
-    public func setCompiler(compiler: Compiler): Unit {
-        this.evaluator.setCompiler(compiler)
-    }
-
-    /**
-     * 设置虚拟机
-     */
-    public func setVM(vm: VM): Unit {
-        this.evaluator.setVM(vm)
+    public func setExecutionBackend(backend: ExecutionBackend): Unit {
+        this.evaluator.setExecutionBackend(backend)
     }
 
     /**

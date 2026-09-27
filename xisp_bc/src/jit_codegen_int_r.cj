@@ -1,4 +1,6 @@
-package ystyle::xisp.core.eval
+package ystyle::xisp_bc
+
+import ystyle::xisp.core.eval.*
 import ystyle::xisp.types.*
 import std.collection.ArrayList
 import std.collection.HashMap

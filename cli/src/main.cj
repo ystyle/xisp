@@ -2,6 +2,7 @@ package ystyle::xisp_cli
 
 import ystyle::xisp.*
 import ystyle::xisp_repl.*
+import ystyle::xisp_bc.*
 import ystyle::xisp.types.*
 import std.collection.ArrayList
 import std.convert.*

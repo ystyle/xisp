@@ -15,3 +15,5 @@
 
 [dependencies]
   "ystyle::xisp" = "0.5.0"
+  # 字节码 / JIT 的契约与集成测试需要后端模块
+  "ystyle::xisp_bc" = "0.5.0"

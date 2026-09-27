@@ -1,6 +1,7 @@
 package ystyle::xisp_tests
 
 import ystyle::xisp.*
+import ystyle::xisp_bc.*
 
 import std.unittest.*
 import std.unittest.testmacro.*
@@ -30,11 +31,7 @@ class BytecodeTest {
         let env = Environment()
         BuiltinFunctions.registerAll(env)
         let evaluator = Evaluator(env)
-        let compiler = BytecodeCompiler()
-        let vm = BytecodeVM()
-        vm.setCompiler(compiler)
-        evaluator.setCompiler(compiler)
-        evaluator.setVM(vm)
+        evaluator.setExecutionBackend(BytecodeExecutionBackend())
         var result: LispValue = Nil
         for (expr in Parser.parseFromString(code)) {
             result = evaluator.eval(expr)

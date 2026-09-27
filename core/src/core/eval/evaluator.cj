@@ -40,9 +40,8 @@ public class Evaluator {
     // 当前 Loader（模块上下文用 ModuleLoader，脚本/REPL 用 ScriptLoader）
     public var currentLoader: Option<Loader> = None
 
-    // 编译器和虚拟机
-    var compiler: Option<Compiler> = None
-    var vm: Option<VM> = None
+    // 字节码执行后端（可选注入：核心不依赖字节码实现，见 backend.cj）
+    var backend: Option<ExecutionBackend> = None
 
     // 求值深度（0 = 顶层表达式根部，用于编译纪律）
     var evalDepth: Int64 = 0
@@ -58,20 +57,15 @@ public class Evaluator {
     // 性能探针（调试用）
 
     /**
-     * 设置编译器
+     * 注入字节码执行后端
+     *
+     * 未注入时全程走 AST 解释；注入后顶层表达式优先尝试编译执行。
      */
-    public func setCompiler(c: Compiler) {
-        this.compiler = Some(c)
-    }
-
-    /**
-     * 设置虚拟机
-     */
-    public func setVM(v: VM) {
-        this.vm = Some(v)
-        // 若中断检查已先于 VM 设置启用，补投给新 VM（配置顺序不应影响中断是否生效）
+    public func setExecutionBackend(b: ExecutionBackend) {
+        this.backend = Some(b)
+        // 若中断检查已先于后端设置启用，补投给新后端（配置顺序不应影响中断是否生效）
         match (this.interruptChecker) {
-            case Some(checker) => v.setInterruptChecker(checker)
+            case Some(checker) => b.setInterruptChecker(checker)
             case None => ()
         }
     }
@@ -187,9 +181,9 @@ public class Evaluator {
      */
     public func setInterruptChecker(checker: () -> Bool): Unit {
         this.interruptChecker = Some(checker)
-        // 字节码路径不经 AST 入口，需同步到 VM（未设置 VM 时由 setVM 补投）
-        match (this.vm) {
-            case Some(v) => v.setInterruptChecker(checker)
+        // 字节码路径不经 AST 入口，需同步到后端（未设置后端时由 setExecutionBackend 补投）
+        match (this.backend) {
+            case Some(b) => b.setInterruptChecker(checker)
             case None => ()
         }
     }

@@ -75,6 +75,7 @@ cjpm 工作区（`[workspace]`）：每个成员是独立发布的包。模块�
 ├── workspace.toml   # cjpm-ws 产品清单（统一版本 / 发布范围）
 ├── core/            # 模块 ystyle::xisp —— 解释器 / 内建 / 模块系统 / 桥接（零外部依赖）
 │   └── src/{types,parser,core,bridge}/ + interpreter.cj + options.cj
+├── xisp_bc/         # 模块 ystyle::xisp_bc —— 字节码编译器 / 寄存器栈 VM / JIT（可选后端）
 ├── terminal/        # 模块 ystyle::xisp_terminal —— 终端能力（零 Lisp 依赖）
 ├── repl/            # 模块 ystyle::xisp_repl —— REPL；会话入口 runRepl / runSimpleRepl
 ├── cli/             # 模块 ystyle::xisp_cli —— 命令行入口（不发布）

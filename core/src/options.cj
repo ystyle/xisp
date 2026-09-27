@@ -479,27 +479,5 @@ public func withModuleMode(): InterpreterOption {
     { interp => interp.setModuleMode() }
 }
 
-/**
- * 启用字节码编译器
- * 将支持的表达式编译为字节码执行（提升性能）
- */
-public func withBytecodeCompiler(): InterpreterOption {
-    { interp =>
-        let compiler = BytecodeCompiler()
-        let vm = BytecodeVM()
-        vm.setCompiler(compiler)
-        interp.setCompiler(compiler)
-        interp.setVM(vm)
-    }
-}
-
-/**
- * 启用 JIT（叠于字节码之上；未开字节码时无效）
- * 未支持指令/类型 → 函数级回退解释器（字节码保留）
- */
-public func withJit(): InterpreterOption {
-    { interp =>
-        JitRuntime()
-        ()
-    }
-}
+// 字节码 / JIT 选项不在此处：它们属于可选后端模块 `ystyle::xisp_bc`
+// （`withBytecodeCompiler()` / `withJit()`），核心不依赖字节码实现。

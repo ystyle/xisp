@@ -186,48 +186,60 @@ xisp_examples ──────→ xisp（+ 各能力域）
 
 `xisp_tests` / `xisp_examples` 以 `*_tests` / `*_examples` 结尾，被 cjpm-ws **自动排除发布**。
 
-> 为什么阶段 2 的 BC 集成测试**不能**跟 `bytecode_kit` 走：kit 的验收标准是"零 xisp 依赖"
-> （08-25 §3.4），而 `bytecode_test.cj` / `jit_test.cj` 依赖 `Evaluator` / `LispValue`。
+> `bytecode_test.cj` / `jit_test.cj` 是**集成测试**：它们依赖 `Evaluator` / `LispValue` / `xisp_bc` 的实现类，
+> 因此留在 `xisp_tests`（该模块额外依赖 `ystyle::xisp_bc`），而不是跟随后端模块走——
+> 后端模块自身的测试应由"最小假宿主"驱动（08-25 §3.4）。
 
-### 3.2 阶段 2：拆出 `ystyle::bytecode_kit`（解决"BC 恒定编入"）
+### 3.2 阶段 2：拆出 `ystyle::xisp_bc`（BC/JIT 恒定编入）—— ✅ 已实施（2026-09-28）
 
-**技术设计不在本文**：接口草案（`ValueHost<T>` / `RegisterVM<T>` / `FnUnit<T>` / `Codegen`）、
-耦合点清单、验收标准，全部见 [`2026-08-25-bytecode-fw-design.md`](2026-08-25-bytecode-fw-design.md) §2–§3。
-本文只记**决策**：
+**形态**：`compiler` / `vm` / `jit_*`（5930 行）搬到独立模块 `ystyle::xisp_bc`（依赖核心）；
+**IR 留在核心**（`CompiledCode` / `CompiledFunction` / `OP_*`）——它是核心与后端之间的**协议**，
+放核心才能让接缝签名直接使用 `CompiledCode`（否则要引入不透明句柄或提前泛型化）。
 
-| 项 | 决定 |
+| 项 | 结果 |
 |---|---|
-| 模块名 | **`ystyle::bytecode_kit`**（中性名，不含 `xisp`）——将来若被第三方复用**不必改名**；改名会破坏所有消费者 |
-| 与既有设计的关系 | 即 08-25 的**方案 A**。本文的"阶段 2"与它**是同一件事**，以那边为准 |
-| 实施范围 | **只做方案 A**。方案 B（语义规则化）/ C（语法驱动生成器）**不做**，种子留在 08-25 |
-| 实现深度 | **特化优先**：`ValueHost<LispValue>` / `BytecodeVM<LispValue>`（避免每指令 trait 分派），泛型化留白 |
-| core 侧接口形状 | 按 `ValueHost<…>` 的**形状**定义（而非 `Evaluator` / `Compiler` 具体类）；特化只是"类型参数先填死"，将来放开是机械改动 |
-| 边界 | `compileDefine` 等**前端语义留在 xisp**（08-25 §3.3 已划对）；kit 内不含任何 Lisp 语义 |
+| 模块 | `xisp_bc`（依赖 `ystyle::xisp`），5 个发布成员之一 |
+| 核心接缝 | `ExecutionBackend` 接口（`core/src/core/eval/backend.cj`）：`compile` / `execute` / `callClosure` / `setInterruptChecker` |
+| 注入点 | `LispInterpreter.setExecutionBackend(backend)`；选项 `withBytecodeCompiler()` / `withJit()` 移入 `xisp_bc` |
+| 装配 | `xisp_bc/src/backend.cj` 的 `BytecodeExecutionBackend` 组合编译器与 VM |
+| JIT | 与 VM **同模块**，因此**不需要跨模块执行钩子**（`JitRuntime.shared` / `functionTable` 都成了模块内访问） |
+| 反向依赖 | 零：核心不认识 `BytecodeVM` / `BytecodeCompiler` / `JitRuntime` |
+| 破坏性变更 | `LispInterpreter.setCompiler/setVM` → `setExecutionBackend`；`withBytecodeCompiler` / `withJit` 的 import 来源变为 `ystyle::xisp_bc` |
 
-**本文此前那个 `ExecutionBackend` 草案作废**，以 08-25 的 `ValueHost<T>` 为准——二者职责重叠，
-不该存在两套接口。同时，08-25 §3.2 的 `ValueHost<T>` 少了两项 xisp 侧需要的能力，**拆分时应补齐**
-（需回写该文档）：
+**关键简化（相对 08-25 草案）**：因为 `xisp_bc` 依赖核心（而不是反过来），只有 **core → BC 一个方向**需要接口注入，
+且核心侧总共只有 6 处引用点（`evaluator` 字段与 setter、`core.cj` 分派、`higher_order.cj` 的闭包回调、
+`interpreter.cj` 注入、`options.cj` 选项）。
 
-1. `closureProcedure(id)` —— 替代现在 `higher_order.cj:513` 直读 `BytecodeVM.functionTable`；
-2. **执行钩子** —— JIT 需要在指令派发处插快速路径（`vm.cj:599`），kit 要给宿主留这个接入点。
+**验收（探针实测）**：只依赖 `ystyle::xisp` 的探针二进制中 `Bytecode:` 字面量 **0**、JIT 字面量 **0**
+（对照 CLI：1 / 5）；core 内已无任何 VM / 编译器 / JIT 代码（仅保留 IR 常量与数据结构）。
 
-- 收益：不依赖 `bytecode_kit` 的宿主**不引入字节码后端**（compiler 1539 + vm 1675 + code 108 = 3322 行）；
-- 风险：动了 core 内部，但回归网较厚（`bytecode_test.cj` 478 行 + `jit_test.cj` 489 行）。
+**关于"通用 kit"**：把 VM 给 xisp 之外的语言复用（`bytecode_kit`）需要先做两件事——
+IR 泛型化、把 VM 的指令语义外置为宿主接口（详见 §3.3）。本次**不做**，理由见 §3.3 末尾。
 
-### 3.3 阶段 3：拆出 `xisp_jit`（把机器码生成从默认二进制里拿掉）
+### 3.3 后续：通用 kit 的演进路径（原"阶段 3"已取消）
 
-JIT **不属于 `bytecode_kit`**：它生成的是**针对 `LispValue` 内存布局**的机器码，与 xisp 的值表示强绑定，
-不具备通用性。它依赖 `bytecode_kit`（经 §3.2 的执行钩子接入）+ `xisp`（值表示）：
+JIT 已随 VM 一起进 `xisp_bc`（同模块、无需钩子），原"阶段 3 拆 `xisp_jit`"**不再需要**。
 
-```
-xisp_jit  →  bytecode_kit + xisp
-```
+若将来确要让 VM 给 xisp 之外的语言复用（`bytecode_kit`），路径是：
 
-收益的准确口径：**不启用 JIT 时本来就不会触发 `mmap`**（`rwx` 在 JIT 运行时初始化时才申请），
-所以拆出的主要收益是**体积与信任面**——不引入 2608 行机器码生成代码，也就没有"被误启用"的可能。
-平台面：JIT 仅 Linux x86-64（`@When`），其它平台本来就会回退字节码。
+1. **IR 泛型化**：`CompiledFunction` / `CompiledCode` 的常量池与 `body` 参数化为 `T`
+   （`paramInfos: ArrayList<ParamInfo>` 需一并处理——它是语言语义，宜随值语义一起外置）；
+2. **值语义外置**：把 `vm.cj` 的 **139 条指令语义**与约 **470 行独立值语义方法**
+   （`binNum` / `compareXxx` / `equalValue` / `callProcedure*` / cons 操作…）抽成宿主接口
+   （约 30~60 个方法），`BytecodeVM` 只保留取指—译码—分派与帧管理；
+3. 把通用部分搬到新模块 `bytecode_kit`，`xisp_bc` 保留语言前端（`compiler.cj`）与值语义实现。
 
-**可选**：若阶段 2 之后确认没人需要"要 BC 不要 JIT"，本阶段可跳过（JIT 留在 xisp 内）。
+**为什么本次不做**：`bytecode_kit` 的唯一增量收益是"给别的语言复用"，而代价是一次涉及 139 条指令的高风险重构
+（含性能重验）；而"宿主可选 BC/JIT"这一主诉求在 §3.2 已达成。等真出现 xisp 之外的宿主时再做，
+届时有真实宿主驱动接口设计。
+
+**留门现状**：
+
+| 已留 | 未留 |
+|---|---|
+| 接缝已按 `ExecutionBackend` 抽象（非 `LispValue` 专用签名散落各处） | IR 仍是 `LispValue` 特化 |
+| `BytecodeVM.functionTable` 的访问已收在模块内 | VM 语义仍在 VM 内（未外置） |
+| IR 与核心同包，泛型化时可统一改 | `ParamInfo` 仍在 IR 里 |
 
 ### 3.4 目录布局
 
@@ -237,13 +249,12 @@ xisp/                      # workspace 根 = 产品
 ├── workspace.toml         # cjpm-ws 清单：产品版本 / 共享依赖 / 发布范围
 ├── core/  terminal/  repl/  cli/  examples/
 │   └── {cjpm.toml, src/}
-├── bytecode_kit/          # 阶段 2 新增：模块名 ystyle::bytecode_kit
-├── jit/                   # 阶段 3 可选：模块名 ystyle::xisp_jit
+├── xisp_bc/         # 阶段 2 新增：模块 ystyle::xisp_bc（字节码编译器 + 寄存器栈 VM + JIT）
 ├── docs/  docs-site/  examples/  lisp-tests/  scripts/    # 仓库级共用资源原地不动
 ```
 
 （仓库根 `examples/*.lisp` 是 Lisp 示例，与 `src/examples` 的仓颉示例是两回事，不动。
-`bytecode_kit` 的目录名与模块名一致，但**模块名故意不含 `xisp`**——见 §3.2。）
+字节码后端与 JIT 合在一个模块（`xisp_bc`）：JIT 需要 VM 的内部状态，同模块内直接访问即可，无需跨模块钩子。）
 
 ---
 
@@ -315,8 +326,7 @@ public func withCapabilities(caps: Array<LispCapability>): InterpreterOption
 
 | 域 | 模块 | 外部依赖 | 状态 |
 |---|---|---|---|
-| bytecode | `bytecode_kit` | 无外部依赖（通用基座，零 Lisp 语义） | 已实现，待拆（§3.2） |
-| jit | `xisp_jit` | 无外部依赖；含 `rwx` 与 Linux x86-64 平台特化 | 已实现，待拆（§3.3） |
+| bytecode + jit | `xisp_bc` | 无外部依赖；含 `rwx`（JIT，仅 Linux x86-64） | ✅ 已拆出（§3.2） |
 | net（http / websocket / tls，见 §4.5） | `xisp_net` | stdx.net.* / stdx.crypto | 规划 |
 | data（compress / serialization / json） | `xisp_data` | stdx.compress.* / stdx.serialization | 规划 |
 | async | 见 §4.5 | 可能零外部依赖 | 规划 |
@@ -494,10 +504,10 @@ cjpm ws bundle / publish / tag
 
 | # | 项 | 说明 |
 |---|---|---|
-| R1 | 阶段 2 动 core 内部 | AST↔VM 接口化虽窄，但涉及求值主路径，需靠既有 bytecode/jit 测试网（约 970 行）兜底；另需回写 08-25 文档（补 `closureProcedure` 与执行钩子，见 §3.2） |
+| R1 | ~~阶段 2 动 core 内部~~ | ✅ 已消解（2026-09-28）：接缝实际只有 6 处引用点（小于草案估计）；BC/JIT 集成测试（约 970 行）作为回归网全部通过。08-25 的 `closureProcedure` / 执行钩子**不再需要**——JIT 与 VM 同模块 |
 | R2 | workspace 版本不校验 | 靠 `cjpm ws check` 进 CI 兜；**不做这道闸门就等于没有 lockstep** |
 | R3 | `terminal` 独立成库 | 它事实上是通用终端库（atelier 已当通用库用），长期看是否该独立成产品/另仓，值得单独评估 |
-| Q1 | 阶段 2 / 3 是否本次做 | **决策已定**（§3.2/§3.3）：阶段 2 拆 `bytecode_kit`、**只做方案 A**；阶段 3 `xisp_jit` 视需要。剩余待定的是**排期**（是否与阶段 1 同批） |
+| Q1 | 阶段 2 / 3 | **已完成**（2026-09-28）：阶段 2 拆出 `xisp_bc`（BC + JIT 同模块，§3.2）；原阶段 3 取消。通用 kit（`bytecode_kit`）留作演进，路径见 §3.3 |
 | Q2 | `xisp_cli` 是否也走 lockstep | 不发布则版本会漂移，需明确"跟随产品版本但不上中心仓" |
 | Q3 | core 的 `cjpminfo` 依赖 | 现在 `types` 用 `@ModuleVer`；若要"零外部依赖核心"，可在阶段 2 用 `build.cj` 生成版本常量替掉 |
 | Q4 | 能力域粒度 | core 域的按域装配是否需要（如"只要算术+表，不要高阶函数"），需要真实宿主诉求来定 |
@@ -539,8 +549,23 @@ cjpm ws bundle / publish / tag
 2. **`LispInterpreter.printBanner()` 不再保留**：banner 文本与版本号都归界面模块，
    core 只留 `shouldShowBanner()`（配置查询）。
 
-**待收口**：跨仓 `atelier/cli` 的 4 处 `ystyle::xisp_terminal.*` → `ystyle::xisp_terminal.*`（并升 0.5.0），
-`cordis_xisp` 仅升版本；README / docs-site 里的产物路径（`ystyle::xisp_cli` → `ystyle::xisp_cli`）。
+**待收口**：跨仓 `atelier/cli` 的 4 处 `ystyle::xisp.terminal.*` → `ystyle::xisp_terminal.*`（并升 0.5.0），
+`cordis_xisp` 仅升版本；README / docs-site 里的产物路径已同步（`ystyle::xisp.cli` → `ystyle::xisp_cli`）。
+
+### 9.2 阶段 2 实施记录（2026-09-28）
+
+| 项 | 结果 |
+|---|---|
+| 新成员 | `xisp_bc`（`compiler` / `vm` / `jit_*` 共 5930 行），5 个发布成员之一 |
+| 留在核心 | IR（`code.cj`：`OP_*` + `CompiledFunction` + `CompiledCode`）与 `ExecutionBackend` 接口 |
+| 核心改动点 | 6 处：`evaluator` 字段与注入方法、`core.cj` 编译分派、`higher_order.cj` 闭包回调、`interpreter.cj` 注入、`options.cj` 移除两个选项 |
+| 需暴露的符号 | `OP_*` 常量加 `public`（IR 是协议）；`Evaluator.evalBegin` 加 `public`（VM 回退 AST 时按 begin 语义求值） |
+| 构建 / 测试 | `cjpm build` 通过；`cjpm test` **427 / 427** |
+| 工作区校验 | `cjpm ws check` 通过；拓扑序 `xisp → xisp_bc → xisp_terminal → xisp_repl → xisp_cli` |
+| **产物验收** | 只依赖 `ystyle::xisp` 的探针：`Bytecode:` 字面量 **0**、JIT 字面量 **0**（CLI 对照：1 / 5） |
+
+**破坏性变更**：`LispInterpreter.setCompiler` / `setVM` → `setExecutionBackend`；
+`withBytecodeCompiler()` / `withJit()` 的 import 来源变为 `ystyle::xisp_bc`（CLI 已同步）。
 
 ---
 

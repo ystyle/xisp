@@ -37,14 +37,12 @@ extend Evaluator {
         if (isRoot) {
             this.compileSuspended = false
         }
-        if (!this.compileSuspended && let Some(c) <- this.compiler) {
+        if (!this.compileSuspended && let Some(b) <- this.backend) {
             if (this.isMacroCallExpr(expr)) {
                 // 宏调用：展开体可能引用调用点局部（AST 环境），本树禁用编译（AST 展开）
                 this.compileSuspended = true
-            } else if (let Some(code) <- c.compile(expr)) {
-                if (let Some(v) <- this.vm) {
-                    return v.execute(code, this.env)
-                }
+            } else if (let Some(code) <- b.compile(expr)) {
+                return b.execute(code, this.env)
             } else {
                 // 编译失败：回退 AST，本树禁用后续编译
                 this.compileSuspended = true

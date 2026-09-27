@@ -506,18 +506,11 @@ extend Evaluator {
 
                 result
             case Closure(id, closureEnv) =>
-                // 高阶回调进 VM 执行（编译闭包直接帧切换式执行）
-                match (this.vm) {
-                    case Some(vm) => vm.callClosure(id, args, closureEnv)
-                    case None =>
-                        if (id < BytecodeVM.functionTable.size) {
-                            let compiledFunc = BytecodeVM.functionTable[id]
-                            this.applyProcedure(
-                                Procedure(compiledFunc.params, compiledFunc.body, closureEnv),
-                                args)
-                        } else {
-                            LispValue.Error(XispError(ErrorType.RuntimeError, "AST: invalid closure ID"))
-                        }
+                // 高阶回调交给后端执行（编译闭包直接帧切换式执行）。
+                // 闭包值只能由后端执行产生，故未注入后端时拿到它属异常状态。
+                match (this.backend) {
+                    case Some(b) => b.callClosure(id, args, closureEnv)
+                    case None => LispValue.Error(XispError(ErrorType.RuntimeError, "AST: closure without bytecode backend"))
                 }
             case _ => Nil
         }
