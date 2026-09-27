@@ -1,8 +1,10 @@
-# Bytecode-FW：字节码框架拆分与语法驱动编译器生成设计
+# Bytecode-Kit：字节码基座拆分与语言生成器设计（原名 Bytecode-FW）
 
-**版本**: 0.1（设计草案）
+**版本**: 0.2（2026-09-27 更新）
 **日期**: 2026-08-25
-**状态**: 待评审（评审通过前不实现）
+**状态**: **方案 A 已定，待实施**；方案 B / C **不做**（设计保留在 §4 / §5，谁要谁捡）
+**模块名**: `ystyle::bytecode_kit`（中性名，不含 `xisp`，见 §3.1）
+**关联**: 整体路线与排期见 [`2026-09-27-workspace-modularization.md`](2026-09-27-workspace-modularization.md) §3.2 / §3.3
 
 ---
 
@@ -14,7 +16,7 @@ xisp 现有字节码实现（`feat/bytecode-compiler`，2026-07-29 起）已经�
 
 本次设计回答两个问题：
 
-1. **能否把 xisp 的字节码编译器/虚拟机拆出来**，做成可复用的库（后续姑且命名 `bytecode-fw`）？
+1. **能否把 xisp 的字节码编译器/虚拟机拆出来**，做成可复用的库（命名定为 `bytecode_kit`，见 §3.1）？
 2. **能否用"指定 EBNF 语法"自动生成字节码编译器**（新语言只写语法描述就得到编译器）？
 
 **结论先行**：
@@ -53,14 +55,19 @@ xisp 现有字节码实现（`feat/bytecode-compiler`，2026-07-29 起）已经�
 
 ---
 
-## 3. 方案 A：bytecode-fw SDK 拆分（第一步，评审通过后实施）
+## 3. 方案 A：拆出 `bytecode_kit`（**本次实施范围**）
 
 ### 3.1 目标
 
-发布独立仓颉包 `bytecode-fw`：
+发布独立仓颉包 **`ystyle::bytecode_kit`**：
+
+- **命名**：描述型 + 中性（不含 `xisp`）——将来若被第三方复用**不必改名**，改名会破坏所有消费者。
+  原名 `bytecode-fw` 弃用（`fw` 易被读成 firmware，且 "framework" 没有信息量）；
 - 不依赖 xisp 任何模块；
-- 提供：指令流/常量池 IR、寄存器栈 VM（泛型值）、编译器基座（emit/跳转回填/槽分配）；
-- xisp 成为第一个宿主（适配层 ~200 行）。
+- 提供：指令流/常量池 IR、寄存器栈 VM、编译器基座（emit/跳转回填/槽分配）；
+- xisp 成为第一个宿主（适配层 ~200 行）；
+- **实现深度：特化优先**——先做 `ValueHost<LispValue>` / `BytecodeVM<LispValue>`（避免每指令 trait 分派），
+  **泛型化留白**：若不出现 xisp 之外的宿主，就不必做（理由见 §6 风险）。
 
 ### 3.2 模块与接口草案（仓颉）
 
@@ -76,14 +83,24 @@ public class FnUnit<T> {                    // 编译单元（函数）
 public enum CompiledCode<T> { | Unit(FnUnit<T>) }
 
 // ---- module: vm ----
-public interface ValueHost<T> {             // 宿主值语义
+public interface ValueHost<T> {             // 宿主值语义（VM → 宿主方向）
     func isCallable(v: T): Bool
     func call(f: T, args: ArrayList<T>, env: Object): T
     func callNamed(name: String, args: ArrayList<T>, env: Object): T
+
+    // 【2026-09-27 补】指令派发钩子：宿主在每指令分派处插快速路径
+    //   （xisp 的 JIT 经此接入，见 vm.cj:599）。不装钩子时必须零开销；形态待定（拦截式 / 通知式）。
 }
-public class RegisterVM<T> {
+public class RegisterVM<T> {                // 宿主 → VM 方向
     // 帧切换/寄存器栈/globalRefs 解析/嵌套执行安全（从 BytecodeVM 平移，全量保留）
     public func execute(code: CompiledCode<T>, env: Object, host: ValueHost<T>): T
+
+    // 【2026-09-27 补】宿主调用"编译闭包"（xisp higher_order.cj:510 需要）
+    public func callClosure(id: Int64, args: ArrayList<T>, env: Object): T
+
+    // 【2026-09-27 补】闭包 id → 参数/体（xisp higher_order.cj:513 现在直读静态表
+    //   BytecodeVM.functionTable，跨包后不可见）。返回类型待定。
+    public func closureProcedure(id: Int64): Option<ClosureRef<T>>
 }
 
 // ---- module: compiler-kit ----
@@ -97,6 +114,17 @@ public open class Codegen {
 }
 ```
 
+### 3.2.1 2026-09-27 补记：接口必须双向
+
+原草案的 `ValueHost<T>` 只覆盖 **VM → 宿主**方向（求值过程中调宿主函数）。
+但 xisp 作为宿主还需要 **宿主 → VM** 方向的三项，缺了拆不动——这三项是 §2.2 耦合点清单的直接落点：
+
+| 需求 | xisp 现位置 | 落点 |
+|---|---|---|
+| 调编译闭包 | `higher_order.cj:510` `vm.callClosure(id, args, env)` | `RegisterVM.callClosure` |
+| 闭包 id 还原 | `higher_order.cj:513` 直读 `BytecodeVM.functionTable`（静态表，跨包不可见） | `RegisterVM.closureProcedure` |
+| JIT 快速路径 | `vm.cj:599` | `ValueHost` 的指令派发钩子 |
+
 ### 3.3 xisp 适配层（留在 xisp 内）
 
 - `LispValueHost <: ValueHost<LispValue>`：实现 `call`（NativeFunc/Procedure/Closure/Macro 分派，现 callFunction 逻辑平移）、`callNamed`（Str(name) 解析）；
@@ -105,13 +133,14 @@ public open class Codegen {
 
 ### 3.4 验收标准
 
-1. `bytecode-fw` 可独立 cjpm 构建（零 xisp 依赖）；
+1. `bytecode_kit` 可独立 cjpm 构建（零 xisp 依赖）；
 2. xisp 字节码模式**行为与性能不回归**（全量测试 + 基准 ~18.7x）；
-3. 提供最小示例宿主（~100 行的"计数器语言"）证明"新语言接入"路径通畅。
+3. 提供最小示例宿主（~100 行的"计数器语言"）证明"新语言接入"路径通畅
+   —— **可选但推荐**：它同时验证了"特化形状没有写死成 xisp 专用"。
 
 ---
 
-## 4. 方案 B：语义规则化（第二步）
+## 4. 方案 B：语义规则化（**不做**，设计保留）
 
 把 xisp 的前端从"手写 match 分派"改造成**规则表 + 基座**：
 
@@ -128,7 +157,7 @@ public struct SemRule<T> {
 
 ---
 
-## 5. 方案 C：语法驱动生成器（第三步，本设计核心，**先不做**）
+## 5. 方案 C：语法驱动生成器（**不做**，设计保留）
 
 ### 5.1 为什么 EBNF 单独不够
 
@@ -200,13 +229,13 @@ emit = """
 
 ## 6. 路线图与工作量
 
-| 阶段 | 内容 | 工作量（人日估） | 产出 |
-|---|---|---|---|
-| A | bytecode-fw 拆分 + 泛型化 + xisp 适配 | 3–5 | cjpm 包 `bytecode-fw` v0.1 |
-| B | 语义规则化（xisp 前端规则表） | 2–3 | 前端"语言描述"第一版 |
-| C1 | 生成器（EBNF→parser + 模板→codegen） | 10–15 | `langforge` CLI（暂名） |
-| C2 | isa.toml → 指令常量/VM 骨架 | 3–5 | 指令集描述化 |
-| C3 | 演示语言（微 Pascal/类 C 子集） | 3–5 | 端到端验证 |
+| 阶段 | 内容 | 工作量（人日估） | 产出 | 状态 |
+|---|---|---|---|---|
+| A | `bytecode_kit` 拆分 + xisp 适配（**特化优先**，泛型化留白） | 3–5 | cjpm 包 `ystyle::bytecode_kit` v0.1 | **实施** |
+| B | 语义规则化（xisp 前端规则表） | 2–3 | 前端"语言描述"第一版 | **不做** |
+| C1 | 生成器（EBNF→parser + 模板→codegen） | 10–15 | `langforge` CLI（暂名） | **不做** |
+| C2 | isa.toml → 指令常量/VM 骨架 | 3–5 | 指令集描述化 | **不做** |
+| C3 | 演示语言（微 Pascal/类 C 子集） | 3–5 | 端到端验证 | **不做** |
 
 **风险**：
 - 泛型化 VM 在仓颉中可能遇到 trait 约束/性能问题——方案 A 先做**特化版本**（`BytecodeVM<LispValue>` 直接内联 `ValueHost` 调用，避免每指令 trait 分派），实测性能后决定是否走泛型接口；
@@ -216,10 +245,10 @@ emit = """
 
 ## 7. 后续待办（依序执行）
 
-1. 评审本设计（重点：A 的接口边界、C 的模板 DSL 原语充分性）；
-2. 实施 A：拆分 `bytecode-fw` 并用 xisp 全量测试 + 基准回归验收；
-3. 实施 B：规则表化 xisp 前端（同时服务 AST 求值器与字节码编译器）；
-4. 实施 C1：定义 .ebnf/.tmpl/isa 格式规范，写生成器原型（先支持一个玩具语言验证闭环）。
+1. ~~评审本设计~~ —— **已完成（2026-09-27）**：只实施方案 A；方案 B / C 不做，设计保留在 §4 / §5；
+2. 实施 A：拆分 `ystyle::bytecode_kit`（**特化优先**）并用 xisp 全量测试 + 基准回归验收；
+   - 接口按 §3.2.1 补记的三项定（`callClosure` / `closureProcedure` / 指令派发钩子）；
+3. （B / C 不在本计划内，谁要谁捡。）
 
 ---
 
