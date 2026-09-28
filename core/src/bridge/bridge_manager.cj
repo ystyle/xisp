@@ -26,19 +26,21 @@ public class BridgeManager {
         name: String,
         handler: (ArrayList<LispValue>) -> LispValue
     ): Unit {
-        this.env.define(name, NativeFunc(handler))
+        Bridge.registerFunc(this.env, name, handler)
     }
 
     /**
      * 注册带命名空间的桥接函数
+     *
+     * 生成的完整符号为 `ns::name`（双冒号），与 `Bridge.registerFuncWithNS`
+     * 和标准库桥接（`cangjie::read-file`）保持同一约定。
      */
     public func registerWithNS(
         ns: String,
         name: String,
         handler: (ArrayList<LispValue>) -> LispValue
     ): Unit {
-        let fullName = "${ns}:${name}"
-        this.env.define(fullName, NativeFunc(handler))
+        Bridge.registerFuncWithNS(this.env, ns, name, handler)
     }
 
     /**

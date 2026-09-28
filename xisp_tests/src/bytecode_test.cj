@@ -474,4 +474,21 @@ class BytecodeTest {
             case Some(_) => @Fail("guard clauses must not compile; should fallback to AST")
         }
     }
+
+    /**
+     * 反向调用的实参按值注入（列表实参包成 `(quote value)`）。
+     * 该表达式是运行时构造后交给后端的，故必须确认 VM 能编译并正确执行 quote，
+     * 而不是只在 AST 求值器下成立。
+     */
+    @TestCase
+    func testReverseCallWithListArgUnderBytecode() {
+        let interpreter = LispInterpreter([withStdLib(), withBytecodeCompiler()])
+        interpreter.eval("(define (sum-list lst) (reduce + 0 lst))")
+
+        let result = interpreter.call("sum-list", [ArrayList<Int64>([1, 2, 3, 4])])
+        match (result) {
+            case LispValue.Int(i) => @Assert(i == 10)
+            case _ => @Fail("期望 Int(10)，实际 ${result}")
+        }
+    }
 }

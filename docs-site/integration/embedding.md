@@ -124,6 +124,9 @@ runSimpleRepl(interpreter)
 `call<T>(funcName: String, args: Array<T>): LispValue` 从仓颉调用已定义的 Lisp 函数，参数自动经 `LispConvertible` 转换为 LispValue：
 
 ```cangjie
+import ystyle::xisp.*
+import ystyle::xisp.bridge.*   // asInt() / asString() 等（ExtendLispValue）
+
 let interpreter = LispInterpreter([withStdLib()])
 
 // 先定义 Lisp 函数
@@ -199,6 +202,7 @@ interpreter.registerKeywordAlias("定义", "define")
 ```cangjie
 import std.time.*
 import ystyle::xisp.*
+import ystyle::xisp.bridge.*   // asString() 等（ExtendLispValue）
 
 main() {
     // 1. 创建带选项的解释器
@@ -241,7 +245,7 @@ main() {
 | `evalFile` | `func evalFile(filePath: String): LispValue` | 执行脚本文件，支持相对导入 |
 | `runRepl` | `func runRepl(interp: LispInterpreter): Int64` | 启动增强版 REPL（`ystyle::xisp_repl` 模块函数） |
 | `runSimpleRepl` | `func runSimpleRepl(interp: LispInterpreter): Int64` | 启动简易版 REPL（`ystyle::xisp_repl` 模块函数） |
-| `call` | `func call<T>(funcName, args: Array<T>): LispValue where T <: LispConvertible` | 反向调用 Lisp 函数 |
+| `call` | `func call<T>(funcName, args: Array<T>): LispValue where T <: LispConvertible` | 反向调用 Lisp 函数；实参按值注入（列表值包 `(quote value)`），异构实参用 `LispValue` 装箱 |
 | `getEnvironment` | `func getEnvironment(): Environment` | 获取顶层环境 |
 | `reset` | `func reset(): Unit` | 重置环境与求值器（保留配置字段） |
 | `setMaxStackDepth` | `func setMaxStackDepth(depth: Int64): Unit` | 设置栈深度 |
@@ -250,7 +254,7 @@ main() {
 | `setOutputFn` | `func setOutputFn(fn: (String) -> Unit): Unit` | 自定义输出 |
 | `registerKeywordAlias` | `func registerKeywordAlias(alias, original: String): Unit` | 注册关键字别名 |
 | `registerBridgeFunction` | `func registerBridgeFunction(name: String, handler: (ArrayList<LispValue>) -> LispValue): Unit` | 注册无命名空间桥接函数 |
-| `registerBridgeFunctionWithNS` | `func registerBridgeFunctionWithNS(ns, name: String, handler: (ArrayList<LispValue>) -> LispValue): Unit` | 注册带命名空间桥接函数 |
+| `registerBridgeFunctionWithNS` | `func registerBridgeFunctionWithNS(ns, name: String, handler: (ArrayList<LispValue>) -> LispValue): Unit` | 注册带命名空间桥接函数（符号为 `ns::name`，双冒号） |
 
 ## 参见
 

@@ -25,6 +25,16 @@ public interface LispConvertible {
  * 为基本类型实现 LispConvertible 接口
  */
 
+// LispValue 自身 —— 恒等转换。
+// 反向调用（宿主调 Lisp）的实参是 `Array<T>`（同构），若只能传标量/集合，
+// 就没法构造「一个列表 + 一个标量」这样的异构实参表；实现本接口后
+// `Array<LispValue>` 可用，异构实参得以表达。
+extend LispValue <: LispConvertible {
+    public func toLisp(): LispValue {
+        this
+    }
+}
+
 // 整数类型
 extend Int8 <: LispConvertible {
     public func toLisp(): LispValue {

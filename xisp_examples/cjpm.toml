@@ -56,3 +56,7 @@ compile-option = "--static"
 [package.package-configuration."ystyle::xisp_examples.modules_demo"]
 output-type = "executable"
 compile-option = "--static"
+
+[package.package-configuration."ystyle::xisp_examples.bridge_demo"]
+output-type = "executable"
+compile-option = "--static"

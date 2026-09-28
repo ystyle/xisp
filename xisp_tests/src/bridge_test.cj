@@ -142,4 +142,79 @@ class BridgeTest {
             case _ => @Fail("HashSet first should be 1")
         }
     }
+
+    /**
+     * 命名空间桥接统一用双冒号 `ns::name`。
+     *
+     * `interpreter.registerBridgeFunctionWithNS` 与 `Bridge.registerFuncWithNS`
+     * 若各拼一种（单冒号 / 双冒号），同一个概念就会有两套拼写，且没有任何机制
+     * 保证它们一致 —— 两处必须产出同一个符号。
+     */
+    @TestCase
+    func testRegisterBridgeFunctionWithNSUsesDoubleColon() {
+        println("\n=== 测试命名空间桥接（interpreter 路径） ===")
+
+        let interpreter = LispInterpreter([withStdLib()])
+        interpreter.registerBridgeFunctionWithNS("mycalc", "add", { args =>
+            match ((args[0], args[1])) {
+                case (LispValue.Int(a), LispValue.Int(b)) => LispValue.Int(a + b)
+                case _ => LispValue.Error(XispError(ErrorType.TypeError, "add: requires 2 numbers"))
+            }
+        })
+
+        let result = interpreter.eval("(mycalc::add 3 4)")
+        match (result) {
+            case LispValue.Int(i) =>
+                @Assert(i == 7)
+                println("✓ (mycalc::add 3 4) = ${i}")
+            case _ => @Fail("期望 Int(7)，实际 ${result}")
+        }
+
+        // 单冒号拼写不再存在
+        let oldForm = interpreter.eval("(mycalc:add 3 4)")
+        match (oldForm) {
+            case LispValue.Error(_) => println("✓ 单冒号拼写未注册")
+            case _ => @Fail("单冒号拼写不应可用，实际 ${oldForm}")
+        }
+    }
+
+    /**
+     * `Bridge.registerFuncWithNS` 与 interpreter 路径产出同一符号。
+     */
+    @TestCase
+    func testRegisterFuncWithNSMatchesInterpreterPath() {
+        println("\n=== 测试命名空间桥接（Bridge 路径） ===")
+
+        let env = Environment()
+        BuiltinFunctions.registerAll(env)
+        Bridge.registerFuncWithNS(env, "mymodule", "func", { _ => LispValue.Int(42) })
+        let evaluator = Evaluator(env)
+
+        let result = evaluator.eval(Parser.parseSingleFromString("(mymodule::func)"))
+        match (result) {
+            case LispValue.Int(i) =>
+                @Assert(i == 42)
+                println("✓ (mymodule::func) = ${i}")
+            case _ => @Fail("期望 Int(42)，实际 ${result}")
+        }
+    }
+
+    /**
+     * 命名空间本身不允许含 `::`（否则符号归属变得不可解析）。
+     */
+    @TestCase
+    func testRegisterFuncWithNSRejectsColonInNamespace() {
+        println("\n=== 测试命名空间校验 ===")
+
+        let env = Environment()
+        BuiltinFunctions.registerAll(env)
+        Bridge.registerFuncWithNS(env, "bad::ns", "func", { _ => LispValue.Int(1) })
+        let evaluator = Evaluator(env)
+
+        let result = evaluator.eval(Parser.parseSingleFromString("(bad::ns::func)"))
+        match (result) {
+            case LispValue.Error(_) => println("✓ 含 :: 的命名空间被拒绝")
+            case _ => @Fail("含 :: 的命名空间不应注册成功，实际 ${result}")
+        }
+    }
 }

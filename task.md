@@ -14,6 +14,7 @@
 - ✅ M4.9: ModuleSource 模块数据源抽象
 - ✅ M5: 工作区化拆分（阶段 1）
 - ✅ M6: 字节码后端拆分（阶段 2）
+- ✅ M14: 桥接反向调用与命名空间统一
 
 ---
 
@@ -588,5 +589,44 @@
 
 **验证**：`cjpm build` 通过；`cjpm test` **427/427**；`cjpm ws check` 通过（拓扑序 `xisp → xisp_bc → …`）；
 只依赖 `ystyle::xisp` 的探针产物中 `Bytecode:` / JIT 字面量均为 **0**（CLI 对照 1 / 5）。
+
+**完成时间**: 2026-09-28
+
+---
+
+## M14: 桥接反向调用与命名空间统一 ✅
+
+修掉桥接层三处长期存在的问题：反向调用的集合实参、命名空间两套拼写、文档与代码不一致。
+
+**1. 反向调用 `call` 的集合实参（真 bug）**
+
+- 现象：`call("sum-list", [ArrayList<Int64>([1,2,3,4])])` → `[TypeError] Attempt to call a non-function value: 1`
+- 根因：`call` 把 `toLisp()` 产出的实参直接拼进调用式再交给求值器；列表值（`Cons`）落在**代码位置**上被二次求值
+  （`(sum-list (1 2 3 4))` 试图调用 `1`）。不是"实参被展开成多个"。
+- 修法：实参**按值注入** —— 列表值包成 `(quote value)`，与 `thread-first` 既有做法一致；
+  该做法在 VM / JIT 下同样成立（`compileQuote` 走 `OP_PUSH_CONSTANT`），已有字节码模式回归用例
+- 配套：`extend LispValue <: LispConvertible`（恒等转换）。`call` 的实参是 `Array<T>`（同构），
+  没有它就无法表达「一个列表 + 一个标量」的异构实参
+
+**2. 命名空间分隔符统一为 `::`**
+
+- 根因：**一次漏改**，不是两次决策。init 时 `Bridge.registerFuncWithNS` 与 `BridgeManager.registerWithNS`
+  都是单冒号；`2ee656e`（统一命名空间为 `cangjie::`）只改了前者，后者当时嵌在 `interpreter.cj` 里被漏掉，
+  文档却同步改成了 `::` —— 从此文档与代码分叉。`bf49919` 把 `BridgeManager` 原样搬出，单冒号一并带走。
+  两处均**零测试覆盖**，所以当时"155 个测试通过"没能拦住。
+- 修法：`BridgeManager.register` / `registerWithNS` 直接委托 `Bridge.registerFunc` / `registerFuncWithNS`
+  —— 消除重复实现，顺带获得命名空间校验。`ns::name` 与标准库桥接（`cangjie::read-file`）同一约定
+- 破坏性：已发布的 `ns:name` 行为改变（0.5.0 未发布，无外部影响）
+
+**3. 文档与代码一致性**
+
+- `ErrorType.TypeMismatch` 不存在（`ErrorType` 是 8 成员封闭枚举），文档 4 处 → `TypeError`
+- 文档示例的 import 不完整（`LispValue` 在 `ystyle::xisp.types`，`asInt()` 在 `ystyle::xisp.bridge`
+  的 `ExtendLispValue` 上）——**这些示例从未编译过**，正是错名能存活的原因
+- 新增**可编译示例** `xisp_examples/src/bridge_demo/main.cj`，与文档「完整示例」逐行对应：
+  文档里的 API 名字从此受编译校验保护
+
+**测试**：新增 11 个用例（反向调用 7：ArrayList / Array / HashSet / 空列表 / 嵌套列表 / 异构实参 / 返回列表；
+命名空间 3 + 字节码模式回归 1）。全量 `cjpm test` 通过。
 
 **完成时间**: 2026-09-28

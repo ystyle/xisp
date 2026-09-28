@@ -15,7 +15,9 @@ Xisp 桥接层（`core/src/bridge/`）提供 Lisp 与仓颉之间的**双向互�
 在解释器上直接注册（`interpreter.cj`）：
 
 ```cangjie
-import ystyle::xisp.*
+import ystyle::xisp.*          // LispInterpreter / 选项
+import ystyle::xisp.types.*    // LispValue / XispError / ErrorType
+import ystyle::xisp.bridge.*   // asInt() 等（ExtendLispValue）
 
 let interpreter = LispInterpreter([withStdLib()])
 
@@ -24,7 +26,7 @@ interpreter.registerBridgeFunction("square", { args =>
     if (args.size > 0 && let LispValue.Int(n) <- args[0]) {
         LispValue.Int(n * n)
     } else {
-        LispValue.Error(XispError(ErrorType.TypeMismatch, "square: expected a number"))
+        LispValue.Error(XispError(ErrorType.TypeError, "square: expected a number"))
     }
 })
 interpreter.eval("(square 5)")   // => 25
@@ -37,18 +39,21 @@ interpreter.registerBridgeFunctionWithNS("mycalc", "add", { args =>
     if (args.size >= 2 && let LispValue.Int(a) <- args[0] && let LispValue.Int(b) <- args[1]) {
         LispValue.Int(a + b)
     } else {
-        LispValue.Error(XispError(ErrorType.TypeMismatch, "add: requires 2 numbers"))
+        LispValue.Error(XispError(ErrorType.TypeError, "add: requires 2 numbers"))
     }
 })
 ```
 
-::: warning 命名空间分隔符差异
-源码中两处 `registerWithNS` 行为**不一致**，使用时务必区分：
+::: tip 命名空间分隔符
+命名空间与函数名统一用**双冒号** `::` 连接，生成符号 `ns::name`（如 `(mycalc::add 3 4)`）。
 
-- `interpreter.registerBridgeFunctionWithNS(ns, name, handler)` 走 `BridgeManager.registerWithNS`，生成**单冒号**符号：`ns:name`，Lisp 中调用 `(mycalc:add 3 4)`。
-- `Bridge.registerFuncWithNS(env, ns, name, handler)` 走 `Bridge.registerFuncWithNS`，生成**双冒号**符号：`ns::name`，Lisp 中调用 `(cangjie::read-file "x")`。
+`interpreter.registerBridgeFunctionWithNS` 与 `Bridge.registerFuncWithNS` 是同一个约定：
+前者只是后者的实例方法入口（`BridgeManager.registerWithNS` 直接委托），不再各自拼一种分隔符。
+`BridgeManager.registerWithNS` 与 `Bridge.registerFuncWithNS` 现在产出完全相同的符号。
 
-标准库桥接函数（`cangjie::read-file` 等）均为双冒号形式。
+标准库桥接函数（`cangjie::read-file` 等）同为双冒号形式。
+
+命名空间本身**不允许包含 `::`**；注册时会校验并拒绝。
 :::
 
 ### 底层：Bridge / BridgeManager
@@ -57,10 +62,11 @@ interpreter.registerBridgeFunctionWithNS("mycalc", "add", { args =>
 
 ```cangjie
 import ystyle::xisp.bridge.*
+import ystyle::xisp.types.*    // LispValue
 
 // 静态方法，可直接传入 Environment
 Bridge.registerFunc(env, "my-func", { args => LispValue.Int(42) })
-Bridge.registerFuncWithNS(env, "mymodule", "func", { args => LispValue.Int(42) })
+Bridge.registerFuncWithNS(env, "mymodule", "func", { args => LispValue.Int(42) })  // 双冒号 mymodule::func
 
 // 一次性注册标准库
 Bridge.registerStdIO(env)                       // 无路径检查
@@ -75,7 +81,7 @@ Bridge.registerAll(env)                         // 上述全部
 ```cangjie
 let bridge = interpreter.bridge
 bridge.register("func-name", { args => ... })          // 无命名空间
-bridge.registerWithNS("ns", "func-name", { args => ... })  // 单冒号 ns:func-name
+bridge.registerWithNS("ns", "func-name", { args => ... })  // 双冒号 ns::func-name
 bridge.registerStdIO()                                  // 绑定解释器的路径检查回调
 bridge.registerStdFS()
 ```
@@ -259,6 +265,8 @@ if (let Some(i) <- result.asInt()) {
 ### 自定义类型的双向转换
 
 ```cangjie
+import ystyle::xisp.types.*    // LispValue / LispConvertible / LispDeserializable
+
 class MyType {
     let data: String
     public init(data: String) { this.data = data }
@@ -292,22 +300,25 @@ if (let Some(myType) <- MyType.fromLisp(lispValue)) {
 ## 完整示例：桥接函数 + 反向调用
 
 ```cangjie
-import ystyle::xisp.*
+import ystyle::xisp.*          // LispInterpreter / 选项
+import ystyle::xisp.types.*    // LispValue / XispError / ErrorType
+import ystyle::xisp.bridge.*   // asInt() 等（ExtendLispValue）
+import std.collection.ArrayList
 
 main() {
     let interpreter = LispInterpreter([withStdLib(), withQuietMode()])
 
     // 1. 注册仓颉函数到 Lisp
     interpreter.registerBridgeFunctionWithNS("math", "double", { args =>
-        if (let LispValue.Int(n) <- args[0]) {
+        if (args.size > 0 && let LispValue.Int(n) <- args[0]) {
             LispValue.Int(n * 2)
         } else {
-            LispValue.Error(XispError(ErrorType.TypeMismatch, "double: expected number"))
+            LispValue.Error(XispError(ErrorType.TypeError, "double: expected number"))
         }
     })
 
     // 2. Lisp 中使用桥接函数
-    interpreter.eval("(define x (math:double 21))")
+    interpreter.eval("(define x (math::double 21))")
     let result = interpreter.eval("(* x 2)")
     if (let Some(i) <- result.asInt()) {
         println(i)   // 84
@@ -319,16 +330,47 @@ main() {
     if (let Some(i) <- total.asInt()) {
         println(i)   // 10
     }
+
+    // 4. 列表 + 标量的异构实参：`call` 的实参是 `Array<T>`（同构），
+    //    异构实参用 `LispValue` 装箱成 `Array<LispValue>`
+    interpreter.eval("(define (len-plus lst n) (+ (length lst) n))")
+    let lst: LispValue = ArrayList<Int64>([1, 2, 3]).toLisp()
+    let mixed = interpreter.call("len-plus", [lst, LispValue.Int(7)])
+    if (let Some(i) <- mixed.asInt()) {
+        println(i)   // 10
+    }
 }
 ```
+
+> 本示例有对应的**可编译版本**：[`xisp_examples/src/bridge_demo/main.cj`](https://gitcode.com/ystyle/xisp/blob/master/xisp_examples/src/bridge_demo/main.cj)。
+> 文档里的 API 名字受它的编译校验保护；改这里请同步改那份。
+
+::: tip 实参按值注入
+`call` 会把实参转换成 Lisp 值后**按值**传给目标函数：列表值（`Array` / `ArrayList` /
+`HashSet`）会包成 `(quote value)` 再进调用式，不会被求值器当作代码再次求值。
+
+正因为实参走的是 `Array<T>`（同构），要传「一个列表 + 一个标量」这类异构组合，
+需要先把各项装箱成 `LispValue`（`LispValue` 实现了 `LispConvertible`，`toLisp()` 为恒等转换）。
+:::
+
+::: tip 实参按值注入
+`call` 会把实参转换成 Lisp 值后**按值**传给目标函数：列表值（`Array` / `ArrayList` /
+`HashSet`）会包成 `(quote value)` 再进调用式，不会被求值器当作代码再次求值。
+
+正因为实参走的是 `Array<T>`（同构），要传「一个列表 + 一个标量」这类异构组合，
+需要先把各项装箱成 `LispValue`（`LispValue` 实现了 `LispConvertible`，`toLisp()` 为恒等转换）。
+:::
 
 ---
 
 ## 注意事项
 
 - **参数校验**：桥接函数务必用模式匹配校验参数类型，避免把异常抛回 Lisp 求值环境。
-- **错误返回**：用 `LispValue.Error(XispError(kind, message))` 返回错误，配合 `ErrorType`（如 `TypeMismatch`、`IOError`、`ArityMismatch`）。
-- **命名空间**：注意单冒号（`BridgeManager.registerWithNS`）与双冒号（`Bridge.registerFuncWithNS`）的区别。
+- **错误返回**：用 `LispValue.Error(XispError(kind, message))` 返回错误。`ErrorType` 是**封闭枚举**，全部成员为
+  `UnboundVariable` / `UndefinedFunction` / `TypeError` / `ArityMismatch` / `SyntaxError` / `RuntimeError` / `IOError` / `ModuleError`
+  —— 类型不符用 `TypeError`（没有 `TypeMismatch` 这个成员）。
+- **命名空间**：命名空间与函数名统一用双冒号 `::` 连接（`ns::name`），`interpreter.registerBridgeFunctionWithNS`
+  与 `Bridge.registerFuncWithNS` 是同一约定、同一符号。
 - **类型转换**：`asXxx()` 类型不匹配时返回 `None`，用 `if let`/`match` 处理。
 
 ## 参见

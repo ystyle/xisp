@@ -770,20 +770,29 @@ public class LispInterpreter {
      * }
      * ```
      *
+     * 实参按**值**注入：`toLisp()` 产出的列表（`Array` / `ArrayList` / `HashSet`）是
+     * `Cons` 结构，若原样放进调用式，求值器会把它当作**代码**再求值一次
+     * （`(f (1 2 3))` → 试图调用 `1`）。故与 thread-first 一致，用 `(quote value)`
+     * 包裹列表值，使其求值为自身。
+     *
      * @param funcName 函数名
      * @param args 0个或多个参数，自动调用 toLisp() 转换
      * @return 函数返回值（LispValue 格式）
      */
     public func call<T>(funcName: String, args: Array<T>): LispValue where T <: LispConvertible {
-        // 将参数转换为 LispValue
-        let lispArgs = ArrayList<LispValue>()
+        // 将参数转换为 LispValue，并把列表值包装成 (quote value) 按值注入
+        let argForms = ArrayList<LispValue>()
         for (arg in args) {
-            lispArgs.add(arg.toLisp())
+            let value = arg.toLisp()
+            if (value.isList()) {
+                argForms.add(consValue(Symbol("quote"), consValue(value, Nil)))
+            } else {
+                argForms.add(value)
+            }
         }
 
         // 构造函数调用表达式：(funcName arg1 arg2 ...)
-        let argsList = list(lispArgs)
-        let callExpr = consValue(Symbol(funcName), argsList)
+        let callExpr = consValue(Symbol(funcName), list(argForms))
 
         // 求值并返回
         this.evaluator.eval(callExpr)

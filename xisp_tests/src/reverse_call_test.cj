@@ -4,6 +4,7 @@ import ystyle::xisp.*
 
 import std.unittest.*
 import std.unittest.testmacro.*
+import std.collection.*
 import ystyle::xisp.bridge.*
 import ystyle::xisp.core.eval.*
 import ystyle::xisp.core.builtin.*
@@ -297,5 +298,155 @@ class ReverseCallTest {
             case Boolean(b) => @Assert(b == true)
             case _ => @Fail("期望返回 Boolean")
         }
+    }
+
+    /**
+     * 集合实参必须按值注入。
+     *
+     * 反例（修复前）：`call` 把 `toLisp()` 产出的 `Cons` 直接放进被求值的调用式，
+     * 求值器把列表当代码再求值 —— `(sum-list (1 2 3 4))` 试图调用 `1`，
+     * 报 `TypeError: Attempt to call a non-function value: 1`。
+     */
+    @TestCase
+    func testCallWithArrayListArg() {
+        println("\n=== 测试 call 方法 - 列表实参（ArrayList） ===")
+
+        let interpreter = LispInterpreter([withStdLib()])
+        interpreter.eval("(define (sum-list lst) (reduce + 0 lst))")
+
+        let result = interpreter.call("sum-list", [ArrayList<Int64>([1, 2, 3, 4])])
+
+        match (result) {
+            case LispValue.Int(i) =>
+                @Assert(i == 10)
+                println("✓ sum-list(ArrayList) = ${i}")
+            case _ => @Fail("期望 Int(10)，实际 ${result}")
+        }
+    }
+
+    @TestCase
+    func testCallWithArrayArg() {
+        println("\n=== 测试 call 方法 - 列表实参（Array） ===")
+
+        let interpreter = LispInterpreter([withStdLib()])
+        interpreter.eval("(define (sum-list lst) (reduce + 0 lst))")
+
+        let result = interpreter.call("sum-list", [[1, 2, 3, 4]])
+
+        match (result) {
+            case LispValue.Int(i) =>
+                @Assert(i == 10)
+                println("✓ sum-list(Array) = ${i}")
+            case _ => @Fail("期望 Int(10)，实际 ${result}")
+        }
+    }
+
+    /**
+     * HashSet 同样经 list() 转成 Cons，走同一条按值注入路径。
+     */
+    @TestCase
+    func testCallWithHashSetArg() {
+        println("\n=== 测试 call 方法 - 集合实参（HashSet） ===")
+
+        let interpreter = LispInterpreter([withStdLib()])
+        interpreter.eval("(define (count-of lst) (length lst))")
+
+        let set = HashSet<Int64>()
+        set.add(1)
+        set.add(2)
+        set.add(3)
+        let result = interpreter.call("count-of", [set])
+
+        match (result) {
+            case LispValue.Int(i) =>
+                @Assert(i == 3)
+                println("✓ count-of(HashSet) = ${i}")
+            case _ => @Fail("期望 Int(3)，实际 ${result}")
+        }
+    }
+
+    /**
+     * 空列表实参：`Nil` 也是自求值的列表字面量，不应被误当成"无实参"。
+     */
+    @TestCase
+    func testCallWithEmptyListArg() {
+        println("\n=== 测试 call 方法 - 空列表实参 ===")
+
+        let interpreter = LispInterpreter([withStdLib()])
+        interpreter.eval("(define (is-empty? lst) (null? lst))")
+
+        let result = interpreter.call("is-empty?", [ArrayList<Int64>()])
+
+        match (result) {
+            case Boolean(b) =>
+                @Assert(b == true)
+                println("✓ is-empty?(空列表) = ${b}")
+            case _ => @Fail("期望 Boolean(true)，实际 ${result}")
+        }
+    }
+
+    /**
+     * 嵌套列表：内层列表若被求值，同样会炸。
+     */
+    @TestCase
+    func testCallWithNestedListArg() {
+        println("\n=== 测试 call 方法 - 嵌套列表实参 ===")
+
+        let interpreter = LispInterpreter([withStdLib()])
+        interpreter.eval("(define (outer-count lst) (length lst))")
+
+        let inner1 = ArrayList<Int64>([1, 2])
+        let inner2 = ArrayList<Int64>([3, 4, 5])
+        let outer = ArrayList<ArrayList<Int64>>()
+        outer.add(inner1)
+        outer.add(inner2)
+
+        let result = interpreter.call("outer-count", [outer])
+
+        match (result) {
+            case LispValue.Int(i) =>
+                @Assert(i == 2)
+                println("✓ outer-count(嵌套列表) = ${i}")
+            case _ => @Fail("期望 Int(2)，实际 ${result}")
+        }
+    }
+
+    /**
+     * 异构实参：`call` 的实参是 `Array<T>`（同构），列表 + 标量必须借
+     * `LispValue` 装箱成 `Array<LispValue>`。
+     */
+    @TestCase
+    func testCallWithListAndScalarArgs() {
+        println("\n=== 测试 call 方法 - 列表 + 标量异构实参 ===")
+
+        let interpreter = LispInterpreter([withStdLib()])
+        interpreter.eval("(define (len-plus lst n) (+ (length lst) n))")
+
+        let lst: LispValue = ArrayList<Int64>([1, 2, 3]).toLisp()
+        let result = interpreter.call("len-plus", [lst, LispValue.Int(7)])
+
+        match (result) {
+            case LispValue.Int(i) =>
+                @Assert(i == 10)
+                println("✓ len-plus(列表, 7) = ${i}")
+            case _ => @Fail("期望 Int(10)，实际 ${result}")
+        }
+    }
+
+    /**
+     * 反向调用返回列表值：返回值应能原样带回宿主侧。
+     */
+    @TestCase
+    func testCallReturnsListValue() {
+        println("\n=== 测试 call 方法 - 返回列表 ===")
+
+        let interpreter = LispInterpreter([withStdLib()])
+        interpreter.eval("(define (echo lst) lst)")
+
+        let result = interpreter.call("echo", [ArrayList<Int64>([1, 2, 3])])
+
+        @Assert(result.isList())
+        @Assert(result.toString() == "(1 2 3)")
+        println("✓ echo(list) = ${result}")
     }
 }
