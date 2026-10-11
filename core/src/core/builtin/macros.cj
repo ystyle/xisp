@@ -26,6 +26,8 @@ extend BuiltinMacros {
         defineNegateMacro(env)
         defineDoMacro(env)
         defineDefunMacro(env)
+        defineAndMacro(env)
+        defineOrMacro(env)
     }
 
     /**
@@ -160,6 +162,46 @@ extend BuiltinMacros {
      */
     private static func defineDefunMacro(env: Environment) {
         let code = "(defmacro defun (name args . body) (cons (quote define) (list (cons name args) (car body))))"
+        let exprs = Parser.parseFromString(code)
+        if (exprs.size > 0) {
+            let evaluator = Evaluator(env)
+            evaluator.eval(exprs[0])
+        }
+    }
+
+    /**
+     * 定义 and 宏 —— 短路求值
+     *
+     * (and)          → #t
+     * (and a)        → (if a a #f)
+     * (and a b ...)  → (if a (and b ...) #f)
+     *
+     * 为什么是宏而不是注册函数：注册函数会**先求值全部实参**，既不短路也不容忍
+     * 后续实参出错。实测 (and 0 (undefined-fn)) 在 AST 下报 UndefinedFunction，
+     * 而字节码后端（编译期展开成跳转）得到 false —— 两个后端语义不一致。
+     * 改为宏后两后端走同一份展开产物，语义统一。
+     */
+    private static func defineAndMacro(env: Environment) {
+        let code = "(defmacro and (. args) (if (null? args) #t (if (null? (cdr args)) `(if ,(car args) ,(car args) #f) `(if ,(car args) (and ,@(cdr args)) #f))))"
+        let exprs = Parser.parseFromString(code)
+        if (exprs.size > 0) {
+            let evaluator = Evaluator(env)
+            evaluator.eval(exprs[0])
+        }
+    }
+
+    /**
+     * 定义 or 宏 —— 短路求值，且首项只求值一次
+     *
+     * (or)          → #f
+     * (or a)        → (if a a #f)
+     * (or a b ...)  → (let ((g a)) (if g g (or b ...)))   ；g 由 gensym 生成
+     *
+     * 用 gensym 而非固定符号暂存首项：`defmacro` 是非卫生宏，固定符号会被调用点
+     * 的同名变量捕获（实测 (let ((tmp 5)) (my-or #f tmp)) 返回 false 而非 5）。
+     */
+    private static func defineOrMacro(env: Environment) {
+        let code = "(defmacro or (. args) (if (null? args) #f (if (null? (cdr args)) `(if ,(car args) ,(car args) #f) (let ((g (gensym))) `(let ((,g ,(car args))) (if ,g ,g (or ,@(cdr args))))))))"
         let exprs = Parser.parseFromString(code)
         if (exprs.size > 0) {
             let evaluator = Evaluator(env)
