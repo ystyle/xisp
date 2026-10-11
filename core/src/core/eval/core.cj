@@ -38,9 +38,24 @@ extend Evaluator {
             this.compileSuspended = false
         }
         if (!this.compileSuspended && let Some(b) <- this.backend) {
-            if (this.isMacroCallExpr(expr)) {
-                // 宏调用：展开体可能引用调用点局部（AST 环境），本树禁用编译（AST 展开）
-                this.compileSuspended = true
+            // 宏是语法层的东西：必须在编译前展开，否则会被后端编译成"运行时调宏"
+            // （每次调用重新展开，且参数已被求值 → 与 AST 语义可能不等价）。
+            // 展开后重新走本函数，让展开产物正常编译。
+            // 先做零分配探测：绝大多数表达式不含宏，不付展开成本。
+            if (this.containsMacroCall(expr)) {
+                let expanded = this.expandForCompile(expr)
+                match (expanded) {
+                    case Error(_) => return expanded
+                    case _ =>
+                        if (!this.isMacroCallExpr(expanded)) {
+                            // 已无宏：交给后端编译展开产物
+                            if (let Some(code) <- b.compile(expanded)) {
+                                return b.execute(code, this.env)
+                            }
+                        }
+                        // 仍含宏（如 defmacro 体等边界内）或编译失败：走 AST
+                        this.compileSuspended = true
+                }
             } else if (let Some(code) <- b.compile(expr)) {
                 return b.execute(code, this.env)
             } else {
