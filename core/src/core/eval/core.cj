@@ -38,11 +38,17 @@ extend Evaluator {
             this.compileSuspended = false
         }
         if (!this.compileSuspended && let Some(b) <- this.backend) {
-            // 宏是语法层的东西：必须在编译前展开，否则会被后端编译成"运行时调宏"
-            // （每次调用重新展开，且参数已被求值 → 与 AST 语义可能不等价）。
-            // 展开后重新走本函数，让展开产物正常编译。
-            // 先做零分配探测：绝大多数表达式不含宏，不付展开成本。
-            if (this.containsMacroCall(expr)) {
+            // 让位优先于编译：若表达式头是"已被用户重定义"的可让位符号
+            // （map / filter / reduce / apply / eval / -> / for-each），必须回退 AST
+            // —— 否则后端会按 core 的语义编译它，用户实现被绕过
+            // （实测：用户 define apply 后 AST 走用户实现，BC 仍返回 core 的结果）。
+            if (this.headIsDeferred(expr)) {
+                this.compileSuspended = true
+            } else if (this.containsMacroCall(expr)) {
+                // 宏是语法层的东西：必须在编译前展开，否则会被后端编译成"运行时调宏"
+                // （每次调用重新展开，且参数已被求值 → 与 AST 语义可能不等价）。
+                // 展开后重新走本函数，让展开产物正常编译。
+                // 先做零分配探测：绝大多数表达式不含宏，不付展开成本。
                 let expanded = this.expandForCompile(expr)
                 match (expanded) {
                     case Error(_) => return expanded
@@ -133,6 +139,12 @@ extend Evaluator {
      * 避免对每个特殊形式符号（如 + < if 等）都遍历环境链查询关键字别名。
      */
     private func trySpecialForm(sym: String, rest: LispValue): Option<LispValue> {
+        // 让位：map / filter / reduce / apply / eval / -> 若已被用户重新定义，
+        // 则不拦截，交给普通调用路径（判据与缓存见 defer_special_form.cj）。
+        // 算术符号（+ - * / < > =）的让位走各自 evalXxx 内部的 isNativeArith 守卫。
+        if (this.shouldDeferToUser(sym)) {
+            return None
+        }
         match (sym) {
             case "+" => Some(this.evalAdd(rest))
             case "-" => Some(this.evalSub(rest))
@@ -158,6 +170,7 @@ extend Evaluator {
             case "map" => Some(this.evalMap(rest))
             case "filter" => Some(this.evalFilter(rest))
             case "reduce" => Some(this.evalReduce(rest))
+            case "for-each" => Some(this.evalForEach(rest))
             case "match" => Some(this.evalMatch(rest))
             case "macroexpand" => Some(this.evalMacroexpand(rest))
             case "macroexpand-all" => Some(this.evalMacroexpandAll(rest))

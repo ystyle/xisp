@@ -54,6 +54,13 @@ public class Evaluator {
     var arithGuardVersion: Int64 = -1
     var arithGuardCache: Array<Bool> = Array<Bool>(7) { _ => false }
 
+    // 特殊形式"让位"缓存（map / filter / reduce / apply / eval / -> / for-each）
+    // deferGuardVersion 匹配 Environment.defineVersion.value 时缓存有效。
+    // 判据见 defer_special_form.cj：这 6 个名字 core 从不注册，故"环境里有绑定"
+    // 等价于"用户放了实现"。
+    var deferGuardVersion: Int64 = -1
+    var deferGuardCache: Array<Bool> = Array<Bool>(7) { _ => false }
+
     // 性能探针（调试用）
 
     /**

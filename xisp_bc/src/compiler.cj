@@ -172,7 +172,7 @@ public class BytecodeCompiler <: Compiler {
                     case "apply" => this.compileApply(cell.cdr)
                     case "->" => this.compileThreadFirst(cell.cdr)
                     case "eval" | "macroexpand" | "macroexpand-all" => false  // 运行时求值/语法树操作，回退 AST
-                    case "map" | "filter" | "reduce" => false  // AST 高阶循环（回调经 VM 执行）
+                    case "map" | "filter" | "reduce" | "for-each" => false  // AST 高阶循环（回调经 VM 执行）
                     case _ => this.compileCall(s, cell.cdr)
                 }
             case _ => false
