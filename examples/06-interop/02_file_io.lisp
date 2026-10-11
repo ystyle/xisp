@@ -61,7 +61,8 @@
 (println "代码: 获取所有 .lisp 文件")
 (define all-files (cangjie::list-dir "examples/01-basics"))
 (define (is-lisp-file? name)
-  (and (> (length name) 5)
+  ;; 用 string-length 判长度（length 只处理列表，非列表返回 0）
+  (and (>= (string-length name) 6)
        (= (first (rest (rest (rest (rest (rest name)))))) 46)  ; ASCII for '.'
        (= (first (rest (rest (rest (rest (rest (rest name))))))) 108)  ; 'l'
        (= (first (rest (rest (rest (rest (rest (rest (rest name)))))))) 105)))  ; 'i'

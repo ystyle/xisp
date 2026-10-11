@@ -32,3 +32,11 @@ jobs:
 
       - name: Test
         run: cjpm test --no-progress
+
+      # 三模式（AST / 字节码 / JIT）examples 一致性闸门。
+      #
+      # 这个脚本靠二进制路径找 CLI；工作区化（阶段 1）把包名从 xisp 改成
+      # xisp_cli 后路径失配，脚本静默退出码 2，此后半年未被实际执行。
+      # 进 CI 是防止它再次"看起来存在、其实没跑"。
+      - name: Examples 三模式一致性
+        run: bash lisp-tests/check-examples.sh

@@ -58,11 +58,12 @@ extend BuiltinFunctions {
                 case External(ext) =>
                     match (ext) {
                         case idx: LispExternalIndexable => LispValue.Int(idx.length())
-                        case _ => LispValue.Error(XispError(ErrorType.TypeError,
-                            "length: ${ext.typeName} is not indexable"))
+                        // 与"非列表返回 0"的既有约定一致
+                        case _ => LispValue.Int(0)
                     }
-                case other => LispValue.Error(XispError(ErrorType.TypeError,
-                    "length: expected a list or indexable value (got: ${other.toString()})"))
+                // 保持既有语义：**非列表返回 0**（文档 docs-site/api/list.md 明确如此）。
+                // 外部值若不实现 LispExternalIndexable，同样按此约定返回 0。
+                case _ => LispValue.Int(0)
             }
         }))
 

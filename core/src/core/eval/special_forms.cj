@@ -409,6 +409,15 @@ extend Evaluator {
 
             let testResult = this.eval(testExpr)
 
+            // 条件求值出错必须**传播**，不能当普通真/假值。
+            // 错误值不是 Boolean(false)/Nil/0，`isTruthy()` 会把它当真 → 走 then 分支，
+            // 于是 `(and (> (length "x") 5) …)` 这类展开式会把错误静默吞掉并算出错误结果
+            // （实测 AST 返回 true、字节码报 TypeError）。
+            match (testResult) {
+                case Error(_) => return testResult
+                case _ => ()
+            }
+
             if (testResult.isTruthy()) {
                 this.eval(thenExpr)
             } else {

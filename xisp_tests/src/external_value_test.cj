@@ -130,10 +130,12 @@ class ExternalValueTest {
         // 对照：普通列表仍正常
         @Assert(this.evalIn(it, "(length (quote (1 2 3)))") == "3")
         println("✓ (length '(1 2 3)) = 3")
-        // 未实现能力接口的外部值应明确报错，而不是静默返回 0
-        let r = this.evalIn(it, "(length 42)")
-        @Assert(r.contains("TypeError"))
-        println("✓ 非列表非可索引值报 TypeError（此前静默返回 0）")
+        // 未实现能力接口的值按既有约定返回 0（`length` 只处理列表，
+        // 见 docs-site/api/list.md：「非列表返回 0」）。取字符串长度用 string-length。
+        @Assert(this.evalIn(it, "(length 42)") == "0")
+        println("✓ 非列表值返回 0（与既有约定一致）")
+        @Assert(this.evalIn(it, "(string-length \"abc\")") == "3")
+        println("✓ (string-length \"abc\") = 3（取字符串长度需用专用函数）")
     }
 
     @TestCase

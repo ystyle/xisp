@@ -1,0 +1,62 @@
+"=== Xisp 文件 I/O 实践演示 ==="
+""
+"1. 创建日志文件"
+"代码: (cangjie::write-file "/tmp/app.log" "[INFO] Application started\n")"
+"日志文件已创建"
+""
+"2. 追加日志"
+"代码: (cangjie::append-file "/tmp/app.log" "[INFO] Processing data\n")"
+"日志已追加"
+""
+"3. 读取完整日志"
+"代码: (cangjie::read-file "/tmp/app.log")"
+"日志内容:
+[INFO] Application started
+[INFO] Processing data
+[INFO] Data processed successfully
+"
+""
+"4. 创建配置文件"
+"代码: (cangjie::write-file "/tmp/config.ini" "[settings]\nkey=value")"
+"配置文件已创建"
+""
+"5. 读取配置"
+"代码: (cangjie::read-file "/tmp/config.ini")"
+"配置内容:
+[settings]
+key=value
+count=42
+"
+""
+"6. 文件操作模式对比"
+"write-file: 覆盖模式 (每次写入会清空原文件)"
+"第一次写入后:"
+"  First content
+"
+"第二次写入后 (覆盖):"
+"  Second content
+"
+""
+"append-file: 追加模式 (在文件末尾添加)"
+"写入+追加后:"
+"  Base content
+Appended 1
+Appended 2
+"
+""
+"7. 实用示例 - 统计 Lisp 文件"
+"代码: 获取所有 .lisp 文件"
+"找到的 Lisp 文件:"
+""
+"8. 文件安全检查示例"
+"读取前检查文件是否存在"
+"README.md 存在，类型判断:"
+"  是文件: #{(cangjiefile? target)}"
+"  是目录: #{(cangjiedirectory? target)}"
+""
+"=== 文件 I/O 实践演示完成 ==="
+""
+"测试文件已创建:"
+"  - app.log (日志文件)"
+"  - config.ini (配置文件)"
+"  - mode_test.txt (模式测试)"
