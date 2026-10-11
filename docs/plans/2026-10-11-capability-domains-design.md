@@ -232,6 +232,119 @@ public func withPreset(preset: Array<LispCapability>): InterpreterOption
 
 ---
 
+### 3.8 分层要解决的真问题：**可替换**（不只是可裁剪）
+
+> 用户原话："除了最基本的，所有其它的都可以不要，而且同能力（或者符号）我们 core 带了，
+> 别人可以不要，直接用宏自行做一个，就是 lisp 大佬说的那样，lisp 实现 lisp 所有。"
+
+这把 §3.6 的"三类/四类"推进成一个更硬的目标：**裁剪是"不给"，替换是"给一个我自己的"。**
+两者判据完全不同——可裁剪只看"不注册是否生效"，**可替换还要看"core 的实现会不会被顶掉"**。
+
+#### 3.8.1 实测：可替换性极不均匀（2026-10-11）
+
+在默认环境里先重定义、再用原语法调用，看谁生效：
+
+| 符号 | 类别 | 用户重定义后 | 可替换？ |
+|---|---|---|---|
+| `car` `length` `not` `+` `<` | ③纯函数 | **用户的实现生效** | ✅ |
+| `and` | ② | **用户的实现生效**（`(defmacro my-and …)` + `define`） | ✅（见下注） |
+| `when` | ④宏 | **用户的宏生效** | ✅ |
+| `map` `filter` `reduce` | ② | `redef=#<procedure>` 但 **probe 仍是 core 的实现** | ❌ **顶不掉** |
+| `let` | ① | `(let ((x 1)) x)` 仍返回 `1`（走硬编码） | ❌ |
+| `if` `quote` `begin` | ① | 完全无效 | ❌ |
+
+**注**：`and` 之所以能替换，是因为它在**空环境里根本不存在**（`[UndefinedFunction]`），
+即它并非真特殊形式；`define` 一个同名宏即可接管。而 `map`/`filter`/`reduce` 在空环境下**仍然可用**
+（求值器直接拦截），所以 `define` 只能改"值"、改不了"行为"。
+
+**结论**：现状下，**③④类可替换、①②类不可替换**。而用户要的"除最基本的都能用宏自行实现"，
+要求的是**②类也可替换**——它们是"能纯 Lisp 写出来"的高阶函数（`my-map` 实测可用纯 Lisp 实现且行为一致），
+却被求值器硬编码占住了名字。
+
+#### 3.8.2 决定性事实：`for-each` 暴露了真正的技术门槛
+
+`for-each` 是③类（纯注册函数），但它**无法把 Lisp 闭包当回调**：
+
+```cangjie
+// core/src/core/builtin/builtin.cj:113
+if (let NativeFunc(proc) <- args[0]) { … }   // 只认 NativeFunc，Lisp 闭包被静默跳过
+```
+
+实测：`(for-each (lambda (x) x) '(1 2 3))` → `nil`（**什么都没发生，静默失败**）。
+而 `map`（求值器实现）能正常调用 Lisp 闭包，因为它走内部的 `applyProcedure`。
+
+**这就是"用宏自行实现"的硬门槛**：Lisp 层要自己实现 `map`/`filter`/`reduce`，
+就必须能**从 Lisp 调用任意 Lisp 函数值**——而 `applyProcedure` 是 `internal`
+（`core/src/core/eval/higher_order.cj:323`），桥接层与注册函数都拿不到。
+
+> 注意：纯 Lisp 自己实现 `map` **是可行的**（实测 `my-map` 递归版行为与 core 一致），
+> 因为它由求值器执行、天然能调闭包。**门槛只卡在"仓颉注册的同能力函数"上。**
+
+#### 3.8.3 推论：可实现替换需要两道接缝（本设计新增）
+
+| # | 接缝 | 作用 | 现状 |
+|---|---|---|---|
+| **A** | **Lisp 函数值调用入口**（`applyProcedure` 公开化，或经 `CapabilityContext.invoke`） | 让仓颉注册函数也能调 Lisp 闭包 → 用户可在④层复刻 `map`/`for-each` | ❌ `internal`，需新增 |
+| **B** | **②类符号的"让位"机制** | 用户提供同名实现时，求值器不再走硬编码快速路径 | ❌ 现状硬编码优先 |
+
+**A 的最小形态**（供注册函数与域使用）：
+
+```cangjie
+public class CapabilityContext {
+    public let env: Environment
+    public let isInterrupted: () -> Bool
+    public let register: (String, (ArrayList<LispValue>) -> LispValue) -> Unit
+    public let registerType: (String) -> Unit
+    public let invoke: (LispValue, ArrayList<LispValue>) -> LispValue   // ← 新增：调用任意 Lisp 函数值
+}
+```
+
+有了 `invoke`，④层宏包/域就能用仓颉或 Lisp 自由复刻 `map`/`filter`/`for-each`，
+而 `for-each` 现在那个"只认 NativeFunc"的静默失败也顺带修掉。
+
+**B 的判据**（与 §3.6 的收敛方向一致）：②类符号若**已由用户定义**，求值器应走用户的实现
+（即把硬编码降级为"默认实现"而非"抢占名字"）。这与 §3.6 的"②类收敛为一等值"是同一件事的两面：
+一等值化之后，"名字被谁占"就可以由环境决定。
+
+#### 3.8.4 分层模型最终形态（四层 × 可替换性）
+
+| 层 | 符号 | 实现 | 可裁剪 | 可替换（目标） |
+|---|---|---|---|---|
+| ① 语言原语 | `if` `quote` `lambda` `define` `set!` `let` `begin` `defmacro` `match` `import` | 求值器硬编码 | ❌ | ❌（但**可携带宿主策略**，如 `import`+`moduleLoadChecker`） |
+| ② 控制流原语 | `and` `or` `apply` `eval` `map` `filter` `reduce` `->`、`+ - * / < > =` | 硬编码 + 注册（双份） | ❌ | **✅ 目标**（接缝 B） |
+| ③ 纯注册函数 | `cons` `car` `list` `length` `not` `str`… | 仓颉 `registerXxx` | ✅ | ✅ 现状即可 |
+| ④ Lisp 层宏/派生语法 | `when` `unless` `incf` `swap` `push` `pop` `negate` `do` `defun` | **Lisp 源码**（`BuiltinMacros`，10 个） | ✅ | ✅ 现状即可 |
+
+**①的边界就是"lisp 实现 lisp"的边界**：① 不可替换，其余全部应可替换。
+用户要的"最基本的那几个"，正对应①（并且与 McCarthy 的 `quote`/`cond`/`lambda`/`label` +
+五个初等函数一脉相承，见 §3.6）。**②类被现状错误地钉死在①那一侧**，这是要修的核心。
+
+#### 3.8.5 ④层的落地形态：宏包即域
+
+`BuiltinMacros.registerAll` 现在被 `registerAll` 与 `registerPure` **各调一次**（捆绑）。
+域化之后，④层天然就是一个 `LispCapability`——`install` 的形态是**执行 Lisp 源码**而非 `register`：
+
+```cangjie
+public class MacroPackCapability <: LispCapability {
+    public prop name = "macros.core"
+    public prop symbols = ["when", "unless", "incf", "decf", "swap", "push", "pop", "negate", "do", "defun"]
+    public prop escapable = false          // 纯语法糖，不逃逸
+    public prop hostPolicy = false
+    public prop after = ["base", "list"]   // 展开结果依赖 list/cons/if
+    public func install(ctx: CapabilityContext): Unit {
+        ctx.evalSource(SOURCE)             // ← 与 register 并列的第二种安装形态
+    }
+}
+```
+
+于是域的 `install` 有**两种形态**，正好对应"能力"的两种来源：
+- `register`：仓颉实现（需要性能或宿主能力时）；
+- `evalSource`：Lisp 源码（语法糖、可用纯 Lisp 表达的能力）。
+
+**用户替换 core 的③类实现时，用自己的宏包顶掉同名域即可**（`after` 保证顺序、`symbols` 用于重名检出）。
+
+---
+
 ## 4. 现状事实（装配骨架已存在）
 
 ### 4.1 `InterpreterOption` 骨架
@@ -551,6 +664,8 @@ public class CapabilityContext {
     public let isInterrupted: () -> Bool                                  // 长循环里周期性调用
     public let register: (String, (ArrayList<LispValue>) -> LispValue) -> Unit
     public let registerType: (String) -> Unit                             // 声明本域产生的外部类型名，供沙箱审计
+    public let invoke: (LispValue, ArrayList<LispValue>) -> LispValue    // 调用任意 Lisp 函数值（§3.8.3 接缝 A）
+    public let evalSource: (String) -> Unit                               // 以 Lisp 源码安装（宏包形态，§3.8.5）
 }
 
 public interface LispCapability {
@@ -580,7 +695,9 @@ public interface LispCapability {
 
 | # | 接缝 | 设计位置 | 状态 |
 |---|---|---|---|
-| 0 | **符号归类收敛**（①原语 / ②控制流原语 / ③纯函数；②收敛为一等值） | §3.6 | **待做，且应最先**（§3.5 的实测表明不做它，能力域模型只覆盖 1/3 的符号） |
+| 0 | **符号归类收敛**（①原语 / ②控制流原语 / ③纯函数 / ④Lisp 层宏；②收敛为一等值） | §3.6、§3.8 | **待做，且应最先**（§3.5 的实测表明不做它，能力域模型只覆盖 1/3 的符号） |
+| 0a | **Lisp 函数值调用入口**（`applyProcedure` 公开化 / `ctx.invoke`） | §3.8.3 | **待做**；修 `for-each` 只认 `NativeFunc` 的静默失败，是"用户自行实现 map"的前提 |
+| 0b | **②类符号"让位"机制**（已由用户定义则不走硬编码快速路径） | §3.8.3 | **待做**；这是"可替换"的核心 |
 | 1 | 域抽象 `LispCapability` + 预置组合（`PRESET_FULL` / `PRESET_PURE`）+ `withDomains` | §3.7、§5.1 | **待做** |
 | 2 | `External` 变体 + `LispExternal` 协议族 | §7 | **待做**，破坏性变更 |
 | 3 | `CapabilityContext`（中断注入、类型声明） | §8.1、§5.1 | **待做** |
@@ -592,10 +709,12 @@ public interface LispCapability {
 
 **建议实施顺序**（若决定做）：
 
-1. **符号归类收敛**（接缝 0）：把 §3.6 的①/②/③落成代码事实——②类收敛为一等值
-   （`(procedure? map)` 为真、可作值传递），并让两个后端语义一致（§3.5 问题 3.3）；
-   顺带修 `funcChecker` 对 A/B 类失效与 `and`/`or` 不短路（见 `docs/bugs/symbol-layering-findings.md`）。
-   **这一步不做，后面的域装配只能管住纯函数**；
+1. **符号归类收敛**（接缝 0 / 0a / 0b）：把 §3.6 的四层落成代码事实——②类收敛为一等值
+   （`(procedure? map)` 为真、可作值传递）**且可被用户实现替换**（接缝 0b）；
+   公开 Lisp 函数值调用入口（接缝 0a，同时修 `for-each` 的 `NativeFunc`-only 静默失败）；
+   并让两个后端语义一致（§3.5 问题 3.3）；顺带修 `funcChecker` 对①②类失效与 `and`/`or` 不短路
+   （见 `docs/bugs/symbol-layering-findings.md`）。
+   **这一步不做，后面的域装配只能管住纯函数，且用户无法用宏顶掉 core 的同能力实现**；
 2. 域抽象落地：把现有 `registerXxx` 包装成 `LispCapability`，`registerAll` / `registerPure`
    改表述为 `PRESET_FULL` / `PRESET_PURE`（后者按 `escapable`/`hostPolicy` 推导），
    补 `withDomains` / `withPreset`；
@@ -623,4 +742,7 @@ public interface LispCapability {
 | C9 | `registerPure` 的归宿 | 收敛为 `withPureEnv()` 还是保持现状（§3.3）；改动会影响 atelier 的手工装配路径（§4.2） |
 | C10 | 网络域走哪条路 | 应用层走 stdx 还是第三方纯仓颉库，见 §6.2，需按"是否引入 stdx"这一判据调研后再定 |
 | C11 | ②类符号收敛的具体形态 | 目标是"真一等值"，但有两条路：① 求值器保留原语语义、额外注册一个一等值（值即能力）；② 改为"取函数值再调用"（把控制流语义移进函数）。后者更干净但需改求值器核心，前者改动小但两套语义仍在。**待定** |
+| C13 | **可替换性的边界**：哪些符号"允许"被用户顶掉 | ①明确不可替换；②③④应可替换。但需定：用户顶掉 core 实现时，**是静默生效还是需显式声明**（如 `withOverride("map", ...)`）？静默容易被误覆盖，显式则更啰嗦。**待定** |
+| C14 | ②类"让位"的性能代价 | 现状 `+ - * / < > =` 走快速路径（`arithmetic_fast.cj`）是性能关键。若改为"已定义则让位"，需确认检查开销不进热路径（可用 `env.arithVersion` 那套版本号缓存，已有先例） |
+| C15 | `evalSource` 安装形态的沙箱影响 | 宏包用 `eval` 安装源码；若宿主禁用了 `eval`，宏包能否安装？（安装是宿主行为、非脚本行为，应允许——需在实现时明确区分"宿主安装期"与"脚本运行期"） |
 | C12 | `PRESET_PURE` 用减法还是显式列表 | core 内部可按 `escapable`/`hostPolicy` **推导**（推荐，默认安全）；宿主要做减法则只能自己列域（§3.7.1）。需确认"新增域默认 `escapable=true`"是否会给现有域带来意外排除 |

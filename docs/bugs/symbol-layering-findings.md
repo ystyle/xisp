@@ -140,6 +140,48 @@ withNoModuleLoad()  →  (import "…") = [ModuleError] Module loading is not al
 
 ---
 
+## 4.5 补充实测：可替换性（2026-10-11 追加）
+
+目标从"可裁剪"推进到**可替换**后，又测了一轮"用户重定义同名符号，谁生效"：
+
+| 符号 | 类别 | 用户重定义后 | 可替换 |
+|---|---|---|---|
+| `car` `length` `not` `+` `<` | ③ | 用户的实现生效 | ✅ |
+| `when` | ④宏 | 用户的宏生效 | ✅ |
+| `and` | ②(伪) | 用户的实现生效 | ✅ | 
+| `map` `filter` `reduce` | ② | `define` 成功但**调用仍走 core 实现** | ❌ |
+| `let` `if` `quote` `begin` | ① | 完全无效 | ❌ |
+
+**`and` 的特殊性**：它在**空环境**里是 `[UndefinedFunction]`，说明它不是真特殊形式；
+`map`/`filter`/`reduce` 在空环境里**仍可用**（求值器直接拦截），所以能被 `define` 改值、改不了行为。
+
+### 4.5.1 `for-each` 只认 `NativeFunc` 回调（新增问题）
+
+`core/src/core/builtin/builtin.cj:113`：
+
+```cangjie
+if (let NativeFunc(proc) <- args[0]) { … }   // Lisp 闭包被静默跳过
+```
+
+实测 `(for-each (lambda (x) x) '(1 2 3))` → `nil`，**什么都没发生且无任何错误**。
+对照 `map`（求值器实现）能正常调闭包。
+
+**后果**：这是"用 Lisp 自行实现同能力函数"的硬门槛——Lisp 层要复刻 `map`/`for-each`，
+必须能从注册函数调用**任意 Lisp 函数值**，而 `applyProcedure` 是 `internal`
+（`core/src/core/eval/higher_order.cj:323`），桥接层拿不到。
+
+> 纯 Lisp 自己实现 `map` 是可行的（实测 `my-map` 递归版行为与 core 一致），
+> 因为它由求值器执行、天然能调闭包。**门槛只卡在"仓颉注册的同能力函数"上。**
+
+### 4.5.2 由此新增两道接缝（设计侧）
+
+| # | 接缝 | 作用 |
+|---|---|---|
+| A | Lisp 函数值调用入口（`applyProcedure` 公开化 / `CapabilityContext.invoke`） | 让仓颉注册函数也能调 Lisp 闭包；顺带修掉 `for-each` 的静默失败 |
+| B | ②类符号"让位"机制（已由用户定义则不走硬编码） | 让 `map`/`filter`/`reduce` 可被用户实现替换 |
+
+---
+
 ## 5. 未做的部分
 
 本次只做**测量与记录**，未改动任何实现。修复项与优先级见设计文档 §3.6 与 §9。
