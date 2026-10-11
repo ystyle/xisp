@@ -340,6 +340,18 @@ public class MacroPackCapability <: LispCapability {
 
 **用户想用宏顶掉 core 的③类实现，就是提供同名域**（`after` 保证顺序、`symbols` 用于重名检出）。
 
+#### 4.2.1 实现记录（2026-10-11）
+
+宏包已落地：16 个内建宏合并为**一份 Lisp 源码** `BUILTIN_MACROS_SOURCE`
+（`core/src/core/builtin/macros.cj`，约 90 行），由 `evalSource` 一次装进环境。
+原先它们是 16 个仓颉函数、各带同样的样板，文件 286 行 —— 合并后约 150 行。
+
+顺带修掉一个卫生性隐患：`swap` 原用固定符号 `temp` 作临时变量，
+非卫生宏下会被调用点同名变量捕获，现改用 `gensym`。
+
+`BuiltinMacros.allSymbols()` 是宏包符号清单的**唯一来源**，能力域 `symbols` 复用它，
+避免清单与实现漂移。
+
 ### 4.3 预置组合（preset）
 
 `registerAll` / `registerPure` 重新表述为**预置组合**，而非两个函数：
@@ -720,8 +732,9 @@ public interface LispExternalCallable <: LispExternal {
 | **0b** | ②类"让位"机制（7 个符号：`map` `filter` `reduce` `apply` `eval` `->` `for-each`） | §3.2 | **✅ 已完成**（2026-10-11），双后端一致 | 可替换 |
 | **0c** | 宏改为**编译前**展开 | §3.4 | **✅ 已完成**（2026-10-11）；含宏递归 10767us → 971us | 0/0b 的前提 |
 | **0d** | `gensym`（非卫生宏的唯一符号来源） | §3.5 | **✅ 已完成**（2026-10-11） | 宏包的前提 |
-| 1 | 域抽象 `LispCapability` + preset + `withDomains` | §4 | **待做** | 可不要 + 可替换 + 可定制 |
-| 2 | `CapabilityContext`（中断注入、类型声明、`invoke`、`evalSource`） | §3.3 | **待做** | 域装配 |
+| 1 | 域抽象 `LispCapability` + preset + `withDomains` | §4 | **✅ 已完成**（2026-10-11）：9 个 core 内置域、`presetFull`/`presetPure`（后者按属性推导）、`orderDomains`（after 拓扑序）、`replace` 独占装配 | 可不要 + 可替换 + 可定制 |
+| 2 | `CapabilityContext`（中断注入、类型声明、`invoke`、`evalSource`） | §3.3 | **✅ 已完成**（2026-10-11） | 域装配 |
+| 1b | **宏包即域**（④层用 `evalSource` 形态安装） | §4.2 | **✅ 已完成**（2026-10-11）：16 个内建宏合并为单一 Lisp 源码 | 可替换（④层） |
 | 3 | `External` 变体 + `LispExternal` 协议族 | §7 | **待做**，破坏性变更 | 下游 sci 族 |
 | 4 | `funcChecker` 覆盖①②类 | §5.4 | **待做** | 沙箱正确性 |
 | 5 | 外部模块的**中断义务** | §3.3 | 机制已有，契约待写进模块 README | 宿主可控性 |
@@ -741,9 +754,15 @@ public interface LispExternalCallable <: LispExternal {
    同时保留求值器快速路径，守卫判据改为"绑定是否仍为 core 注册的那份"；
    用户替换后自动让位。**不急于做**：目前 `map` 作为值传入高阶函数仍是
    `UnboundVariable`，但"可替换"本身已成立。
-2. **接缝 1 / 2（域装配）**：把现有 `registerXxx` 包装成 `LispCapability`，
-   `registerAll` / `registerPure` 改表述为 `PRESET_FULL` / `PRESET_PURE`（后者按属性推导），
-   补 `withDomains` / `withPreset` / `CapabilityContext`。
+2. ~~**接缝 1 / 2（域装配）**~~ —— **✅ 已完成**（2026-10-11）：
+   `LispCapability` + `CapabilityContext` + 9 个 core 内置域；
+   `presetFull` / `presetPure`（后者按 `!escapable && !hostPolicy` **推导**）；
+   `orderDomains`（`after` 拓扑序）；`withDomains` / `withPreset`（含 `replace` 独占装配）；
+   宏包以 `evalSource` 形态安装（16 个内建宏合并为单一 Lisp 源码）。
+
+   **边界如实记录**（并有测试锁定）：即便独占装配，①语言原语（`if`/`let`/`lambda`）
+   与②求值器拦截（`map`/`eval`）**仍然可用** —— 它们不在环境里，域装配动不了。
+   域装配只覆盖③注册函数。
 3. **接缝 4（`funcChecker` 覆盖）**：①②类接上权限检查（可与第 1 步合并）。
 4. **接缝 3（`External` 变体）**：`types` 加协议族 + 变体 → 编译驱动修 core 内那 12 处，
    补单元测试；core 通用语义按能力接口分派（`print` / `type-of` / `=` / `length` / `nth` / 谓词）。
