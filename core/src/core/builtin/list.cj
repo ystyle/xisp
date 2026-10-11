@@ -45,13 +45,24 @@ extend BuiltinFunctions {
         }))
 
         // (length list) - 列表长度
+        // (length x) - 列表长度；外部值若实现 LispExternalIndexable 则按其 length()
         env.define("length", NativeFunc({ args =>
             if (args.size != 1) {
                 return Nil
             }
             match (args[0]) {
                 case Cons(cell) => LispValue.Int(cell.length())
-                case _ => LispValue.Int(0)
+                case Nil => LispValue.Int(0)
+                // 能力接口分派：外部值靠"是否实现 LispExternalIndexable"获得内建支持，
+                // 无需 core 认识任何具体外部类型（能力域设计 §7.2.1）
+                case External(ext) =>
+                    match (ext) {
+                        case idx: LispExternalIndexable => LispValue.Int(idx.length())
+                        case _ => LispValue.Error(XispError(ErrorType.TypeError,
+                            "length: ${ext.typeName} is not indexable"))
+                    }
+                case other => LispValue.Error(XispError(ErrorType.TypeError,
+                    "length: expected a list or indexable value (got: ${other.toString()})"))
             }
         }))
 

@@ -40,6 +40,28 @@ extend BuiltinFunctions {
         }))
 
         // (symbol? x) - 是否为符号
+        // (external? x) - 是否为外部值（宿主/扩展模块提供的值）
+        env.define("external?", NativeFunc({ args =>
+            if (args.size != 1) {
+                return LispValue.Boolean(false)
+            }
+            match (args[0]) {
+                case External(_) => LispValue.Boolean(true)
+                case _ => LispValue.Boolean(false)
+            }
+        }))
+
+        // (external-type x) - 外部值的类型名；非外部值返回 nil
+        env.define("external-type", NativeFunc({ args =>
+            if (args.size != 1) {
+                return Nil
+            }
+            match (args[0]) {
+                case External(ext) => Str(ext.typeName)
+                case _ => Nil
+            }
+        }))
+
         env.define("symbol?", NativeFunc({ args =>
             if (args.size != 1) {
                 return LispValue.Boolean(false)
@@ -150,6 +172,8 @@ extend BuiltinFunctions {
                 case Closure(_, _) => Str("procedure")
                 case Macro(_, _, _) => Str("macro")
                 case MacroFromParams(_, _, _) => Str("macro")
+                // 外部值报告实现方声明的类型名（如 "ndarray"），而非笼统的 "external"
+                case External(ext) => Str(ext.typeName)
                 case _ => Str("unknown")
             }
         }))

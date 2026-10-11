@@ -704,6 +704,18 @@ public enum LispValue <: ToString {
      | Closure(Int64, Environment)
 
      /**
+      * 外部值（宿主 / 扩展模块提供的值）
+      *
+      * core 只认识 `LispExternal` 协议（`typeName` + `display()`），
+      * **不认识任何具体外部类型** —— NDArray、分布对象、句柄等的内存布局与算法
+      * 一行都不进 core。见 `lisp_external.cj` 与能力域设计 §7。
+      *
+      * 这是整份设计中唯一"只有 core 能给"的东西：外部模块要把自己的值交给
+      * Lisp 层，就必须有一个 core 承认的值形态。
+      */
+     | External(LispExternal)
+
+     /**
      * 哈希映射（字典）
      *
      * 键值对集合，键是字符串，值可以是任意 LispValue
@@ -897,6 +909,8 @@ public enum LispValue <: ToString {
             // 显示名必须一致，否则同一段脚本在 AST 与字节码后端下打印结果不同
             // （实测 `(define (f x) x)` 的返回值 AST 打 #<procedure>、BC 打 #<closure>）。
             case Closure(_, _) => "#<procedure>"
+            // 外部值的 repr 由**实现方**提供（含截断策略，见 lisp_external.cj 第 6 条）
+            case External(ext) => ext.display()
             case HashMap(map) => hashmapToString(map)
             case Error(err) => err.toString()
         }
@@ -920,6 +934,9 @@ public enum LispValue <: ToString {
             case MacroFromParams(params, body, env) => MacroFromParams(params, body, env.clone())
             case NativeFunc(f) => NativeFunc(f)  // 原生函数不需要克隆
             case Closure(id, env) => Closure(id, env.clone())
+            // 外部值**按引用**复制：它的内部缓冲可能很大（NDArray 的连续内存），
+            // 深拷会破坏"零拷贝"这一设计前提；可变性由实现方自行负责。
+            case External(ext) => External(ext)
             case HashMap(map) => HashMap(map)  // HashMap 是不可变的，直接复制引用
             case Error(err) => Error(err)  // 错误是不可变的，直接复制引用
         }
