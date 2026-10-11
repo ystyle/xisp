@@ -161,6 +161,77 @@ public func withStdLib(): InterpreterOption {
     }
 }
 
+// ==================== 能力域装配 ====================
+
+/**
+ * 安装一组能力域（能力域设计 §4）
+ *
+ * 组合的语义是**并集**：按 `after` 约束排序后逐个安装。宿主要么用预置组合
+ * （`withPreset(PRESET_FULL)`），要么自己拼：
+ *
+ * ```cangjie
+ * LispInterpreter([
+ *     withDomains([BuiltinFunctions.domainArithmetic(), BuiltinFunctions.domainList()])
+ * ])
+ * ```
+ *
+ * 也可用自定义域顶替 core 的同名域（域只是"注册集合"，后装者覆盖先装者）。
+ */
+public func withDomains(domains: Array<LispCapability>): InterpreterOption {
+    withDomains(domains, replace: false)
+}
+
+/**
+ * 安装一组能力域，并可指定是否**独占**。
+ *
+ * `replace = true` 时先清空环境（含 `LispInterpreter()` 默认装的全量内建），
+ * 只留所声明的域 —— 这是"宿主自己选择要哪些能力"的完整语义。
+ * `replace = false`（默认）为追加：在默认全量之上再装（适合只加自定义域）。
+ *
+ * 注意：即使 `replace = true`，①语言原语（`if`/`let`/`lambda`…）与②求值器拦截
+ * （`map`/`eval`…）**仍然可用** —— 它们不在环境里，域装配动不了（设计文档 §5.3）。
+ */
+public func withDomains(domains: Array<LispCapability>, replace!: Bool): InterpreterOption {
+    { interpreter =>
+        if (replace) {
+            interpreter.clearEnvironmentBindings()
+            interpreter.markDomainsExclusive()
+        } else if (interpreter.isDomainsExclusive()) {
+            // 已经独占装配过：后续 withDomains 只做追加，不重装默认全量
+            ()
+        }
+        BuiltinFunctions.installDomains(
+            interpreter.getEnvironment(),
+            domains,
+            isInterrupted: Some({ => interpreter.isInterruptedNow() })
+        )
+    }
+}
+
+/**
+ * 安装一个预置组合（`PRESET_FULL` / `PRESET_PURE`，或宿主自造的组合）
+ */
+public func withPreset(preset: Array<LispCapability>, replace!: Bool = false): InterpreterOption {
+    withDomains(preset, replace: replace)
+}
+
+/**
+ * 全量预置组合：所有 core 内置域
+ */
+public func presetFull(): Array<LispCapability> {
+    BuiltinFunctions.presetFull()
+}
+
+/**
+ * 纯函数子集预置组合：按 `!escapable && !hostPolicy` **推导**（非手写清单）
+ *
+ * 注意不含输出域 —— 导出通道由宿主用 `withOutputFn` / `registerPure(output:)` 接管，
+ * 与既有语义一致。
+ */
+public func presetPure(): Array<LispCapability> {
+    BuiltinFunctions.presetPure()
+}
+
 // ==================== 其他配置选项 ====================
 
 /**

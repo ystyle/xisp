@@ -20,6 +20,10 @@ import std.fs.*
 public class LispInterpreter {
     private var env: Environment
     private var evaluator: Evaluator
+    // 是否已由能力域独占装配（`withDomains` 的 replace 模式）。
+    // 默认装配是 registerAll 全量；宿主若明确要"只要这些域"，需要清掉默认注册，
+    // 否则未选中的域符号仍然可用，"选择权"形同虚设。
+    private var domainsInstalledExclusively: Bool = false
     public var bridge: BridgeManager
 
     // ==================== 配置字段 ====================
@@ -565,6 +569,40 @@ public class LispInterpreter {
      */
     public func getEnvironment(): Environment {
         this.env
+    }
+
+    /**
+     * 清空环境中的绑定（保留求值器配置），供"独占式能力域装配"使用。
+     *
+     * 只清 `bindings`，不动 `Evaluator` 的配置（中断 / 权限 / 栈深等）。
+     */
+    public func clearEnvironmentBindings(): Unit {
+        this.env = Environment()
+        this.evaluator.env = this.env
+    }
+
+    /**
+     * 标记"能力域已独占装配本解释器"。
+     *
+     * 语义：此后不再套用默认的 `registerAll` 全量装配（那会让未选中的域重新可用）。
+     */
+    public func markDomainsExclusive(): Unit {
+        this.domainsInstalledExclusively = true
+    }
+
+    /** 是否已由能力域独占装配 */
+    public func isDomainsExclusive(): Bool {
+        this.domainsInstalledExclusively
+    }
+
+    /**
+     * 当前是否已被请求中断（宿主取消 / 沙箱超时）
+     *
+     * 供能力域在长循环里周期性查询 —— 外部域拿到的是本方法与
+     * `CapabilityContext.isInterrupted`，而不是求值器实例。
+     */
+    public func isInterruptedNow(): Bool {
+        this.evaluator.isInterrupted()
     }
 
     /**
