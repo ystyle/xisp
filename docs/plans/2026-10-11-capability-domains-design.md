@@ -148,18 +148,23 @@
 
 | 归类 | 判据 | 符号（现状） | 域装配能否关掉 |
 |---|---|---|---|
-| **① 语言原语**（不可省、不可拦、非一等值） | 语法结构；缺了就不是这门语言 | `if` `quote` `lambda` `define` `set!` `let` `begin` `defmacro` `match` `import` `export` | ❌ 关不掉（但**语义内部可以带宿主策略**，见下） |
-| **② 控制流原语**（需延迟/控制求值，且应为**一等值**） | 必须能操作"未求值的实参"，或必须能作为值传递 | `and` `or`（短路）、`apply` `eval` `map` `filter` `reduce` `for-each` `->` | ❌ 关不掉（现状）；**应收敛为一等值** |
-| **③ 纯函数**（真注册、可省、可拦、可作值） | 实参先求值，无控制流 | `+ - * / < > =` `cons car cdr list length append` `not eq? number? string? symbol? list? procedure?` `str print println` … | ✅ 只有这类能靠"不注册"表达禁止 |
+| **① 语言原语**（不可省、非一等值） | 语法结构；缺了就不是这门语言 | `if` `quote` `lambda` `define` `set!` `let` `begin` `defmacro` `match` `condb` `import` `export` | ❌ 关不掉（但**语义内部可以带宿主策略**，见下） |
+| **② 求值器拦截**（需控制求值，且应为**一等值**） | 必须能操作"未求值的实参"，或必须能作为值传递 | `map` `filter` `reduce` `apply` `eval`（**求值器直接拦截**）；`and` `or`（注册物，但 AST 下不短路）；`+ - * / < > =`、`->` `for-each`（注册物 + 快速路径，**已可让位**） | 前者 ❌（现状）；**应收敛为一等值** |
+| **③ 纯函数**（真注册、可省、可拦、可作值） | 实参先求值，无控制流 | `cons car cdr list length append` `not eq? number? string? symbol? list? procedure?` `str print println` … | ✅ 只有这类能完全靠"不注册"表达禁止 |
 
 **①/② 与"可配置"并不互斥**——既有先例：`import` / `export` 是①类原语，
 但内部已接宿主策略（`moduleLoadChecker`），`withNoModuleLoad()` 实测能拦住。
 所以正确的模型是：**原语不可"移除"，但可以携带宿主策略开关**。
 
-**②类的目标形态**（收敛方向，不是现状）：让它们成为**真一等值**——
-`(procedure? map)` 为真、`(go map)` 能把 `map` 当参数传。
+**②类的目标形态**（收敛方向，不是现状）：让 `map`/`filter`/`reduce`/`apply`/`eval`
+成为**真一等值**——`(procedure? map)` 为真、`(go map)` 能把 `map` 当参数传。
 只要求值器能"取到函数值再决定如何调用"（而非把符号名硬编码进分派），
-② 就同时获得了一等值与可配置性。这也是字节码/AST 两个后端语义一致的唯一办法（§3.5 问题 3.3）。
+② 就同时获得了一等值、可替换性与可配置性。
+
+> **注意**：`+ - * / < > =` 虽然也走快速路径，但它们**已具备让位能力**
+> （`isNativeArith` 查 `env.lookup` 是否为 `NativeFunc`，不是则回退普通调用），
+> 且**已被 `funcChecker` 覆盖**。所以真正要收敛的②类只有"求值器直接拦截"的那 5 个 +
+> `and`/`or` 的语义统一。这也是字节码/AST 两个后端语义一致的唯一办法（§3.5 问题 3.3）。
 
 ---
 
@@ -246,20 +251,31 @@ public func withPreset(preset: Array<LispCapability>): InterpreterOption
 
 | 符号 | 类别 | 用户重定义后 | 可替换？ |
 |---|---|---|---|
-| `car` `length` `not` `+` `<` | ③纯函数 | **用户的实现生效** | ✅ |
-| `and` | ② | **用户的实现生效**（`(defmacro my-and …)` + `define`） | ✅（见下注） |
-| `when` | ④宏 | **用户的宏生效** | ✅ |
-| `map` `filter` `reduce` | ② | `redef=#<procedure>` 但 **probe 仍是 core 的实现** | ❌ **顶不掉** |
-| `let` | ① | `(let ((x 1)) x)` 仍返回 `1`（走硬编码） | ❌ |
-| `if` `quote` `begin` | ① | 完全无效 | ❌ |
+| `car` `length` `not` | ③纯函数 | **用户的实现生效** | ✅ |
+| `+` `-` `*` `/` `<` `>` `=` | ②（算术快速路径） | **用户的实现生效**（`(define + (lambda (a b) 999))` → `(+ 1 2)` = `999`） | ✅ **已有"让位"机制** |
+| `and` `or` | ②（伪） | **用户的实现生效** | ✅ |
+| `when` `unless` | ④宏 | **用户的宏生效** | ✅ |
+| **`map` `filter` `reduce`** | ②（求值器硬编码） | `define` 成功，但**调用仍走 core 的实现** | ❌ **顶不掉** |
+| `apply` | ②（求值器硬编码） | `define` 成功但调用仍走 core；`(apply 42 …)` 之类返回 `nil` | ❌ |
+| `eval` | ②（求值器硬编码） | 同上 | ❌ |
+| `let` `if` `quote` `begin` `match` `condb` | ① | 完全无效 | ❌ |
 
-**注**：`and` 之所以能替换，是因为它在**空环境里根本不存在**（`[UndefinedFunction]`），
-即它并非真特殊形式；`define` 一个同名宏即可接管。而 `map`/`filter`/`reduce` 在空环境下**仍然可用**
-（求值器直接拦截），所以 `define` 只能改"值"、改不了"行为"。
+**判别方法（可复现）**：看该符号在**空环境**（`Environment()` + `Evaluator`，不注册任何东西）里的行为——
+- 报 `UndefinedFunction` ⇒ 只是注册物或"注册后才生效的快速路径"，**可替换**
+  （`+` `-` `*` `/` `<` `>` `=`、`and` `or`、`->`、`for-each` 属此类）
+- **仍可用** ⇒ 求值器直接拦截，**顶不掉**
+  （`map` `filter` `reduce` `apply` `eval`、`let` `if` `quote` `begin` `match` 属此类）
 
-**结论**：现状下，**③④类可替换、①②类不可替换**。而用户要的"除最基本的都能用宏自行实现"，
-要求的是**②类也可替换**——它们是"能纯 Lisp 写出来"的高阶函数（`my-map` 实测可用纯 Lisp 实现且行为一致），
-却被求值器硬编码占住了名字。
+**关键更正**：算术符号（`+ - * / < > =`）**已经具备"让位"能力**——
+`isNativeArith()`（`core/src/core/eval/arithmetic_fast.cj:280`）先看 `env.lookup(op)` 是不是 `NativeFunc`：
+不是则**回退普通调用**（`evalAdd` 开头的 `if (!this.isNativeArith("+")) { return this.evalFunctionCall(…) }`）。
+且 `isNativeArith` 里**已包含 `funcChecker` 检查**，所以拉黑算术符号是有效的
+（实测 `blockFunctions(["+"])` → `(+ 1 2)` 报 `Function '+' is not allowed`）。
+
+**结论**：现状下**只有"求值器直接拦截"的那批（`map` `filter` `reduce` `apply` `eval` + ①类）不可替换**。
+它们恰好是"能纯 Lisp 写出来"的高阶函数（`my-map` 实测用纯 Lisp 实现、行为与 core 一致），
+却被求值器硬编码占住了名字。**要修的范围比初版判断小**：`+ - * / < > =` 无需改动（已有让位 + 已被 funcChecker 覆盖），
+`and`/`or` 只需把"AST 不短路 / BC 短路"统一到同一个语义。
 
 #### 3.8.2 决定性事实：`for-each` 暴露了真正的技术门槛
 
@@ -285,7 +301,7 @@ if (let NativeFunc(proc) <- args[0]) { … }   // 只认 NativeFunc，Lisp 闭�
 | # | 接缝 | 作用 | 现状 |
 |---|---|---|---|
 | **A** | **Lisp 函数值调用入口**（`applyProcedure` 公开化，或经 `CapabilityContext.invoke`） | 让仓颉注册函数也能调 Lisp 闭包 → 用户可在④层复刻 `map`/`for-each` | ❌ `internal`，需新增 |
-| **B** | **②类符号的"让位"机制** | 用户提供同名实现时，求值器不再走硬编码快速路径 | ❌ 现状硬编码优先 |
+| **B** | **②类符号的"让位"机制** | 用户提供同名实现时，求值器不再走硬编码快速路径 | **部分已有**：`+ - * / < > =` 已让位（`isNativeArith`）；**`map` `filter` `reduce` `apply` `eval` 仍需做** |
 
 **A 的最小形态**（供注册函数与域使用）：
 
@@ -311,7 +327,8 @@ public class CapabilityContext {
 | 层 | 符号 | 实现 | 可裁剪 | 可替换（目标） |
 |---|---|---|---|---|
 | ① 语言原语 | `if` `quote` `lambda` `define` `set!` `let` `begin` `defmacro` `match` `import` | 求值器硬编码 | ❌ | ❌（但**可携带宿主策略**，如 `import`+`moduleLoadChecker`） |
-| ② 控制流原语 | `and` `or` `apply` `eval` `map` `filter` `reduce` `->`、`+ - * / < > =` | 硬编码 + 注册（双份） | ❌ | **✅ 目标**（接缝 B） |
+| ② 控制流原语 | `+ - * / < > =`、`and` `or` | 硬编码快速路径 + 注册（**已让位**） | ❌ | ✅ **已有** |
+| ② 求值器拦截 | `map` `filter` `reduce` `apply` `eval` | 求值器硬编码 | ❌ | **✅ 目标**（接缝 B） |
 | ③ 纯注册函数 | `cons` `car` `list` `length` `not` `str`… | 仓颉 `registerXxx` | ✅ | ✅ 现状即可 |
 | ④ Lisp 层宏/派生语法 | `when` `unless` `incf` `swap` `push` `pop` `negate` `do` `defun` | **Lisp 源码**（`BuiltinMacros`，10 个） | ✅ | ✅ 现状即可 |
 
@@ -697,7 +714,7 @@ public interface LispCapability {
 |---|---|---|---|
 | 0 | **符号归类收敛**（①原语 / ②控制流原语 / ③纯函数 / ④Lisp 层宏；②收敛为一等值） | §3.6、§3.8 | **待做，且应最先**（§3.5 的实测表明不做它，能力域模型只覆盖 1/3 的符号） |
 | 0a | **Lisp 函数值调用入口**（`applyProcedure` 公开化 / `ctx.invoke`） | §3.8.3 | **待做**；修 `for-each` 只认 `NativeFunc` 的静默失败，是"用户自行实现 map"的前提 |
-| 0b | **②类符号"让位"机制**（已由用户定义则不走硬编码快速路径） | §3.8.3 | **待做**；这是"可替换"的核心 |
+| 0b | **②类符号"让位"机制**（已由用户定义则不走硬编码） | §3.8.3 | **部分已有**（`+ - * / < > =` 已让位）；**剩余 `map` `filter` `reduce` `apply` `eval` 待做**，这是"可替换"的核心 |
 | 1 | 域抽象 `LispCapability` + 预置组合（`PRESET_FULL` / `PRESET_PURE`）+ `withDomains` | §3.7、§5.1 | **待做** |
 | 2 | `External` 变体 + `LispExternal` 协议族 | §7 | **待做**，破坏性变更 |
 | 3 | `CapabilityContext`（中断注入、类型声明） | §8.1、§5.1 | **待做** |
@@ -743,6 +760,6 @@ public interface LispCapability {
 | C10 | 网络域走哪条路 | 应用层走 stdx 还是第三方纯仓颉库，见 §6.2，需按"是否引入 stdx"这一判据调研后再定 |
 | C11 | ②类符号收敛的具体形态 | 目标是"真一等值"，但有两条路：① 求值器保留原语语义、额外注册一个一等值（值即能力）；② 改为"取函数值再调用"（把控制流语义移进函数）。后者更干净但需改求值器核心，前者改动小但两套语义仍在。**待定** |
 | C13 | **可替换性的边界**：哪些符号"允许"被用户顶掉 | ①明确不可替换；②③④应可替换。但需定：用户顶掉 core 实现时，**是静默生效还是需显式声明**（如 `withOverride("map", ...)`）？静默容易被误覆盖，显式则更啰嗦。**待定** |
-| C14 | ②类"让位"的性能代价 | 现状 `+ - * / < > =` 走快速路径（`arithmetic_fast.cj`）是性能关键。若改为"已定义则让位"，需确认检查开销不进热路径（可用 `env.arithVersion` 那套版本号缓存，已有先例） |
+| C14 | ②类"让位"的性能代价 | **算术部分已解决**：`+ - * / < > =` 已用 `env.arithVersion` 版本号缓存做守卫（`isNativeArith`），改 `env` 才重算，热路径无额外开销。`map`/`filter`/`reduce`/`apply`/`eval` 做让位时**应复用同一模式**（版本号缓存），不要每次调用都查环境 |
 | C15 | `evalSource` 安装形态的沙箱影响 | 宏包用 `eval` 安装源码；若宿主禁用了 `eval`，宏包能否安装？（安装是宿主行为、非脚本行为，应允许——需在实现时明确区分"宿主安装期"与"脚本运行期"） |
 | C12 | `PRESET_PURE` 用减法还是显式列表 | core 内部可按 `escapable`/`hostPolicy` **推导**（推荐，默认安全）；宿主要做减法则只能自己列域（§3.7.1）。需确认"新增域默认 `escapable=true`"是否会给现有域带来意外排除 |

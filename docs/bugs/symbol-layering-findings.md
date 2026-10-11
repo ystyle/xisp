@@ -146,11 +146,24 @@ withNoModuleLoad()  →  (import "…") = [ModuleError] Module loading is not al
 
 | 符号 | 类别 | 用户重定义后 | 可替换 |
 |---|---|---|---|
-| `car` `length` `not` `+` `<` | ③ | 用户的实现生效 | ✅ |
-| `when` | ④宏 | 用户的宏生效 | ✅ |
-| `and` | ②(伪) | 用户的实现生效 | ✅ | 
-| `map` `filter` `reduce` | ② | `define` 成功但**调用仍走 core 实现** | ❌ |
-| `let` `if` `quote` `begin` | ① | 完全无效 | ❌ |
+| `car` `length` `not` | ③ | 用户的实现生效 | ✅ |
+| `+` `-` `*` `/` `<` `>` `=` | ②算术 | **用户的实现生效**（`(define + (lambda (a b) 999))` → `(+ 1 2)`=`999`） | ✅ |
+| `and` `or` | ②(伪) | 用户的实现生效 | ✅ |
+| `when` `unless` | ④宏 | 用户的宏生效 | ✅ |
+| `map` `filter` `reduce` | ②求值器拦截 | `define` 成功但**调用仍走 core 实现** | ❌ |
+| `apply` `eval` | ②求值器拦截 | 同上 | ❌ |
+| `let` `if` `quote` `begin` `match` | ① | 完全无效 | ❌ |
+
+**⚠️ 更正（同日复测）**：初版记录写"`+` `<` 属③类可替换、②类全不可替换"是**不准确的**。
+复测确认：算术符号**已具备让位机制** —— `isNativeArith()`
+（`core/src/core/eval/arithmetic_fast.cj:280`）先查 `env.lookup(op)` 是否为 `NativeFunc`，
+不是则回退普通调用（`evalAdd` 开头即 `if (!this.isNativeArith("+")) { return this.evalFunctionCall(…) }`）。
+且该函数**内含 `funcChecker` 检查**，故拉黑算术符号有效：
+`blockFunctions(["+"])` → `(+ 1 2)` 报 `Function '+' is not allowed`。
+
+**判别技巧**：看符号在**空环境**里是否仍可用 ——
+`+ - * / < > =` `and` `or` `->` `for-each` 报 `UndefinedFunction`（可替换）；
+`map` `filter` `reduce` `apply` `eval` `let` `if` `quote` `begin` `match` **仍可用**（求值器拦截，顶不掉）。
 
 **`and` 的特殊性**：它在**空环境**里是 `[UndefinedFunction]`，说明它不是真特殊形式；
 `map`/`filter`/`reduce` 在空环境里**仍可用**（求值器直接拦截），所以能被 `define` 改值、改不了行为。
