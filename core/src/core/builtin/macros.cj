@@ -28,6 +28,10 @@ extend BuiltinMacros {
         defineDefunMacro(env)
         defineAndMacro(env)
         defineOrMacro(env)
+        defineCondbMacro(env)
+        defineIfLetMacro(env)
+        defineLetStarMacro(env)
+        defineWhenLetStarMacro(env)
     }
 
     /**
@@ -202,6 +206,77 @@ extend BuiltinMacros {
      */
     private static func defineOrMacro(env: Environment) {
         let code = "(defmacro or (. args) (if (null? args) #f (if (null? (cdr args)) `(if ,(car args) ,(car args) #f) (let ((g (gensym))) `(let ((,g ,(car args))) (if ,g ,g (or ,@(cdr args))))))))"
+        let exprs = Parser.parseFromString(code)
+        if (exprs.size > 0) {
+            let evaluator = Evaluator(env)
+            evaluator.eval(exprs[0])
+        }
+    }
+
+    /**
+     * 定义 condb 宏 —— 增强条件表达式（支持 :let 绑定）
+     *
+     * (condb (:let x 5) (> x 3) "large" else "small")
+     *   → (let ((x 5)) (if (> x 3) "large" "small"))
+     *
+     * 语法：任意多个 (:let var value) 子句 + (条件 结果) 对 + 可选 else 结果。
+     * 条件全假且无 else 时返回 nil。
+     *
+     * 原为特殊形式（求值期展开），降为宏后语义不变但归属更准确：它是纯派生语法。
+     */
+    private static func defineCondbMacro(env: Environment) {
+        // 自递归展开（与 and/or 同一手法）：
+        //   :let 子句 → (let (binding) (condb 剩余…))
+        //   else      → 其结果
+        //   其余      → (if test result (condb 剩余…))
+        //
+        // 不能用"辅助宏"做值层变换：宏收到的是**语法**而非值，
+        // (%helper x) 传给 helper 的是符号 x 本身（实测会栈溢出）。
+        let code = "(defmacro condb (. cs) (if (null? cs) nil (if (eq? (car (car cs)) :let) `(let (,(cdr (car cs))) (condb ,@(cdr cs))) (if (eq? (car cs) (quote else)) (cadr cs) `(if ,(car cs) ,(cadr cs) (condb ,@(cddr cs)))))))"
+        let exprs = Parser.parseFromString(code)
+        if (exprs.size > 0) {
+            let evaluator = Evaluator(env)
+            evaluator.eval(exprs[0])
+        }
+    }
+
+    /**
+     * 定义 if-let 宏 —— (if-let (var value) then else) → (let ((var value)) (if var then else))
+     */
+    private static func defineIfLetMacro(env: Environment) {
+        let code = "(defmacro if-let (binding then else) `(let (,(list (car binding) (cadr binding))) (if ,(car binding) ,then ,else)))"
+        let exprs = Parser.parseFromString(code)
+        if (exprs.size > 0) {
+            let evaluator = Evaluator(env)
+            evaluator.eval(exprs[0])
+        }
+    }
+
+    /**
+     * 定义 let* 宏 —— 顺序绑定，展开为嵌套 let
+     *
+     * (let* ((a 1) (b (+ a 1))) body) → (let ((a 1)) (let* ((b (+ a 1))) body))
+     */
+    private static func defineLetStarMacro(env: Environment) {
+        let code = "(defmacro let* (bindings . body) (if (null? bindings) `(begin ,@body) (if (null? (cdr bindings)) `(let (,(car bindings)) ,@body) `(let (,(car bindings)) (let* ,(cdr bindings) ,@body)))))"
+        let exprs = Parser.parseFromString(code)
+        if (exprs.size > 0) {
+            let evaluator = Evaluator(env)
+            evaluator.eval(exprs[0])
+        }
+    }
+
+    /**
+     * 定义 when-let* 宏 —— 顺序绑定；**最后一个**值为真则求 body，否则 nil
+     *
+     * (when-let* ((a v1) (b v2)) body...) → (let* ((a v1) (b v2)) (if b (begin body...) nil))
+     *
+     * 语义要点：**全部绑定都建立**，只判最后一个值的真值（不是遇到假值就停）。
+     * 最后一个变量名用普通函数 `reverse` 在展开期算出 —— 不能用辅助宏
+     * （宏收语法不收值，见 condb 注释）。
+     */
+    private static func defineWhenLetStarMacro(env: Environment) {
+        let code = "(defmacro when-let* (bindings . body) (if (null? bindings) nil `(let* ,bindings (if ,(car (car (reverse bindings))) (begin ,@body) nil))))"
         let exprs = Parser.parseFromString(code)
         if (exprs.size > 0) {
             let evaluator = Evaluator(env)
