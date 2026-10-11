@@ -44,6 +44,16 @@ public open class Environment {
     private var bindings: HashMap<String, LispValue>
 
     /**
+     * 由 **core 自己安装**的一等值名（②类符号，见 core/eval/first_class_values.cj）。
+     *
+     * 用途：区分"core 注册的值"与"用户覆盖的值"。
+     * 让位判据是"环境里有绑定即让位"，若 core 也注册这些名字，
+     * 就会把自己的注册误判成用户实现、导致快速路径被跳过。
+     * 故 core 注册时打标记，查找时沿链向上找（与 bindings 同构）。
+     */
+    private var coreInstalledNames: HashSet<String> = HashSet<String>()
+
+    /**
      * 关键字别名映射表
      * 用于支持多语言关键字（如：定义 -> define）
      * 惰性初始化：大多数环境不使用别名，避免每次 createChild 都分配
@@ -101,6 +111,11 @@ public open class Environment {
      */
     public func define(name: String, value: LispValue): Unit {
         this.bindings[name] = value
+        // 任何一次普通 define 都视为"用户写入"：清掉 core 安装标记，
+        // 使让位判据把该名字当成用户实现（core 安装自己的一等值时会随后重新打标记）。
+        if (this.coreInstalledNames.contains(name)) {
+            this.coreInstalledNames.remove(name)
+        }
         Environment.defineVersion.value = Environment.defineVersion.value + 1
         if (Environment.isArithOp(name)) {
             this.arithVersion.value = this.arithVersion.value + 1
@@ -184,6 +199,37 @@ public open class Environment {
     /**
      * 创建子环境
      */
+    /**
+     * 移除一个绑定（供卸载 core 安装的一等值使用）
+     */
+    public func removeBinding(name: String): Unit {
+        this.bindings.remove(name)
+        if (this.coreInstalledNames.contains(name)) {
+            this.coreInstalledNames.remove(name)
+        }
+        Environment.defineVersion.value = Environment.defineVersion.value + 1
+    }
+
+    /**
+     * 标记某名字是 core 安装的一等值
+     */
+    public func markCoreInstalled(name: String): Unit {
+        this.coreInstalledNames.add(name)
+    }
+
+    /**
+     * 该名字是否由 core 安装（沿父环境链查找）
+     */
+    public func isCoreInstalled(name: String): Bool {
+        if (this.coreInstalledNames.contains(name)) {
+            return true
+        }
+        match (this.parent) {
+            case Some(p) => p.isCoreInstalled(name)
+            case None => false
+        }
+    }
+
     public func createChild(): Environment {
         let env = Environment()
         env.parent = Some(this)

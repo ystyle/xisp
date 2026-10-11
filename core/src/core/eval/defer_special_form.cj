@@ -92,6 +92,11 @@ extend Evaluator {
      * core 不注册这 6 个名字，因此"存在绑定"等价于"用户放了实现"。
      */
     private func hasUserBinding(name: String): Bool {
+        // core 自己安装的一等值（②类符号，接缝 0e）不算"用户实现"——
+        // 否则快速路径会被自己的注册顶掉。
+        if (this.env.isCoreInstalled(name)) {
+            return false
+        }
         match (this.env.lookup(name)) {
             case Error(_) => false
             case _ => true

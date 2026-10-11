@@ -161,6 +161,17 @@ public func withStdLib(): InterpreterOption {
     }
 }
 
+/**
+ * 关闭②类符号的一等值（接缝 0e）
+ *
+ * 默认开启：`map` / `filter` / `reduce` / `apply` / `eval` / `->` / `for-each`
+ * 既可被调用（走求值器快速路径），也可作为**值**传递（`(procedure? map)` 为真）。
+ * 关闭后它们只在调用位置可用，环境里没有绑定。
+ */
+public func withNoFirstClassValues(): InterpreterOption {
+    { interpreter => interpreter.setFirstClassValues(false) }
+}
+
 // ==================== 能力域装配 ====================
 
 /**

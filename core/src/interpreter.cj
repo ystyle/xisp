@@ -24,6 +24,10 @@ public class LispInterpreter {
     // 默认装配是 registerAll 全量；宿主若明确要"只要这些域"，需要清掉默认注册，
     // 否则未选中的域符号仍然可用，"选择权"形同虚设。
     private var domainsInstalledExclusively: Bool = false
+    // 是否为②类符号安装一等值（接缝 0e）；宿主可用 withNoFirstClassValues() 关闭
+    private var firstClassValuesEnabled: Bool = true
+    // 是否已安装（卸载时需要知道从哪个环境移除）
+    private var firstClassValuesInstalled: Bool = false
     public var bridge: BridgeManager
 
     // ==================== 配置字段 ====================
@@ -127,6 +131,12 @@ public class LispInterpreter {
 
         // 注册内置函数
         BuiltinFunctions.registerAll(this.env)
+        // ②类符号的一等值（接缝 0e）：调用仍走求值器快速路径，
+        // 值位置（procedure? / 作参数传递）则从环境取到这里注册的 NativeFunc。
+        // 注意：选项在 init 之后才应用，故这里先按默认安装；
+        // `withNoFirstClassValues()` 会把它们移除（见 setFirstClassValues）。
+        this.evaluator.installFirstClassValues(this.env)
+        this.firstClassValuesInstalled = true
 
         // 注册标准桥接函数
         this.bridge.registerStdIO()
@@ -601,6 +611,27 @@ public class LispInterpreter {
      * 供能力域在长循环里周期性查询 —— 外部域拿到的是本方法与
      * `CapabilityContext.isInterrupted`，而不是求值器实例。
      */
+    /**
+     * 关闭②类符号的一等值安装。
+     *
+     * 关闭后 `(procedure? map)` 等回到"未绑定"状态 —— 适合追求最小环境、
+     * 且确认不需要把高阶函数当值传递的宿主。
+     */
+    public func setFirstClassValues(enabled: Bool): Unit {
+        this.firstClassValuesEnabled = enabled
+        if (enabled) {
+            if (!this.firstClassValuesInstalled) {
+                this.evaluator.installFirstClassValues(this.env)
+                this.firstClassValuesInstalled = true
+            }
+        } else {
+            if (this.firstClassValuesInstalled) {
+                this.evaluator.uninstallFirstClassValues(this.env)
+                this.firstClassValuesInstalled = false
+            }
+        }
+    }
+
     public func isInterruptedNow(): Bool {
         this.evaluator.isInterrupted()
     }
