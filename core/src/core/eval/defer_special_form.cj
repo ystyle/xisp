@@ -98,3 +98,31 @@ extend Evaluator {
         }
     }
 }
+
+extend Evaluator {
+    /**
+     * 特殊形式是否被宿主权限策略禁止。
+     *
+     * `funcChecker` 原本只作用于普通函数调用路径，特殊形式（`eval` / `apply` /
+     * `map` / `filter` / `reduce` / `for-each` / `->` 等）由求值器直接分派、
+     * 从不经过检查 → 沙箱的 `blockFunctions(["eval","apply"])` 形同虚设。
+     *
+     * 覆盖范围：仅"可逃逸"的那部分特殊形式（与 `shouldDeferToUser` 同一集合），
+     * **不含** `if` / `define` / `lambda` 等语言原语 —— 它们是语法结构，
+     * 拦掉会让任何脚本都无法运行，而非"限制能力"。
+     */
+    func specialFormBlocked(sym: String): Bool {
+        match (this.funcChecker) {
+            case Some(checker) =>
+                // 只对可逃逸集合做检查（与可让位集合同一批名字）
+                var inSet = false
+                for (n in DEFER_NAMES) {
+                    if (n == sym) {
+                        inSet = true
+                    }
+                }
+                inSet && !checker(sym)
+            case None => false
+        }
+    }
+}

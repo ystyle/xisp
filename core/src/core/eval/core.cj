@@ -159,6 +159,22 @@ extend Evaluator {
         if (this.shouldDeferToUser(sym)) {
             return None
         }
+
+        // 权限检查覆盖特殊形式（能力域设计 §5.4 接缝 4）
+        //
+        // 此前 `funcChecker` 只挂在普通调用路径（`evalFunctionCallWithValue`），
+        // 而特殊形式在分派时从不经过那里 —— 于是 `withSandbox()` 明确声明的
+        // `blockFunctions(["eval", "apply"])` **实测拦不住**（`(eval …)` / `(apply …)`
+        // 照常执行），而③类注册函数（如 `length`）能被正常拦住。
+        //
+        // 特殊形式是**能绕过检查**的那一类（`registerPure` 的文档注释已论证：
+        // `eval`/`apply`/`map`/`filter`/`reduce`/`for-each` 会先于检查执行），
+        // 因此这里必须显式检查，否则沙箱的核心意图失效。
+        if (this.specialFormBlocked(sym)) {
+            return Some(LispValue.Error(XispError(ErrorType.UndefinedFunction,
+                "Function '${sym}' is not allowed")))
+        }
+
         match (sym) {
             case "+" => Some(this.evalAdd(rest))
             case "-" => Some(this.evalSub(rest))
