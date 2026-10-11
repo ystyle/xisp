@@ -99,6 +99,137 @@
 这条约束决定了：**运行期装配的作用点是 `env.define` 的那一刻，不是调用那一刻。**
 任何"先全注册、再按名单拦截"的设计都不成立。
 
+### 3.5 ⚠️ 修正：这条约束只覆盖了符号的一半（2026-10-11 实测）
+
+上文（承自 `registerPure` 注释）默认"符号都靠注册"，但**实测不成立**。按"默认环境里
+`env.lookup` 是否命中"逐个符号测下来，现存符号是**三类**，而 §3.4 的约束只对第三类有效：
+
+| 类 | 符号 | 注册为值 | 一等值（`procedure?`） | 「不注册」能否禁止 |
+|---|---|---|---|---|
+| **A 求值器原语** | `if` `quote` `define` `lambda` `let` `let*` `begin` `set!` `defmacro` `condb` `if-let` `when-let*` `match` `backquote` `comma` `import` `export` | ❌ | ❌ | **❌ 根本做不到**：从未注册，由求值器硬编码（`trySpecialForm` 33 条 `case`） |
+| **B 半原语** | `+ - * / < > =`、`and or`、`apply eval map filter reduce for-each ->` | ✅/部分 | ❌/✅ 混合 | **❌ 注册了也关不掉**：硬编码优先于注册表 |
+| **C 纯注册函数** | `cons car cdr list length null? not eq? number? str print…` | ✅ | ✅ | ✅ 这就是 §3.4 说的那类 |
+
+**实测证据**（默认环境）：
+
+```
+(define map 42)        →  map 求值为 42，但 (map f lst) 仍照常工作   ← B 类：值可改、行为不可改
+(define if 42)         →  (if 1 2) 仍返回 2                          ← A 类：define 完全无效
+(procedure? map)       →  [UnboundVariable] Undefined variable: 'map' ← B 类：不是一等值
+(procedure? car)       →  true                                        ← C 类：是
+(define (go f) (f …)) (go map) → [UnboundVariable] 'map'              ← B 类无法作为值传递
+(apply 42 '(1 2))      →  nil（静默吞掉类型错误）
+```
+
+**两个衍生问题**（另见实现问题记录）：
+
+1. **`funcChecker` 对 A/B 类失效**：权限检查只在普通调用路径（`core.cj:233`），
+   特殊形式在 `trySpecialForm` 早退。`withSandbox()` 明确 `blockFunctions(["eval","apply"])`，
+   实测**两者都拦不住**；`length`（C 类）则正常报 `Function 'length' is not allowed`。
+2. **`and` / `or` 在 AST 求值器下不短路**（注册成普通 `NativeFunc`，实参先全求值），
+   而字节码编译器把它们当**真特殊形式**（`compileAnd`/`compileOr`）→ **两个后端语义不一致**：
+   `(and 0 (undefined-fn-xyz))` AST 报 `UndefinedFunction`、BC 得 `false`。
+   同一现象还有 `(apply 42 …)`（AST `nil` / BC `RuntimeError`）、以及
+   **BC 下 `length` 被拉黑仍返回 2**（VM 不查 `funcChecker`）。
+
+**对能力域设计的影响**（重要）：
+
+- §3.4 的"注册集合"模型**只覆盖 C 类**；A/B 类由编译进去的求值器提供，**任何域装配都关不掉**。
+  而沙箱最想收紧的 `eval` / `apply` / `map` / `filter` / `reduce` 恰恰全在 A/B 类。
+- 因此能力域要真正成立，前提是先做**符号归类收敛**：A 类明确为"语言原语，域装配不管"，
+  B 类要么降为 C 类（真注册 + 一等值 + 求值器按需取函数值），要么升为 A 类（明确不可配置）。
+  这条比 `External` 变体更靠前（见 §9 实施顺序）。
+
+---
+
+### 3.6 符号归类：必需原语 vs 可选能力（本设计的模型基础）
+
+§3.5 的实测说明"必需 / 可选"不能用"注册 / 不注册"来分。按**能否用函数替代**重分：
+
+| 归类 | 判据 | 符号（现状） | 域装配能否关掉 |
+|---|---|---|---|
+| **① 语言原语**（不可省、不可拦、非一等值） | 语法结构；缺了就不是这门语言 | `if` `quote` `lambda` `define` `set!` `let` `begin` `defmacro` `match` `import` `export` | ❌ 关不掉（但**语义内部可以带宿主策略**，见下） |
+| **② 控制流原语**（需延迟/控制求值，且应为**一等值**） | 必须能操作"未求值的实参"，或必须能作为值传递 | `and` `or`（短路）、`apply` `eval` `map` `filter` `reduce` `for-each` `->` | ❌ 关不掉（现状）；**应收敛为一等值** |
+| **③ 纯函数**（真注册、可省、可拦、可作值） | 实参先求值，无控制流 | `+ - * / < > =` `cons car cdr list length append` `not eq? number? string? symbol? list? procedure?` `str print println` … | ✅ 只有这类能靠"不注册"表达禁止 |
+
+**①/② 与"可配置"并不互斥**——既有先例：`import` / `export` 是①类原语，
+但内部已接宿主策略（`moduleLoadChecker`），`withNoModuleLoad()` 实测能拦住。
+所以正确的模型是：**原语不可"移除"，但可以携带宿主策略开关**。
+
+**②类的目标形态**（收敛方向，不是现状）：让它们成为**真一等值**——
+`(procedure? map)` 为真、`(go map)` 能把 `map` 当参数传。
+只要求值器能"取到函数值再决定如何调用"（而非把符号名硬编码进分派），
+② 就同时获得了一等值与可配置性。这也是字节码/AST 两个后端语义一致的唯一办法（§3.5 问题 3.3）。
+
+---
+
+### 3.7 两级装配模型（core 内置域 + 宿主自定义域）
+
+本设计的装配分**两层**，粒度与作用者都不同：
+
+| 层 | 作用者 | 粒度 | 现状 |
+|---|---|---|---|
+| **L1 core 内置域** | xisp 自己 | 一个"域"= 一组顶层符号（算术 / 列表 / 高阶 / 哈希表 / 输出…） | `registerAll`（全部）/ `registerPure`（子集）两档 |
+| **L2 宿主自定义域** | 宿主 | 同上，但由宿主声明并安装 | 已有 `Bridge.registerFunc*` 的一函数级入口，无"域"抽象 |
+
+**关键结论：`LispCapability` 应该是这两层共用的同一个抽象**——core 内置域把它当作
+"自描述的分组"，宿主自定义域把它当作"扩展点"。这样：
+
+- L1 的各域天然可组合（`registerAll` = 域并集，`registerPure` = 显式子集，**不再是两份平行清单**，见 §3.3）；
+- L2 复用同一套 `install(ctx)` / `symbols` 声明；
+- 沙箱审计、文档生成、重名检出对**两层**统一生效（都读 `symbols` 清单）。
+
+### 3.7.1 预置组合（preset）与自定义组合
+
+`registerAll` / `registerPure` 的定位应重新表述为**预置组合（preset）**，而不是两个函数：
+
+```cangjie
+// 草案：域集合（core 内置）
+public let DOMAIN_BASE:      LispCapability   // nil / 关键字别名
+public let DOMAIN_ARITH:     LispCapability
+public let DOMAIN_LIST:      LispCapability
+public let DOMAIN_HIGHER:    LispCapability   // map / filter / reduce …
+public let DOMAIN_HASHMAP:   LispCapability
+public let DOMAIN_OUTPUT:    LispCapability   // 需注入 output 通道，见下
+
+// 预置组合（命名组合，可由 core 提供，也可由宿主自造）
+public let PRESET_FULL: Array<LispCapability>   // 全量
+public let PRESET_PURE: Array<LispCapability>   // = FULL 减去 可逃逸域 + 策略域
+// 宿主可自造：withDomains([DOMAIN_ARITH, DOMAIN_LIST, MyOwnDomain])
+```
+
+- **预置组合是"命名 + 域列表"**，宿主可以定义自己的组合，而不只是二选一；
+- 组合的语义是**并集**：`withDomains([...])` 逐域 `install`；
+- **顺序敏感**：别名域必须在被别名域之后（现有 `registerModernAliases` 已依赖这个次序），
+  故 `install` 顺序即声明顺序、且需要一条依赖声明（`after: ["arith"]`）。
+- 关于"减法"：**只有 `PRESET_PURE` 这类"由 core 预先定义好的组合"才可能用减法表达**
+  （在 core 内部按域属性推导）；宿主若想从全量里减，只能自己列出要装的域
+  —— 因为对已安装的环境做"删符号"违背 §3.4（逃逸域已执行过）。
+
+### 3.7.2 与 `InterpreterOption` 的关系（L2 定制的落点）
+
+宿主侧保留既有的 `InterpreterOption` 风格（`withXxx`），域只是其中一个新的选项类型：
+
+```cangjie
+public func withDomains(caps: Array<LispCapability>): InterpreterOption
+public func withPreset(preset: Array<LispCapability>): InterpreterOption
+```
+
+这样不动现有 31 个 `withXxx` 的心智模型，只是把"装哪些符号"从两个硬编码函数
+扩展成"可选组合 + 自定义域"。
+
+### 3.7.3 域的属性（决定它能进哪个 preset）
+
+建议每个域声明两个布尔属性，`PRESET_PURE` 由**推导**得出而非手写清单：
+
+| 属性 | 含义 | 例 |
+|---|---|---|
+| `escapable` | 该域能否绕过权限检查（`eval`/`apply`/`map`/高阶回调） | `higher` = true |
+| `hostPolicy` | 该域是否触及宿主资源（文件/网络/进程/输出） | `io`/`fs`/`net` = true |
+
+规则：`PRESET_PURE` = 所有 `!escapable && !hostPolicy` 的域。
+**新增域默认 `escapable = true`（保守），须显式声明才进 pure** —— 默认安全。
+
 ---
 
 ## 4. 现状事实（装配骨架已存在）
@@ -127,29 +258,40 @@
 
 ## 5. 域模型
 
-### 5.1 一个域 = 三个要素
+### 5.1 一个域 = 五个要素
 
-1. **注册集合**（哪些顶层符号）—— 靠"不注册"表达禁止（§3.4）；
+1. **注册集合**（哪些顶层符号）—— 靠"不注册"表达禁止（§3.4，但注意 §3.5 对它只覆盖 C 类）；
 2. **实现位置**（core 内 / 独立模块）；
-3. **默认开关状态**（解释器默认给不给）。
+3. **默认开关状态**（解释器默认给不给）；
+4. **属性**：`escapable`（能否绕过权限检查）、`hostPolicy`（是否触及宿主资源）—— 决定它能否进 `PRESET_PURE`（§3.7.3）；
+5. **安装顺序约束**（`after`）—— 别名域必须晚于被别名域（§3.7.1）。
 
-域在 core 内部时，直接用现有 `registerXxx` 同包函数组合即可；
-域在独立模块时，需要一个跨模块接缝（草案）：
+**`LispCapability` 是 L1（core 内置域）与 L2（宿主自定义域）共用的同一个抽象**（§3.7）：
 
 ```cangjie
 // ystyle::xisp（core 侧，草案）
 public interface LispCapability {
-    prop name: String                 // 域标识，如 "net"
-    prop symbols: Array<String>       // 本域注册的顶层符号，供沙箱审计与自省
-    func install(interp: LispInterpreter): Unit
+    prop name: String                     // 域标识，如 "net"
+    prop symbols: Array<String>           // 本域注册的顶层符号，供沙箱审计与自省
+    prop escapable: Bool                  // 能否绕过权限检查（默认 true = 保守）
+    prop hostPolicy: Bool                 // 是否触及宿主资源（文件/网络/进程/输出）
+    prop after: Array<String>             // 安装顺序约束（如别名域 after ["arith"]）
+    func install(ctx: CapabilityContext): Unit
 }
 
-public func withCapability(cap: LispCapability): InterpreterOption
-public func withCapabilities(caps: Array<LispCapability>): InterpreterOption
+public func withDomains(caps: Array<LispCapability>): InterpreterOption
+public func withPreset(preset: Array<LispCapability>): InterpreterOption
 ```
+
+> 早期草案的 `install(interp: LispInterpreter)` 已改为 `install(ctx: CapabilityContext)`：
+> 独立模块需要的不止解释器，还需要中断检查器与类型声明通道（§8.1）。
 
 `xisp_net` 依赖 core 并提供 `NetCapability`，core **完全不认识 net** —— 依赖方向正确，
 且这套机制对字节码 / JIT 后端同样适用（可与工作区化文档 §3.2 的执行后端接缝统一为同一套宿主接缝）。
+
+**域在 core 内部时**（L1）也走同一接口：把现有 `registerXxx` 包装成域，
+`PRESET_FULL` = 所有域的并集、`PRESET_PURE` = 按属性推导的子集（§3.7.3），
+**不再维护第二份平行清单**（消除 §3.2 的隐式依赖问题）。
 
 ### 5.2 域清单与现状
 
@@ -438,9 +580,11 @@ public interface LispCapability {
 
 | # | 接缝 | 设计位置 | 状态 |
 |---|---|---|---|
-| 1 | `External` 变体 + `LispExternal` 协议族 | §7 | **待做**，破坏性变更 |
-| 2 | 域装配 `LispCapability` + `CapabilityContext`（中断注入、类型声明） | §8.1、§5.1 | **待做** |
-| 3 | 外部模块的**中断义务**（长循环必须查中断） | §8.1 | 机制已有，契约待写进模块 README |
+| 0 | **符号归类收敛**（①原语 / ②控制流原语 / ③纯函数；②收敛为一等值） | §3.6 | **待做，且应最先**（§3.5 的实测表明不做它，能力域模型只覆盖 1/3 的符号） |
+| 1 | 域抽象 `LispCapability` + 预置组合（`PRESET_FULL` / `PRESET_PURE`）+ `withDomains` | §3.7、§5.1 | **待做** |
+| 2 | `External` 变体 + `LispExternal` 协议族 | §7 | **待做**，破坏性变更 |
+| 3 | `CapabilityContext`（中断注入、类型声明） | §8.1、§5.1 | **待做** |
+| 4 | 外部模块的**中断义务**（长循环必须查中断） | §8.1 | 机制已有，契约待写进模块 README |
 
 > 第 3 条最容易被忽略：core 已有 `setInterruptChecker`（`evaluator.cj`），
 > `INTERRUPTED_MESSAGE` 也已是 public。但沙箱 `timeout` 与宿主取消**只能打断求值热路径**
@@ -448,12 +592,19 @@ public interface LispCapability {
 
 **建议实施顺序**（若决定做）：
 
-1. `types` 包加协议族 + 变体 → 编译驱动修 core 内那 12 处，补单元测试；
-2. core 通用语义按能力接口分派：`print` / `type-of` / `=` / `length` / `nth` / 谓词；
-3. `LispCapability` + `CapabilityContext`（中断注入、类型声明）；
-4. **先用一个测试用假扩展**（如 `ExternalDemo`：一个极简的外部计数器值）端到端验证
+1. **符号归类收敛**（接缝 0）：把 §3.6 的①/②/③落成代码事实——②类收敛为一等值
+   （`(procedure? map)` 为真、可作值传递），并让两个后端语义一致（§3.5 问题 3.3）；
+   顺带修 `funcChecker` 对 A/B 类失效与 `and`/`or` 不短路（见 `docs/bugs/symbol-layering-findings.md`）。
+   **这一步不做，后面的域装配只能管住纯函数**；
+2. 域抽象落地：把现有 `registerXxx` 包装成 `LispCapability`，`registerAll` / `registerPure`
+   改表述为 `PRESET_FULL` / `PRESET_PURE`（后者按 `escapable`/`hostPolicy` 推导），
+   补 `withDomains` / `withPreset`；
+3. `types` 包加协议族 + 变体 → 编译驱动修 core 内那 12 处，补单元测试；
+4. core 通用语义按能力接口分派：`print` / `type-of` / `=` / `length` / `nth` / 谓词；
+5. `CapabilityContext`（中断注入、类型声明）；
+6. **先用一个测试用假扩展**（如 `ExternalDemo`：一个极简的外部计数器值）端到端验证
    —— 注册域 → 产生 External → `print` / `=` / 中断全部走通；
-5. 之后才开科学计算族的地基模块（见下游文档）。
+7. 之后才开科学计算族的地基模块（见下游文档）。
 
 ---
 
@@ -471,3 +622,5 @@ public interface LispCapability {
 | C8 | 多成员样板重复 | `bin-dependencies` / `link-option` 必须在每个要发布的成员里各写全份（cordis-cj 实测 42 处重复），且 cjpm-ws 目前不同步这类字段。缓解：约定"只有能力域成员才允许出现 stdx 配置" + CI 校验各成员该段一致 |
 | C9 | `registerPure` 的归宿 | 收敛为 `withPureEnv()` 还是保持现状（§3.3）；改动会影响 atelier 的手工装配路径（§4.2） |
 | C10 | 网络域走哪条路 | 应用层走 stdx 还是第三方纯仓颉库，见 §6.2，需按"是否引入 stdx"这一判据调研后再定 |
+| C11 | ②类符号收敛的具体形态 | 目标是"真一等值"，但有两条路：① 求值器保留原语语义、额外注册一个一等值（值即能力）；② 改为"取函数值再调用"（把控制流语义移进函数）。后者更干净但需改求值器核心，前者改动小但两套语义仍在。**待定** |
+| C12 | `PRESET_PURE` 用减法还是显式列表 | core 内部可按 `escapable`/`hostPolicy` **推导**（推荐，默认安全）；宿主要做减法则只能自己列域（§3.7.1）。需确认"新增域默认 `escapable=true`"是否会给现有域带来意外排除 |

@@ -652,3 +652,38 @@
 - [x] 更新 6 处仓库内引用（`AGENTS.md` / `CLAUDE.md` / `core/README.md` / `xisp_bc/README.md` / `task.md` / 08-25 文档）
 
 **完成时间**: 2026-10-11
+
+---
+
+## M16: 符号分层实测 + 两级装配模型（能力域设计推进）🔍
+
+评审"lisp 必需符号的划分是否正确"时，逐个符号实测默认环境行为，得出对能力域设计的**结构性修正**。
+
+**实测结论**：现有三个真值来源互不一致（`docs/core.md` 清单 / `trySpecialForm` 33 条硬编码 / `registerXxx` 注册表）。
+符号实为**三类**，而「不注册表达禁止」只对第三类成立：
+
+| 类 | 符号 | 注册为值 | 一等值 | 「不注册」能否禁止 |
+|---|---|---|---|---|
+| ① 求值器原语 | `if` `quote` `define` `lambda` `let` `begin` `set!` `defmacro` `match` `import` `export`… | ❌ | ❌ | ❌ 从未注册，由其提供 |
+| ② 控制流原语 | `and` `or` `apply` `eval` `map` `filter` `reduce` `for-each` `->`、`+ - * / < > =` | ✅/部分 | ❌/✅ 混合 | ❌ 注册了也关不掉（硬编码优先） |
+| ③ 纯函数 | `cons` `car` `length` `not` `eq?` `str` `print`… | ✅ | ✅ | ✅ |
+
+**暴露的实现问题**（已记入 `docs/bugs/symbol-layering-findings.md`，本次不改代码）：
+- [ ] `funcChecker` 对①②类失效 → `withSandbox()` 的 `blockFunctions(["eval","apply"])` **实测拦不住**
+- [ ] `and`/`or` 在 AST 求值器下**不短路**（注册成普通 `NativeFunc`）
+- [ ] **两后端语义不一致**：BC 把 `and`/`or` 当真特殊形式（短路）；`(apply 42 …)` AST `nil` / BC 报错；
+      **BC 下拉黑 `length` 仍返回 2**（VM 不查 `funcChecker` → 沙箱绕过）
+- [ ] 静默吞错：`(apply 42 '(1 2))` → `nil`、`(map 非函数 …)` → `(nil nil)`
+
+**设计推进**（已写入能力域文档）：
+- [x] §3.5 修正 §3.4 的硬约束（"注册集合"只覆盖 1/3 符号）
+- [x] §3.6 符号归类（①语言原语 / ②控制流原语 / ③纯函数），明确①②**不可移除但可携带宿主策略**
+      —— 既有先例：`import` 是①类，但已接 `moduleLoadChecker`，`withNoModuleLoad()` 实测能拦
+- [x] §3.7 **两级装配模型**：`LispCapability` 是 L1（core 内置域）与 L2（宿主自定义域）共用的同一抽象；
+      `registerAll`/`registerPure` 重新表述为**预置组合** `PRESET_FULL`/`PRESET_PURE`；
+      域新增 `escapable` / `hostPolicy` / `after` 属性，`PRESET_PURE` 由属性**推导**而非手写清单
+- [x] §5.1 域模型从三要素扩为五要素；`install(interp)` → `install(ctx: CapabilityContext)`
+- [x] §9 实施顺序新增**接缝 0：符号归类收敛**，排在最前（不做它，域装配只能管住纯函数）
+- [x] 风险表新增 C11（②类收敛形态待定）、C12（`PRESET_PURE` 减法 vs 显式列表）
+
+**完成时间**: 2026-10-11
