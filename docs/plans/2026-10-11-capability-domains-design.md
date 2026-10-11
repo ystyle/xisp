@@ -249,6 +249,40 @@ core 已有 `setInterruptChecker`（`evaluator.cj`），`INTERRUPTED_MESSAGE` �
 
 ---
 
+### 3.4 接缝 D：宏改为**编译前**展开（0/0b 的前提）
+
+**这是本轮最关键的修正。** 宏本是语法层的东西，却一直放在**运行时**展开
+（AST 在 `evalListInternal` 遇到宏才展开；VM 用 `callMacro` 每次调用重新展开）：
+
+- **性能**：宏调用被编译成"调宏指令"，每次执行都展开一次并起子求值器。
+  实测递归函数体内含一个宏：字节码 10767us vs 不含宏 566us（**差 19 倍**）；
+- **语义**：编译路径下宏参数**已被求值为值**，VM 只能把值 `quote` 回去冒充语法
+  （`vm.cj` 的 `buildCallExpr` 注释自陈"常见宏…与 AST 完全等价"）——
+  对"把参数当语法分析"的宏就**不等价**，是静默错误。
+
+改法：`evalInner` 分派后端**之前**，若表达式含宏则先展开，再用展开产物走正常编译。
+新增 `expandForCompile`（尊重求值边界的展开）与零分配探测 `containsMacroCall`。
+
+> **不能复用 `macroExpandAll`**：它是 `(macroexpand-all …)` 的语义，递归展开一切，
+> 包括 `quote` 内部（实测 `(quote (quote (when …)))` 会被展平）——那是**数据**。
+> `expandForCompile` 换判据为"只展开会被求值的位置"，遇 `quote`/`quasiquote`/`defmacro`
+> 即停；而 `lambda` 与 `define` 的函数体**要**展开（函数体是会被求值的代码）。
+
+效果：含宏递归 10767us → **971us**；宏展开次数由"每次调用 1 次"变为
+**定义时 1 次、此后恒定**；AST 与字节码语义一致。
+
+### 3.5 接缝 E：`gensym`
+
+`defmacro` 与调用点共享符号空间（非卫生宏），宏体里的临时变量会捕获用户的同名变量
+（实测 `(defmacro my-or (a b) …(quote tmp)…)` 在 `(let ((tmp 5)) (my-or #f tmp))`
+下返回 `false` 而非 `5`）。卫生宏由语言机制解决；非卫生宏的通行解法是
+`gensym`：`(gensym)` → `#:g12`，`(gensym "prefix")` → `#:g12-prefix`。
+
+计数器用 `AtomicInt64`：`gensym` 天然是全局名字源（CL 亦如此），且 `NativeFunc`
+的 handler 拿不到求值器（正是接缝 0a 要解决的事）。
+
+---
+
 ## 4. 域装配模型（core 内置域 + 宿主自定义域）
 
 ### 4.1 一个域 = 五要素
@@ -680,9 +714,12 @@ public interface LispExternalCallable <: LispExternal {
 
 | # | 接缝 | 设计位置 | 状态 | 服务于 |
 |---|---|---|---|---|
-| **0** | 符号归类落成代码事实（四层；②类收敛） | §2 | **待做，应最先** | 可替换（§1） |
-| **0a** | Lisp 函数值调用入口（`applyProcedure` 公开 / `ctx.invoke`） | §3.1 | **待做**；修 `for-each` 的 `NativeFunc`-only 静默失败 | 可替换 |
-| **0b** | ②类"让位"机制 | §3.2 | **部分已有**（`+ - * / < > =`）；**剩余 `map` `filter` `reduce` `apply` `eval` `->` 待做** | 可替换 |
+| **0** | 符号归类落成代码事实（①收敛：33 → 10 条） | §2 | **✅ 已完成**（2026-10-11）：`and` `or` `condb` `if-let` `let*` `when-let*` 降为宏 | 可替换（§1） |
+| **0e** | ②类**一等值化**（`(procedure? map)` 为真、可作值传递） | §3.2 | **待做**（让位已使其"可替换"，但尚不可作值传递）；形态见下方注 | 可替换（完整） |
+| **0a** | Lisp 函数值调用入口（`Evaluator.applyFunction` / `isCallableValue`） | §3.1 | **✅ 已完成**（2026-10-11）；顺带修掉 `for-each` 只认 `NativeFunc` 的静默失败 | 可替换 |
+| **0b** | ②类"让位"机制（7 个符号：`map` `filter` `reduce` `apply` `eval` `->` `for-each`） | §3.2 | **✅ 已完成**（2026-10-11），双后端一致 | 可替换 |
+| **0c** | 宏改为**编译前**展开 | §3.4 | **✅ 已完成**（2026-10-11）；含宏递归 10767us → 971us | 0/0b 的前提 |
+| **0d** | `gensym`（非卫生宏的唯一符号来源） | §3.5 | **✅ 已完成**（2026-10-11） | 宏包的前提 |
 | 1 | 域抽象 `LispCapability` + preset + `withDomains` | §4 | **待做** | 可不要 + 可替换 + 可定制 |
 | 2 | `CapabilityContext`（中断注入、类型声明、`invoke`、`evalSource`） | §3.3 | **待做** | 域装配 |
 | 3 | `External` 变体 + `LispExternal` 协议族 | §7 | **待做**，破坏性变更 | 下游 sci 族 |
@@ -691,12 +728,19 @@ public interface LispExternalCallable <: LispExternal {
 
 ### 8.2 实施顺序
 
-1. **接缝 0 / 0a / 0b（可替换）** —— 本设计的首要目标，也最靠前：
-   - 0a：公开函数值调用入口，修 `for-each` 回调限制；
-   - 0b：②类让位（复用 `isNativeArith` 的版本号缓存模式）；
-   - 0：②类收敛为一等值（`(procedure? map)` 为真、可作值传递）；
-   - 顺带让两个后端语义一致、修 `and`/`or` 不短路、修 `funcChecker` 覆盖缺口。
-   **不做这步，域装配只能管住③类，用户也无法用宏顶掉 core 的同能力实现。**
+1. ~~**接缝 0 / 0a / 0b / 0c / 0d（可替换）**~~ —— **✅ 已完成**（2026-10-11）：
+   - 0c 宏改为编译前展开（含宏递归 10767us → 971us，且消除 AST/BC 语义偏差）
+   - 0d `gensym`（非卫生宏的唯一符号来源）
+   - 0a `applyFunction` / `isCallableValue`；顺带修 `for-each` 只认 `NativeFunc` 的静默失败
+   - 0b 让位机制（7 个符号，双后端一致；**让位判断必须先于编译**）
+   - 0 六个派生形式降为宏；`and`/`or` 的 4 处 AST/BC 语义分歧归零
+   **效果**：core 自带的同能力实现全部可被用户顶掉 —— "可替换"目标达成。
+
+   **仍欠一项**：0e `(procedure? map)` 为真 / 可作值传递。
+   形态建议：照搬算术符号已验证的模式 —— core 把 `map` 等**注册成值**（一等值），
+   同时保留求值器快速路径，守卫判据改为"绑定是否仍为 core 注册的那份"；
+   用户替换后自动让位。**不急于做**：目前 `map` 作为值传入高阶函数仍是
+   `UnboundVariable`，但"可替换"本身已成立。
 2. **接缝 1 / 2（域装配）**：把现有 `registerXxx` 包装成 `LispCapability`，
    `registerAll` / `registerPure` 改表述为 `PRESET_FULL` / `PRESET_PURE`（后者按属性推导），
    补 `withDomains` / `withPreset` / `CapabilityContext`。
