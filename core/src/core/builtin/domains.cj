@@ -93,8 +93,7 @@ extend BuiltinFunctions {
     /** 内建宏包：`when` `unless` `incf` `swap` `do` `defun` `and` `or` `condb` `if-let` `let*` `when-let*` … */
     public static func domainMacrosCore(): LispCapability {
         SimpleCapability("macros.core",
-            ["when", "unless", "incf", "decf", "swap", "push", "pop", "negate",
-             "do", "defun", "and", "or", "condb", "if-let", "let*", "when-let*"],
+            BuiltinMacros.allSymbols(),
             { ctx => BuiltinMacros.registerAll(ctx.env) },
             // 宏展开本身不逃逸：它产出的是**代码**，最终仍受环境的权限检查约束。
             // 但 `and`/`or` 等展开后可能引用高阶形式，故保守标 true。
