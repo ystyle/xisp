@@ -4,7 +4,7 @@
 **日期**: 2026-08-25
 **状态**: **方案 A 已定，待实施**；方案 B / C **不做**（设计保留在 §4 / §5，谁要谁捡）
 **模块名**: `ystyle::bytecode_kit`（中性名，不含 `xisp`，见 §3.1）
-**关联**: 整体路线与排期见 [`2026-09-27-workspace-modularization.md`](2026-09-27-workspace-modularization.md) §3.2 / §3.3
+**关联**: 模块划分与字节码后端的落地记录见 [`2026-09-27-workspace-modularization.md`](2026-09-27-workspace-modularization.md) §3.2 / §3.3（已实施并随 0.5.0 发布）
 
 ---
 

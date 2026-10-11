@@ -43,5 +43,6 @@ cjpm clean
 ### 项目结构
 
 > 已改为 cjpm 工作区（`core` / `terminal` / `repl` / `cli` / `xisp_examples` / `xisp_tests`），
-> 结构以 `AGENTS.md` 与 `docs/plans/2026-09-27-workspace-modularization.md` 为准。
+> 结构以 `AGENTS.md` 与 `docs/plans/2026-09-27-workspace-modularization.md` 为准；
+> 运行期能力装配 / 扩展接缝见 `docs/plans/2026-10-11-capability-domains-design.md`。
 

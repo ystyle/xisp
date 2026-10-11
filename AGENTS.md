@@ -67,7 +67,8 @@ cjpm clean
 ## 项目结构
 
 cjpm 工作区（`[workspace]`）：每个成员是独立发布的包。模块划分与依赖方向见
-`docs/plans/2026-09-27-workspace-modularization.md`。
+`docs/plans/2026-09-27-workspace-modularization.md`（已实施并随 0.5.0 发布）；
+运行期能力装配与扩展接缝见 `docs/plans/2026-10-11-capability-domains-design.md`。
 
 ```
 .

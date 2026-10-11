@@ -561,8 +561,8 @@
 **验证**：`cjpm build` 通过；`cjpm test` **427 / 427**；产物 `ystyle::xisp_cli` + 10 个 examples 可执行件；
 冒烟 `(println (+ 1 2))` → `3`；CLI / REPL banner 版本号显示 0.5.0。
 
-**设计**：`docs/plans/2026-09-27-workspace-modularization.md`
-（阶段 2 `bytecode_kit` / 阶段 3 `xisp_jit` 已规划，见该文档 §3.2 / §3.3 与 `2026-08-25-bytecode-fw-design.md`）
+**设计**：`docs/plans/2026-09-27-workspace-modularization.md`（**已实施并随 0.5.0 发布，现冻结为记录**）
+`xisp_bc` 的落地见该文档 §3.2；通用 kit（`bytecode_kit`）的演进路径见 §3.3 与 `2026-08-25-bytecode-fw-design.md`。
 
 **待收口**：跨仓 `atelier/cli` 的 4 处 `ystyle::xisp.terminal.*` → `ystyle::xisp_terminal.*`（并升 0.5.0）；
 `cordis_xisp` 仅升版本。
@@ -630,3 +630,25 @@
 命名空间 3 + 字节码模式回归 1）。全量 `cjpm test` 通过。
 
 **完成时间**: 2026-09-28
+
+---
+
+## M15: 设计文档拆分 —— 工作区化 / 能力域 / 科学计算族 📄
+
+`2026-09-27-workspace-modularization.md` 原为一份 871 行的三合一文档（模块划分 + 运行期能力域 +
+科学计算族）。模块化那部分已实施并随 **0.5.0 发布**，故按"已实施 / 未实施"拆开，各自独立演进。
+
+| 文档 | 内容 | 状态 |
+|---|---|---|
+| `docs/plans/2026-09-27-workspace-modularization.md` | 仓颉侧模块划分（原 §1–§3、§5–§9） | **冻结**（0.5.0 已发布，仅作记录） |
+| `docs/plans/2026-10-11-capability-domains-design.md` | 运行期能力域、register 分层、`External` 接缝、域装配与中断注入 | **未实施** |
+| `docs/plans/2026-10-11-sci-family-design.md` | 科学计算族的依赖分层、C 库、数组归属比选 | **规划中**（排很后面） |
+
+- [x] 拆分两份新文档；原文档裁剪 871 → 438 行，§4 / §10 留为占位节
+- [x] **保留原节号**：外部有 5 处引用 `§3.2` / `§3.3` / `§5.2`（CI、docs-site、两个 README、08-25 文档），改号会断链
+- [x] 原文档内指向已迁出内容的引用（`§4.4` / `§4.5` / `Q4` / `Q5` / `R4` / `R5`）改为跨文档指针
+- [x] 顺带纠正过期事实：0.5.0 **已发布**（原文多处仍写"建议并入 0.5.0"）、`xisp_cli` 已纳入发布（Q2）、core 去 `cjpminfo` 已完成（Q3）、消费者版本 0.4.1 → 0.5.0
+- [x] 新补 `register 分层` 一节（能力域文档 §3）：三条注册路径的粒度与缺口、`registerAll` 与 `registerPure` 两份平行清单的实测差异、"能力 + 可逃逸性"主轴、`registerPure` 归宿待定
+- [x] 更新 6 处仓库内引用（`AGENTS.md` / `CLAUDE.md` / `core/README.md` / `xisp_bc/README.md` / `task.md` / 08-25 文档）
+
+**完成时间**: 2026-10-11

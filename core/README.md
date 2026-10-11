@@ -19,4 +19,5 @@ main(): Int64 {
 }
 ```
 
-工作区结构与模块划分见仓库根 `README.md` 与 `docs/plans/2026-09-27-workspace-modularization.md`。
+工作区结构与模块划分见仓库根 `README.md` 与 `docs/plans/2026-09-27-workspace-modularization.md`；
+能力域装配与扩展接缝见 `docs/plans/2026-10-11-capability-domains-design.md`。
