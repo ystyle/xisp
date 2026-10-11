@@ -27,6 +27,7 @@ extend BuiltinFunctions {
         registerPredicates(env)
         registerPrint(env)
         registerHashMap(env)
+        registerSymbols(env)
         BuiltinMacros.registerAll(env)
         registerRedisAliases(env)     // Redis 风格别名
         registerModernAliases(env)      // 最后注册别名，确保所有原函数已注册
@@ -60,6 +61,7 @@ extend BuiltinFunctions {
         registerLogic(env)
         registerPredicates(env)
         registerHashMap(env)
+        registerSymbols(env)
         registerStringOps(env)
         BuiltinMacros.registerAll(env)
         registerRedisAliases(env)     // 哈希表别名
