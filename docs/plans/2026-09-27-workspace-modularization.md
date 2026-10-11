@@ -125,8 +125,8 @@ types  ←  parser  ←  core.module  ←  core.eval  ←  core.builtin  ←  br
 
 即：**能力域的粒度必须是"注册集合"，不能是"调用拦截"。**
 
-> 运行期装配的后续设计（域模型、register 分层、`registerPure` 的归宿）见
-> [`2026-10-11-capability-domains-design.md`](2026-10-11-capability-domains-design.md) §3–§5；
+> 运行期装配的后续设计（四层模型 §2、域装配 §4、register 收敛 §5）见
+> [`2026-10-11-capability-domains-design.md`](2026-10-11-capability-domains-design.md)；
 > 本节仅作为"骨架已存在"的事实记录。
 
 ### 2.8 两个真实消费者只用到了 core 的一小块
@@ -274,7 +274,7 @@ xisp/                      # workspace 根 = 产品
 
 > 本节（域模型、`registerPure` 约束、域清单与现状、外部依赖域 stdx 实测、网络域分层、异步域定位）
 > 已迁至 [`2026-10-11-capability-domains-design.md`](2026-10-11-capability-domains-design.md)：
-> 域模型见其 §5，域清单见其 §5.2，stdx 实测与网络/异步域见其 §6。
+> 域模型见其 §4，域清单见其 §4.6，stdx 实测见其 §6.1，网络/异步域见其 §6.2 / §6.3。
 >
 > 保留本节号，是为了不破坏下文与外部对 `§4.4` / `§4.5` 的既有引用。
 
@@ -441,7 +441,8 @@ cjpm ws bundle / publish / tag
 >
 > | 原内容 | 现文档 |
 > |---|---|
-> | 外部值接缝、协议族、语义决策、破坏面、命名与符号冲突、域装配与中断注入 | [`2026-10-11-capability-domains-design.md`](2026-10-11-capability-domains-design.md) §7、§8 |
+> | 外部值接缝、协议族、语义决策、破坏面 | [`2026-10-11-capability-domains-design.md`](2026-10-11-capability-domains-design.md) §7 |
+| 符号分层、域装配、中断注入、命名与符号冲突 | 同上，§2、§3.3、§4 |
 > | 科学计算族的依赖分层、C 库、落地形态、数组归属比选 | [`2026-10-11-sci-family-design.md`](2026-10-11-sci-family-design.md)（**规划中**） |
 >
 > 该族排在很后面（用户明确"会很后面才开始"），故 sci 文档当前只固化约束，不开工。

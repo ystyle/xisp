@@ -2,7 +2,7 @@
 
 > **状态**：**规划中** —— 明确排在很后面，本文件当前只做**架构定位与约束固化**，不是开工计划
 > **前置（必须先做完）**：
-> [`2026-10-11-capability-domains-design.md`](2026-10-11-capability-domains-design.md)（能力域与扩展接缝）
+> [`2026-10-11-capability-domains-design.md`](2026-10-11-capability-domains-design.md)（能力分层与扩展接缝）
 > —— 其中 §7 的 `External` 变体 + 协议族是**本族唯一的地基接缝**
 > **上游背景**：工作区化（模块划分）见
 > [`2026-09-27-workspace-modularization.md`](2026-09-27-workspace-modularization.md)
