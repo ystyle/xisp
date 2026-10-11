@@ -38,31 +38,45 @@ extend Evaluator {
             this.compileSuspended = false
         }
         if (!this.compileSuspended && let Some(b) <- this.backend) {
+            // 关键字别名必须先于编译解析：编译器不认识别名表，`setq` 会被当普通函数
+            // 调用（环境里并无此绑定）→ **静默什么都不做**，脚本悄悄算错。
+            // 解析只动头位置（见 alias_for_compile.cj）。
+            var toCompile = expr
+            match (this.resolveHeadAlias(expr)) {
+                case Some(resolved) => toCompile = resolved
+                case None => ()
+            }
             // 让位优先于编译：若表达式头是"已被用户重定义"的可让位符号
             // （map / filter / reduce / apply / eval / -> / for-each），必须回退 AST
             // —— 否则后端会按 core 的语义编译它，用户实现被绕过
             // （实测：用户 define apply 后 AST 走用户实现，BC 仍返回 core 的结果）。
-            if (this.headIsDeferred(expr)) {
+            if (this.headIsDeferred(toCompile)) {
                 this.compileSuspended = true
-            } else if (this.containsMacroCall(expr)) {
+            } else if (this.containsMacroCall(toCompile) || this.containsAliasCall(toCompile)) {
                 // 宏是语法层的东西：必须在编译前展开，否则会被后端编译成"运行时调宏"
                 // （每次调用重新展开，且参数已被求值 → 与 AST 语义可能不等价）。
                 // 展开后重新走本函数，让展开产物正常编译。
                 // 先做零分配探测：绝大多数表达式不含宏，不付展开成本。
-                let expanded = this.expandForCompile(expr)
+                let expanded = this.expandForCompile(toCompile)
                 match (expanded) {
                     case Error(_) => return expanded
                     case _ =>
                         if (!this.isMacroCallExpr(expanded)) {
-                            // 已无宏：交给后端编译展开产物
-                            if (let Some(code) <- b.compile(expanded)) {
+                            // 展开产物里可能仍有别名（expandForCompile 已一并解析，
+                            // 但宏产出可能新增别名），此处再兜一次头位置
+                            var finalExpr = expanded
+                            match (this.resolveHeadAlias(expanded)) {
+                                case Some(r) => finalExpr = r
+                                case None => ()
+                            }
+                            if (let Some(code) <- b.compile(finalExpr)) {
                                 return b.execute(code, this.env)
                             }
                         }
                         // 仍含宏（如 defmacro 体等边界内）或编译失败：走 AST
                         this.compileSuspended = true
                 }
-            } else if (let Some(code) <- b.compile(expr)) {
+            } else if (let Some(code) <- b.compile(toCompile)) {
                 return b.execute(code, this.env)
             } else {
                 // 编译失败：回退 AST，本树禁用后续编译

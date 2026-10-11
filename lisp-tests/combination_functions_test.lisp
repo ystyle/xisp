@@ -38,7 +38,7 @@
     (println "✗ cddr test failed"))
 
 ;; 与 (rest (rest lst)) 比较
-(define result6 (rest (rest lst1))
+(define result6 (rest (rest lst1)))
 (if (= (length result5) (length result6))
     (println "✓ cddr equals rest of rest")
     (println "✗ cddr does not equal rest of rest"))

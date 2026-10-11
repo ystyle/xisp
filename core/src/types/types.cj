@@ -779,6 +779,10 @@ public enum LispValue <: ToString {
             case Macro(_, _, _) => true
             case MacroFromParams(_, _, _) => true
             case NativeFunc(_) => true
+            // 编译闭包在语言层面同样是"过程"。
+            // 漏掉它会使 (procedure? <编译闭包>) 在字节码下返回 false 而 AST 下返回 true
+            // —— 同一段脚本两个后端行为不同（实测）。
+            case Closure(_, _) => true
             case _ => false
         }
     }
@@ -843,7 +847,10 @@ public enum LispValue <: ToString {
             case Macro(_, _, _) => "#<macro>"
             case MacroFromParams(_, _, _) => "#<macro>"
             case NativeFunc(_) => "#<native-function>"
-            case Closure(_, _) => "#<closure>"
+            // 编译闭包与解释器过程在语言层面都是"过程"：
+            // 显示名必须一致，否则同一段脚本在 AST 与字节码后端下打印结果不同
+            // （实测 `(define (f x) x)` 的返回值 AST 打 #<procedure>、BC 打 #<closure>）。
+            case Closure(_, _) => "#<procedure>"
             case HashMap(map) => hashmapToString(map)
             case Error(err) => err.toString()
         }

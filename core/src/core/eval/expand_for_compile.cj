@@ -59,6 +59,35 @@ extend Evaluator {
     }
 
     /**
+     * 快速探测：表达式里是否含有"会被求值的"关键字别名调用。
+     *
+     * 与 `containsMacroCall` 同构 —— 别名同样必须在编译前解析成规范名，
+     * 否则编译器会把它当普通函数调用（环境里并无此绑定）→ 报 `UnboundVariable`
+     * 或静默什么都不做。实测 `(let ((t x)) (setq x y) …)` 在 BC 下失败而 AST 正常。
+     */
+    func containsAliasCall(expr: LispValue): Bool {
+        match (expr) {
+            case Cons(cell) =>
+                if (let Symbol(sym) <- cell.car) {
+                    let resolvedSym = this.env.lookupKeyword(sym)
+                    match (resolvedSym) {
+                        // 数据边界：内部不解析
+                        case "quote" | "quasiquote" | "backquote" | "defmacro" => return false
+                        case _ => ()
+                    }
+                    if (resolvedSym != sym) {
+                        return true
+                    }
+                }
+                if (this.containsAliasCall(cell.car)) {
+                    return true
+                }
+                this.containsAliasCall(cell.cdr)
+            case _ => false
+        }
+    }
+
+    /**
      * 编译前展开：把表达式里**会被求值的**宏调用全部展开，返回无宏的等价表达式。
      *
      * 边界规则（哪些位置不下钻）：
@@ -82,6 +111,11 @@ extend Evaluator {
 
     private func expandForCompileCons(cell: ConsCell): LispValue {
         if (let Symbol(sym) <- cell.car) {
+            // 关键字别名解析：编译器不认识别名表，`setq` 会被当普通函数调用
+            // （环境里并无此绑定）→ 静默什么都不做或报 UnboundVariable。
+            // 必须在**每个会被求值的位置**解析，而不只是顶层头部
+            // —— 实测 (let … (setq …) …) 这类嵌套位置若不解析，BC 会报
+            // `UnboundVariable: 'setq'` 且赋值不生效（AST 下正常）。
             let resolvedSym = this.env.lookupKeyword(sym)
 
             // 数据 / 展开期边界：不下钻
@@ -109,7 +143,17 @@ extend Evaluator {
             }
         }
 
-        // 一般位置：逐元素下钻（car 也要下钻 —— 函数位置可能是 (if …) 之类的表达式）
+        // 一般位置：先解析头别名（若 car 是别名符号），再逐元素下钻
+        if (let Symbol(sym) <- cell.car) {
+            let canonical = this.env.lookupKeyword(sym)
+            if (canonical != sym) {
+                let newCdr0 = this.expandForCompileList(cell.cdr)
+                match (newCdr0) {
+                    case Error(_) => return newCdr0
+                    case _ => return consValue(Symbol(canonical), newCdr0)
+                }
+            }
+        }
         let newCar = this.expandForCompile(cell.car)
         match (newCar) {
             case Error(_) => return newCar

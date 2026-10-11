@@ -307,15 +307,15 @@ public class BytecodeVM <: VM {
                             let result = match (a) {
                                 case Int(ai) => match (b) {
                                     case Float(bf) => LispValue.Float(Float64(ai) + bf)
-                                    case _ => LispValue.Error(XispError(ErrorType.TypeError, "Bytecode: + expected number"))
+                                    case _ => LispValue.Error(XispError(ErrorType.TypeError, "+: expected a number"))
                                 }
                                 case Float(af) => match (b) {
                                     case Int(bi) => LispValue.Float(af + Float64(bi))
                                     case Float(bf) => LispValue.Float(af + bf)
-                                    case _ => LispValue.Error(XispError(ErrorType.TypeError, "Bytecode: + expected number"))
+                                    case _ => LispValue.Error(XispError(ErrorType.TypeError, "+: expected a number"))
                                 }
                                 case Str(s) => Str(s + b.toString())
-                                case _ => LispValue.Error(XispError(ErrorType.TypeError, "Bytecode: + expected number"))
+                                case _ => LispValue.Error(XispError(ErrorType.TypeError, "+: expected a number"))
                             }
                             this.push(result)
                         }
@@ -333,14 +333,14 @@ public class BytecodeVM <: VM {
                             let result = match (a) {
                                 case Int(ai) => match (b) {
                                     case Float(bf) => LispValue.Float(Float64(ai) - bf)
-                                    case _ => LispValue.Error(XispError(ErrorType.TypeError, "Bytecode: - expected number"))
+                                    case _ => LispValue.Error(XispError(ErrorType.TypeError, "-: expected a number"))
                                 }
                                 case Float(af) => match (b) {
                                     case Int(bi) => LispValue.Float(af - Float64(bi))
                                     case Float(bf) => LispValue.Float(af - bf)
-                                    case _ => LispValue.Error(XispError(ErrorType.TypeError, "Bytecode: - expected number"))
+                                    case _ => LispValue.Error(XispError(ErrorType.TypeError, "-: expected a number"))
                                 }
-                                case _ => LispValue.Error(XispError(ErrorType.TypeError, "Bytecode: - expected number"))
+                                case _ => LispValue.Error(XispError(ErrorType.TypeError, "-: expected a number"))
                             }
                             this.push(result)
                         }
@@ -358,14 +358,14 @@ public class BytecodeVM <: VM {
                             let result = match (a) {
                                 case Int(ai) => match (b) {
                                     case Float(bf) => LispValue.Float(Float64(ai) * bf)
-                                    case _ => LispValue.Error(XispError(ErrorType.TypeError, "Bytecode: * expected number"))
+                                    case _ => LispValue.Error(XispError(ErrorType.TypeError, "*: expected a number"))
                                 }
                                 case Float(af) => match (b) {
                                     case Int(bi) => LispValue.Float(af * Float64(bi))
                                     case Float(bf) => LispValue.Float(af * bf)
-                                    case _ => LispValue.Error(XispError(ErrorType.TypeError, "Bytecode: * expected number"))
+                                    case _ => LispValue.Error(XispError(ErrorType.TypeError, "*: expected a number"))
                                 }
-                                case _ => LispValue.Error(XispError(ErrorType.TypeError, "Bytecode: * expected number"))
+                                case _ => LispValue.Error(XispError(ErrorType.TypeError, "*: expected a number"))
                             }
                             this.push(result)
                         }
@@ -383,14 +383,14 @@ public class BytecodeVM <: VM {
                             let result = match (a) {
                                 case Int(ai) => match (b) {
                                     case Float(bf) => LispValue.Float(Float64(ai) / bf)
-                                    case _ => LispValue.Error(XispError(ErrorType.TypeError, "Bytecode: / expected number"))
+                                    case _ => LispValue.Error(XispError(ErrorType.TypeError, "/: expected a number"))
                                 }
                                 case Float(af) => match (b) {
                                     case Int(bi) => LispValue.Float(af / Float64(bi))
                                     case Float(bf) => LispValue.Float(af / bf)
-                                    case _ => LispValue.Error(XispError(ErrorType.TypeError, "Bytecode: / expected number"))
+                                    case _ => LispValue.Error(XispError(ErrorType.TypeError, "/: expected a number"))
                                 }
-                                case _ => LispValue.Error(XispError(ErrorType.TypeError, "Bytecode: / expected number"))
+                                case _ => LispValue.Error(XispError(ErrorType.TypeError, "/: expected a number"))
                             }
                             this.push(result)
                         }
@@ -1263,6 +1263,17 @@ public class BytecodeVM <: VM {
         }
         this.sp -= argCount
 
+        // 实参求值出错时**短路**：AST 侧 `evalFunctionCallWithValue` 会先扫一遍实参，
+        // 遇到 Error 直接返回（不调用函数本体）。VM 此前不查，把 Error 值当普通实参
+        // 传进函数 —— 于是 `(println (+ 1 #t))` 在 AST 下报 TypeError、
+        // 在字节码下被 println 打印出来并返回 nil（实测两后端不一致）。
+        for (a in args) {
+            match (a) {
+                case Error(_) => return a
+                case _ => ()
+            }
+        }
+
         match (funcVal) {
             case Str(name) =>
                 let value = this.currentEnv.lookup(name)
@@ -1491,7 +1502,7 @@ public class BytecodeVM <: VM {
         }
         match (result) {
             case Some(v) => this.setReg(rd, v)
-            case None => this.setReg(rd, LispValue.Error(XispError(ErrorType.TypeError, "Bytecode: expected number")))
+            case None => this.setReg(rd, LispValue.Error(XispError(ErrorType.TypeError, "expected a number")))
         }
     }
 
@@ -1500,7 +1511,7 @@ public class BytecodeVM <: VM {
         match (a) {
             case LispValue.Int(ai) => this.setReg(rd, LispValue.Int(-ai))
             case LispValue.Float(af) => this.setReg(rd, LispValue.Float(-af))
-            case _ => this.setReg(rd, LispValue.Error(XispError(ErrorType.TypeError, "Bytecode: expected number")))
+            case _ => this.setReg(rd, LispValue.Error(XispError(ErrorType.TypeError, "expected a number")))
         }
     }
 
@@ -1526,7 +1537,7 @@ public class BytecodeVM <: VM {
                             case 2 => LispValue.Float(Float64(ai) * bf)
                             case _ => LispValue.Float(Float64(ai) / bf)
                         }
-                    case _ => LispValue.Error(XispError(ErrorType.TypeError, "Bytecode: expected number"))
+                    case _ => LispValue.Error(XispError(ErrorType.TypeError, "expected a number"))
                 }
             case LispValue.Float(af) =>
                 match (b) {
@@ -1544,9 +1555,9 @@ public class BytecodeVM <: VM {
                             case 2 => LispValue.Float(af * bf)
                             case _ => LispValue.Float(af / bf)
                         }
-                    case _ => LispValue.Error(XispError(ErrorType.TypeError, "Bytecode: expected number"))
+                    case _ => LispValue.Error(XispError(ErrorType.TypeError, "expected a number"))
                 }
-            case _ => LispValue.Error(XispError(ErrorType.TypeError, "Bytecode: expected number"))
+            case _ => LispValue.Error(XispError(ErrorType.TypeError, "expected a number"))
         }
     }
 
@@ -1613,8 +1624,19 @@ public class BytecodeVM <: VM {
             return af == bf
         }
         match (a) {
-            case LispValue.Int(ai) => match (b) { case LispValue.Int(bi) => ai == bi; case _ => false }
-            case LispValue.Float(af) => match (b) { case LispValue.Float(bf) => af == bf; case _ => false }
+            // 数值跨类型比较：AST 侧注册的 `=` 会把 Int 提升为 Float 再比
+            // （comparison.cj 的 `case (Int(a), Float(b))`），
+            // 这里若只认同类型，`(= 2 (/ 6 3))` 会 AST 得 true、BC 得 false —— 实测不兼容。
+            case LispValue.Int(ai) => match (b) {
+                case LispValue.Int(bi) => ai == bi
+                case LispValue.Float(bf) => Float64(ai) == bf
+                case _ => false
+            }
+            case LispValue.Float(af) => match (b) {
+                case LispValue.Float(bf) => af == bf
+                case LispValue.Int(bi) => af == Float64(bi)
+                case _ => false
+            }
             case Str(sa) => match (b) { case Str(sb) => sa == sb; case _ => false }
             case Boolean(ba) => match (b) { case Boolean(bb) => ba == bb; case _ => false }
             case Nil => match (b) { case Nil => true; case _ => false }

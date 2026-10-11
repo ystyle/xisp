@@ -610,6 +610,16 @@ public class LispInterpreter {
      * @param code Lisp 代码字符串
      * @return 求值结果，如果解析或求值失败返回 None
      */
+    /**
+     * 求值**单个已解析表达式**（不经字符串往返）。
+     *
+     * 供需要逐表达式逐步比对的场景（如 AST/字节码差分测试）使用：
+     * 调用方自己持有解析结果，可保证两种后端跑的是**同一批表达式**。
+     */
+    public func evalExpr(expr: LispValue): LispValue {
+        this.evaluator.eval(expr)
+    }
+
     public func eval(code: String): LispValue {
         // 如果启用沙箱，使用 evalInSandbox
         if (this.sandboxEnabled) {

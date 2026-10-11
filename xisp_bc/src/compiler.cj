@@ -111,7 +111,13 @@ public class BytecodeCompiler <: Compiler {
                 this.emit(OP_PUSH_NIL)
                 true
             case Symbol(s) =>
-                if (this.envVars.contains(s)) {
+                // 关键字符号（以 : 开头）是**自求值**的（AST 语义，见 core.cj 的 evalInner）。
+                // 漏掉这条会让裸 `:ok` 在字节码下被当变量查找 → UnboundVariable，
+                // 而 AST 下正常返回 `:ok`（实测不一致）。
+                if (s.size > 0 && s.startsWith(":")) {
+                    this.emitWithArg(OP_PUSH_CONSTANT, this.addConst(Symbol(s)))
+                    true
+                } else if (this.envVars.contains(s)) {
                     this.emitWithArg(OP_LOAD_GLOBAL, this.addConst(Str(s)))
                     true
                 } else if (this.locals.contains(s)) {

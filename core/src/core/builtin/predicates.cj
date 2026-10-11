@@ -145,7 +145,11 @@ extend BuiltinFunctions {
                 case HashMap(_) => Str("hashmap")
                 case NativeFunc(_) => Str("procedure")
                 case Procedure(_, _, _) => Str("procedure")
+                case ProcedureFromParams(_, _, _) => Str("procedure")
+                // 编译闭包：与解释器过程同属"过程"，两个后端的 type-of 必须一致
+                case Closure(_, _) => Str("procedure")
                 case Macro(_, _, _) => Str("macro")
+                case MacroFromParams(_, _, _) => Str("macro")
                 case _ => Str("unknown")
             }
         }))
