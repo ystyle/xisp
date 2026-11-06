@@ -116,6 +116,14 @@ extend Evaluator {
             // 求值要匹配的表达式
             let value = this.eval(cell.car)
 
+            // 被匹配的表达式求值出错 → 中止。错误值不匹配任何模式，只会一路落到
+            // else 分支，于是 `(match 未定义变量 (1 "one") (else "other"))` 静默
+            // 返回 "other"（实测），把故障伪装成正常结果。
+            match (value) {
+                case Error(_) => return value
+                case _ => ()
+            }
+
             // 遍历所有模式分支
             var clauses = cell.cdr
             var clauseIndex = 0

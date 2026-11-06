@@ -338,6 +338,13 @@ extend Evaluator {
             if (let Symbol(name) <- first && let Cons(restCell) <- rest) {
                 if (restCell.length() == 1) {
                     let value = this.eval(restCell.car)
+                    // 初始化表达式出错：**不绑定**、直接传播。
+                    // 绑一个错误值进去只会把故障推迟到下一次读取，且与 VM 不一致
+                    // （VM 的 CALL 遇错误立即从执行循环返回，STORE_GLOBAL 根本不会执行）。
+                    match (value) {
+                        case Error(_) => return value
+                        case _ => ()
+                    }
                     this.env.define(name, value)
                     value
                 } else {
@@ -384,6 +391,11 @@ extend Evaluator {
         if (let Cons(cell) <- expr && let Symbol(name) <- cell.car && let Cons(restCell) <- cell.cdr) {
             if (restCell.length() == 1) {
                 let value = this.eval(restCell.car)
+                // 同 define：错误值不写入变量，直接传播（与 VM 一致）
+                match (value) {
+                    case Error(_) => return value
+                    case _ => ()
+                }
                 let success = this.env.set(name, value)
                 if (success) {
                     value
@@ -490,7 +502,15 @@ extend Evaluator {
 
             while (!current.isNil()) {
                 if (let Cons(currCell) <- current) {
-                    result = this.eval(currCell.car)
+                    let step = this.eval(currCell.car)
+                    // 某一步出错即**中止整个 begin**，与字节码 VM 一致（VM 遇错误直接
+                    // 从执行循环返回）。此前这里丢弃错误继续跑后续表达式，导致
+                    // `(define (f) (assert 假) 42)` 在 AST 下返回 42 —— assert 形同虚设。
+                    match (step) {
+                        case Error(_) => return step
+                        case _ => ()
+                    }
+                    result = step
                     current = currCell.cdr
                 } else {
                     break
@@ -516,7 +536,11 @@ extend Evaluator {
 
                 match (bindingsExpr) {
                     case Cons(bindingsCell) =>
-                        this.processBindings(bindingsCell, letEnv)
+                        // 初值出错时 processBindings 返回该错误：不执行 body，直接传播
+                        let bindResult = this.processBindings(bindingsCell, letEnv)
+                        if (let Error(_) <- bindResult) {
+                            return bindResult
+                        }
                     case _ => ()
                 }
 

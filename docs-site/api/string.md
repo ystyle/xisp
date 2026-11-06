@@ -1,6 +1,6 @@
 # 字符串
 
-本页覆盖字符串相关函数，共 7 个。
+本页覆盖字符串相关函数，共 9 个。
 
 ::: warning 字符串比较
 Xisp 的 `=` 只用于数字比较，**字符串相等请使用 `string=?`**。`(= "a" "a")` 返回 `false`。
@@ -62,6 +62,47 @@ Xisp 的 `=` 只用于数字比较，**字符串相等请使用 `string=?`**。`
 (string> "b" "a")        ; => true
 (string> "a" "b")        ; => false
 (string< "b" 1)          ; => nil    非字符串
+```
+
+### `string-length` - 字符串长度
+
+签名：`(string-length s)`
+
+返回字符串的**字节数**（UTF-8 编码长度），**不是字符数**。非字符串参数返回 `nil`。
+
+```lisp
+(string-length "hello")  ; => 5
+(string-length "")       ; => 0
+(string-length "中")     ; => 3    UTF-8 中文 3 字节/字
+(string-length "中文")   ; => 6
+(string-length "a中")    ; => 4    1 字节 + 3 字节
+(string-length 42)       ; => nil  非字符串
+```
+
+::: warning 与 `length` 的区别
+`length` 只处理列表，**对字符串返回 `0`**；取字符串长度必须用 `string-length`。
+
+```lisp
+(length "hello")         ; => 0
+(string-length "hello")  ; => 5
+```
+
+要按「字符」计数时，Lisp 层目前没有字符级切片函数，请按 UTF-8 字节数自行换算
+（ASCII 之外的字符占多个字节）。
+:::
+
+### `string-contains?` - 子串包含判断
+
+签名：`(string-contains? s sub)`
+
+判断 `s` 是否包含子串 `sub`，返回布尔值。参数不是字符串、或参数个数不为 2 时返回 `false`。
+
+```lisp
+(string-contains? "hello" "ell")     ; => true
+(string-contains? "hello" "xyz")     ; => false
+(string-contains? "中文测试" "测试")  ; => true
+(string-contains? "hello" "")        ; => true    空串恒被包含
+(string-contains? "hello" 1)         ; => false   非字符串
 ```
 
 ### `string?` - 是否为字符串

@@ -67,6 +67,45 @@ extend BuiltinFunctions {
             }
         }))
 
+        // (nth x index) - 按下标取元素
+        //
+        // 列表按链表走；外部值若实现 `LispExternalIndexable` 则走其 `at(index)`
+        // —— 这是 `LispExternalIndexable` 的**唯一消费点**，没有它"可下标"这条
+        // 能力就只有定义、没有分派。越界一律返回 nil（与 `first`/`second` 一致）。
+        env.define("nth", NativeFunc({ args =>
+            if (args.size != 2) {
+                return Nil
+            }
+            let index = match (args[1]) {
+                case LispValue.Int(i) => i
+                case _ => return Nil
+            }
+            if (index < 0) {
+                return Nil
+            }
+            match (args[0]) {
+                case External(ext) =>
+                    match (ext) {
+                        case idx: LispExternalIndexable => idx.at(index)
+                        case _ => Nil
+                    }
+                case _ =>
+                    var current = args[0]
+                    var i: Int64 = 0
+                    while (i < index) {
+                        match (current) {
+                            case Cons(cell) => current = cell.cdr
+                            case _ => return Nil
+                        }
+                        i++
+                    }
+                    match (current) {
+                        case Cons(cell) => cell.car
+                        case _ => Nil
+                    }
+            }
+        }))
+
         // (append list1 list2 ...) - 连接多个列表
         env.define("append", NativeFunc({ args =>
             // 从前往后收集所有元素

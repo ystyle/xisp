@@ -36,6 +36,11 @@ extend Evaluator {
             let funcExpr = cell.car
             let rest = cell.cdr
             let funcValue = this.eval(funcExpr)
+            // 函数位置出错 → 中止（否则错误值落到下面的 case _ => Nil，整个 apply 静默返回 nil）
+            match (funcValue) {
+                case Error(_) => return funcValue
+                case _ => ()
+            }
 
             let args = ArrayList<LispValue>()
             var current: LispValue = rest
@@ -55,6 +60,17 @@ extend Evaluator {
                 }
             }
 
+            // 任一实参求值出错 → 中止
+            if (let Error(_) <- lastList) {
+                return lastList
+            }
+            for (arg in args) {
+                match (arg) {
+                    case Error(_) => return arg
+                    case _ => ()
+                }
+            }
+
             if (let Cons(lastListCell) <- lastList) {
                 var listCurrent: LispValue = Cons(lastListCell)
                 while (!listCurrent.isNil()) {
@@ -71,7 +87,12 @@ extend Evaluator {
                 case Procedure(_, _, _) => this.applyProcedure(funcValue, args)
                 case NativeFunc(f) => f(args)
                 case Closure(_, _) => this.applyProcedure(funcValue, args)
-                case _ => Nil
+                // 非可调用值不再静默返回 nil：`(apply 42 '(1 2))` 曾静默得 nil，
+                // 而字节码报 RuntimeError。按"错误必须可见"统一成 TypeError，
+                // 两后端错误种类一致（文案仍可由 `errorKind` 归一）。
+                case other =>
+                    LispValue.Error(XispError(ErrorType.TypeError,
+                        "apply: expected a callable value (got: ${other.toString()})"))
             }
         } else {
             Nil

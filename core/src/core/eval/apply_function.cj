@@ -48,6 +48,14 @@ extend Evaluator {
                 this.applyProcedure(procValue, args)
             case NativeFunc(f) =>
                 f(args)
+            // 外部值：实现 LispExternalCallable 的可以被调用
+            case External(ext) =>
+                match (ext) {
+                    case c: LispExternalCallable => c.invoke(args)
+                    case _ =>
+                        LispValue.Error(XispError(ErrorType.TypeError,
+                            "Attempt to call a non-callable external value (${ext.typeName})"))
+                }
             // 宏不是函数值：它不是"调用"的对象，而是"展开"的对象
             case Macro(_, _, _) | MacroFromParams(_, _, _) =>
                 LispValue.Error(XispError(ErrorType.RuntimeError,
@@ -67,6 +75,11 @@ extend Evaluator {
     public func isCallableValue(value: LispValue): Bool {
         match (value) {
             case Procedure(_, _, _) | ProcedureFromParams(_, _, _) | Closure(_, _) | NativeFunc(_) => true
+            case External(ext) =>
+                match (ext) {
+                    case _: LispExternalCallable => true
+                    case _ => false
+                }
             case _ => false
         }
     }

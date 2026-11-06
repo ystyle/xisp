@@ -193,10 +193,26 @@ public class BytecodeCompiler <: Compiler {
                         // (define name value)
                         match (cell.cdr) {
                             case Cons(cell2) =>
-                                if (this.compileExpr(cell2.car)) {
-                                    this.emitWithArg(OP_STORE_GLOBAL, this.addConst(Str(name)))
-                                    true
-                                } else { false }
+                                if (!this.compileExpr(cell2.car)) { return false }
+                                // 函数体内的 `define` 定义的是**本帧局部**，不是全局。
+                                // AST 侧 evalDefine 写的是 `this.env`，而调用过程时
+                                // eval 的是 `closureEnv.createChild()` —— 于是函数内
+                                // define 只在该次调用内可见（实测：函数外读不到）。
+                                // 此前这里一律发 STORE_GLOBAL，而符号引用走帧槽
+                                // （globalRefs 在**进帧时**解析，那时变量还没定义），
+                                // 于是 `(define (f) (define r 5) r)` 在字节码下报
+                                // UnboundVariable、AST 下正常返回 5。
+                                if (this.compilingFuncBody && !this.locals.contains(name)) {
+                                    let slot = this.localCount
+                                    this.locals[name] = slot
+                                    this.localCount++
+                                    // 保留表达式值（define 的返回值就是那个值）
+                                    this.emit(OP_DUP)
+                                    this.emitWithArg(OP_STORE_LOCAL, slot)
+                                    return true
+                                }
+                                this.emitWithArg(OP_STORE_GLOBAL, this.addConst(Str(name)))
+                                true
                             case _ => false
                         }
                     case Cons(nameCell) =>
@@ -210,6 +226,15 @@ public class BytecodeCompiler <: Compiler {
                                             case Some((bodyFunc, caps)) =>
                                                 this.functions.add(bodyFunc)
                                                 this.emitMakeClosure(this.functions.size - 1, caps)
+                                                // 同 (define name value)：函数体内的 define 是**本帧局部**
+                                                if (this.compilingFuncBody && !this.locals.contains(name)) {
+                                                    let slot = this.localCount
+                                                    this.locals[name] = slot
+                                                    this.localCount++
+                                                    this.emit(OP_DUP)
+                                                    this.emitWithArg(OP_STORE_LOCAL, slot)
+                                                    return true
+                                                }
                                                 this.emitWithArg(OP_STORE_GLOBAL, this.addConst(Str(name)))
                                                 true
                                             case None => false

@@ -11,22 +11,31 @@ import ystyle::xisp.bridge.*
 import std.unittest.*
 import std.unittest.testmacro.*
 import std.collection.ArrayList
-import std.collection.HashMap
 import std.fs.*
 
 /**
- * AST ↔ 字节码 **差分测试**（兼容性回归网）
+ * 三后端**差分测试**（AST / 字节码 / JIT 兼容性回归网）
  *
- * 同一段代码分别在两个后端下执行，**逐表达式**比对结果。任何不一致都要显式列出，
+ * 同一段代码分别在三个后端下执行，**逐表达式**比对结果。任何不一致都要显式列出，
  * 而不是靠"测试全绿"来暗示兼容。
  *
- * 覆盖两个语料来源：
- * - 存量 Lisp 集成测试（lisp-tests 目录）
- * - 示例脚本（`examples/` 下的全部 .lisp）
+ * 两层覆盖：
  *
- * 用法：`cjpm test --show-all-output --filter 'BackendDiffTest.*'`
+ * | 层 | 粒度 | 能定位到什么 |
+ * |---|---|---|
+ * | `testCorpusDifferential` | 逐表达式（把源码切成一棵棵顶层表达式） | "第 65 步不一致" |
+ * | `testFileDifferential` | 逐文件（`evalFile` + 输出捕获） | 相对导入、模块搜索路径、副作用序列 |
+ *
+ * 文件层不能省：`(import "./utils.lisp")` 依赖 `currentFilePath`，逐表达式求值拿不到
+ * 文件位置，相对导入必然失败——那会把"harness 缺口"误报成"后端差异"。
+ *
+ * 用法：`cjpm test --show-all-output --filter '*BackendDiffTest*'`
  */
 
+/** 参与比对的后端名 */
+func diffBackendNames(): Array<String> {
+    ["AST", "BC", "JIT"]
+}
 
 /**
  * 提取错误结果的**种类**（如 `[TypeError]`）；非错误返回空串。
@@ -45,6 +54,51 @@ func errorKind(s: String): String {
     }
 }
 
+/**
+ * 去掉调用栈只留结论。
+ *
+ * AST 侧的错误带 `调用栈:` 与若干 `  N. frame` 行，字节码侧目前不带 —— 这是
+ * **诊断信息的完整度差异**，不是求值语义差异。逐字节比对会把每条错误都判成不同，
+ * 于是真正的问题被淹没在噪声里（实测：91 个语料里 20 个报"差异"，其中 16 个
+ * 只是少了调用栈）。故先归一化。
+ */
+func stripStackTrace(s: String): String {
+    let out = ArrayList<String>()
+    for (line in s.split("\n")) {
+        let t = line.trimAscii()
+        if (t == "调用栈:") {
+            continue
+        }
+        // 调用栈条目形如 "1. foo"：1~2 位数字 + '.' + 空格
+        let frame = isStackFrameLine(t)
+        if (frame) {
+            continue
+        }
+        out.add(line)
+    }
+    var joined = ""
+    for (i in 0..out.size) {
+        if (i > 0) {
+            joined += "\n"
+        }
+        joined += out[i]
+    }
+    joined
+}
+
+/** 调用栈条目形如 `1. foo` / `12. bar` */
+func isStackFrameLine(t: String): Bool {
+    let runes = t.toRuneArray()
+    var i = 0
+    while (i < runes.size && runes[i] >= r'0' && runes[i] <= r'9') {
+        i++
+    }
+    if (i == 0 || i > 2) {
+        return false
+    }
+    i < runes.size && runes[i] == r'.' && i + 1 < runes.size && runes[i + 1] == r' '
+}
+
 @Test
 class BackendDiffTest {
     /**
@@ -54,17 +108,26 @@ class BackendDiffTest {
      * 与 CLI 保持一致 —— 手写 `Environment` + 逐个 register 容易漏掉
      * 别名、桥接等装配步骤，从而把"harness 缺口"误报成"后端差异"。
      */
-    func runSteps(code: String, useBc: Bool): Array<String> {
-        let out = ArrayList<String>()
+    func makeInterpreter(backend: String): LispInterpreter {
         let opts = ArrayList<InterpreterOption>()
         opts.add(withQuietMode())
         opts.add(withStdLib())
         opts.add(withChineseKeywords())
         opts.add(withJapaneseKeywords())
-        if (useBc) {
+        // 模块搜索路径：`(import pkg1)` 这类绝对导入需要它发现 lisp-tests/pkg1
+        opts.add(withModulePath("./lisp-tests"))
+        if (backend != "AST") {
             opts.add(withBytecodeCompiler())
         }
-        let it = LispInterpreter(opts.toArray())
+        if (backend == "JIT") {
+            opts.add(withJit())
+        }
+        LispInterpreter(opts.toArray())
+    }
+
+    func runSteps(code: String, backend: String): Array<String> {
+        let out = ArrayList<String>()
+        let it = this.makeInterpreter(backend)
         let exprs = try {
             Parser.parseFromString(code)
         } catch (e: Exception) {
@@ -84,24 +147,39 @@ class BackendDiffTest {
         out.toArray()
     }
 
-    /** 比对一份源码在两个后端下的逐步结果，返回差异描述（无差异返回空串） */
-    func diff(code: String, label: String): String {
-        // 两种后端用完全相同的装配，只有后端不同
-        let ast = this.runSteps(code, false)
-        let bc = this.runSteps(code, true)
-        if (ast.size != bc.size) {
-            return "${label}: 步数不同 AST=${ast.size} BC=${bc.size}"
+    /**
+     * 整文件跑：走 `evalFile`，从而带上 `currentFilePath`（相对导入依赖它），
+     * 并把每个输出行收集起来（副作用序列也是语义的一部分）。
+     */
+    func runFile(path: String, backend: String): Array<String> {
+        let out = ArrayList<String>()
+        let it = this.makeInterpreter(backend)
+        it.setOutputFn({ line => out.add(line) })
+        var finalResult = ""
+        try {
+            finalResult = it.evalFile(path).toString()
+        } catch (e: Exception) {
+            finalResult = "EXCEPTION: " + e.toString()
+        }
+        out.add("=== 最终结果: " + stripStackTrace(finalResult))
+        out.toArray()
+    }
+
+    /** 比对两次运行结果（已归一化），返回差异描述 */
+    func compare(label: String, ast: Array<String>, other: Array<String>, otherName: String): String {
+        if (ast.size != other.size) {
+            return "${label} [${otherName}]: 输出行数不同 AST=${ast.size} ${otherName}=${other.size}"
         }
         var msg = ""
         for (i in 0..ast.size) {
-            let a = ast[i]
-            let b = bc[i]
+            let a = stripStackTrace(ast[i])
+            let b = stripStackTrace(other[i])
             if (a == b) {
                 continue
             }
-            // 两侧都是错误时，只比较**错误种类**（`[TypeError]` / `[RuntimeError]` / …）：
-            // 后端与 AST 的错误文案由不同代码路径产出，措辞差异不等于语义差异
-            // （实测：`+: expected a number (got: true)` vs `expected a number`）。
+            // 两侧都是错误时只比较**错误种类**：后端与 AST 的错误文案由不同代码
+            // 路径产出，措辞差异不等于语义差异（实测 `+: expected a number (got: true)`
+            // vs `+: expected a number`）。
             let ak = errorKind(a)
             let bk = errorKind(b)
             if (ak.size > 0 && ak == bk) {
@@ -110,9 +188,43 @@ class BackendDiffTest {
             if (msg.size > 0) {
                 msg += "\n"
             }
-            msg += "${label} 第${i+1}步: AST=${a} | BC=${b}"
+            msg += "${label} [${otherName}] 第${i+1}处: AST=${a} | ${otherName}=${b}"
         }
         msg
+    }
+
+    /** 逐表达式的三后端比对 */
+    func diffSteps(code: String, label: String): String {
+        let ast = this.runSteps(code, "AST")
+        var msg = ""
+        for (name in ["BC", "JIT"]) {
+            let d = this.compare(label, ast, this.runSteps(code, name), name)
+            if (d.size > 0) {
+                msg = this.appendDiff(msg, d)
+            }
+        }
+        msg
+    }
+
+    /** 逐文件的三后端比对 */
+    func diffFile(path: String, label: String): String {
+        let ast = this.runFile(path, "AST")
+        var msg = ""
+        for (name in ["BC", "JIT"]) {
+            let d = this.compare(label, ast, this.runFile(path, name), name)
+            if (d.size > 0) {
+                msg = this.appendDiff(msg, d)
+            }
+        }
+        msg
+    }
+
+    /** 追加一段差异描述（换行分隔） */
+    func appendDiff(msg: String, d: String): String {
+        if (msg.size == 0) {
+            return d
+        }
+        msg + "\n" + d
     }
 
     /** 扫一个目录下的全部 Lisp 文件（递归） */
@@ -137,14 +249,29 @@ class BackendDiffTest {
     }
 
     /**
-     * 核心差分：存量 Lisp 语料逐文件比对。
+     * 该文件是否**本来就不是**可独立执行的脚本。
      *
-     * 允许个别文件因"需要外部资源 / 依赖模块搜索路径 / 本身是性能基准"而跳过，
-     * 但**任何语义差异都要报出来** —— 这是兼容性的证据。
+     * 与"因为 harness 不够而跳过"须严格区分：这里每一条都是语料自身的性质，
+     * 且都在对应文档里写明。
      */
-    @TestCase
-    func testCorpusDifferential() {
-        println("\n=== AST ↔ 字节码差分（存量语料） ===")
+    func isNotRunnableScript(f: String): Bool {
+        // 性能基准：输出含耗时，本身不稳定；由 lisp-tests/perf/run.sh 另行度量
+        if (f.contains("/perf/") || f.contains("benchmark")) {
+            return true
+        }
+        // REPL 交互演示：需要 TTY 与 `,lang zh` 等 REPL 命令，不是独立脚本
+        if (f.contains("legacy/chinese_demo") || f.contains("/repl/")) {
+            return true
+        }
+        // `module.lisp` 是模块元数据清单，由模块加载器特殊处理，不能当脚本执行
+        if (f.endsWith("/module.lisp")) {
+            return true
+        }
+        false
+    }
+
+    /** 收集全部可执行语料 */
+    func allCorpus(): Array<String> {
         let files = ArrayList<String>()
         for (f in this.collectLispFiles("lisp-tests")) {
             files.add(f)
@@ -152,12 +279,74 @@ class BackendDiffTest {
         for (f in this.collectLispFiles("examples")) {
             files.add(f)
         }
+        files.toArray()
+    }
+
+    /**
+     * 核心差分：存量 Lisp 语料**逐文件**比对。
+     *
+     * 走 `evalFile` 而非逐表达式求值，因此相对导入、模块搜索路径、输出副作用
+     * 全都在覆盖范围内 —— 这正是文件层不能用表达式层替代的原因。
+     */
+    @TestCase
+    func testFileDifferential() {
+        println("\n=== 三后端差分（存量语料 · 逐文件） ===")
+        let files = this.allCorpus()
         println("扫到 " + files.size.toString() + " 个 .lisp 文件")
 
         var checked = 0
         var skipped = 0
         var diffs = ArrayList<String>()
         for (f in files) {
+            if (this.isNotRunnableScript(f)) {
+                skipped++
+                continue
+            }
+            checked++
+            let d = this.diffFile(f, f)
+            if (d.size > 0) {
+                diffs.add(d)
+                println("差异: " + d)
+            }
+        }
+        println("已比对 " + checked.toString() + " 个文件，跳过 " + skipped.toString() + " 个（非独立脚本）")
+        if (diffs.size > 0) {
+            var all = ""
+            for (d in diffs) {
+                all += d + "\n"
+            }
+            @Fail("三后端存在 " + diffs.size.toString() + " 个文件的差异:\n" + all)
+        }
+        println("✓ 全部 " + checked.toString() + " 个文件在三个后端下结果一致")
+    }
+
+    /**
+     * 逐表达式差分：把文件切成一棵棵顶层表达式，**逐步**比对返回值。
+     *
+     * 比逐文件更细：能定位到"第 N 个顶层表达式不一致"。代价是拿不到文件上下文，
+     * 所以跳过依赖相对导入的语料（那些由 `testFileDifferential` 覆盖）。
+     */
+    @TestCase
+    func testCorpusDifferential() {
+        println("\n=== 三后端差分（存量语料 · 逐表达式） ===")
+        let files = this.allCorpus()
+
+        var checked = 0
+        var skipped = 0
+        var diffs = ArrayList<String>()
+        for (f in files) {
+            if (this.isNotRunnableScript(f)) {
+                skipped++
+                continue
+            }
+            // 相对导入依赖 currentFilePath；逐表达式求值没有文件位置，
+            // 两侧都会报"找不到"，这里的差异不反映后端语义
+            if (f.contains("module-imports") || f.contains("05-modules") ||
+                f.contains("testrel") || f.contains("reltest") || f.contains("rel-test") ||
+                f.contains("ystyle/") || f.contains("pkg1/") || f.contains("pkg2/")) {
+                skipped++
+                continue
+            }
             var content = ""
             try {
                 content = String.fromUtf8(File.readFrom(f))
@@ -165,31 +354,11 @@ class BackendDiffTest {
                 skipped++
                 continue
             }
-            // 跳过明显的基准/交互脚本（打印耗时、读键盘等，输出不稳定）
-            if (f.contains("perf/") || f.contains("benchmark") || f.contains("repl")) {
-                skipped++
-                continue
-            }
-            // 需要真实文件系统交互的语料：差异来自"环境未配置"而非两后端语义
-            if (f.contains("file_io") || f.contains("debug_backslash")) {
-                skipped++
-                continue
-            }
-            // 依赖模块搜索路径（`(import pkg1)`）的语料：需要 withModulePath 装配，
-            // 当前 harness 未配置，两侧都会报"模块找不到"（错误文本不同）。
-            // 这类由 module_integration_test / evaluator_test 覆盖。
-            if (f.contains("module-imports") || f.contains("error-tests") ||
-                f.contains("05-modules") || f.contains("module_integration") ||
-                f.contains("pkg1/module") || f.contains("pkg2/module") ||
-                f.contains("/module.lisp") || f.contains("testrel") || f.contains("reltest") ||
-                f.contains("rel-test") || f.contains("ystyle/")) {
-                skipped++
-                continue
-            }
-            let d = this.diff(content, f)
             checked++
+            let d = this.diffSteps(content, f)
             if (d.size > 0) {
                 diffs.add(d)
+                println("差异: " + d)
             }
         }
         println("已比对 " + checked.toString() + " 个文件，跳过 " + skipped.toString() + " 个")
@@ -197,10 +366,9 @@ class BackendDiffTest {
             var all = ""
             for (d in diffs) {
                 all += d + "\n"
-                println("差异: " + d)
             }
-            @Fail("AST/字节码存在 " + diffs.size.toString() + " 处差异:\n" + all)
+            @Fail("三后端存在 " + diffs.size.toString() + " 处差异:\n" + all)
         }
-        println("✓ 全部 " + checked.toString() + " 个文件在两后端下结果一致")
+        println("✓ 全部 " + checked.toString() + " 个文件在三个后端下逐步一致")
     }
 }

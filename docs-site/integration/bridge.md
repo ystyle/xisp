@@ -167,8 +167,120 @@ interpreter.call("constant", [])   // 无参调用
 | `LispValue.Symbol(String)` | 符号 |
 | `Nil` | 空值/空列表 |
 | `LispValue.Cons(ConsCell)` | 列表 |
+| `LispValue.NativeFunc((ArrayList<LispValue>) -> LispValue)` | 仓颉实现的函数 |
+| `LispValue.Procedure` / `ProcedureFromParams` / `Closure` | Lisp 过程 / 编译闭包 |
+| `LispValue.Macro` / `MacroFromParams` | 宏 |
+| `LispValue.External(LispExternal)` | **外部值**（宿主 / 扩展模块提供的值，见下节） |
 | `LispValue.HashMap(HashMap<String, LispValue>)` | 哈希映射 |
 | `LispValue.Error(XispError)` | 错误 |
+
+#### 外部值：`External` 变体与 `LispExternal` 协议族
+
+外部模块（NDArray、分布对象、句柄、FFI 指针等）要把自己的值交给 Lisp 层，
+就必须有一个 core 承认的值形态 ——这就是 `LispValue.External(LispExternal)`。
+core **只认识协议**，不认识任何具体外部类型。
+
+```cangjie
+// ystyle::xisp.types（core/src/types/lisp_external.cj）
+
+/** 必需：core 的通用逻辑（print / type-of / 错误信息）只依赖这两项 */
+public interface LispExternal {
+    prop typeName: String        // "ndarray"，供 type-of / 谓词 / 错误信息
+    func display(): String       // repr；实现方负责截断
+}
+```
+
+以下能力接口**按需实现**，core 内建按"是否实现"分派，互不牵连：
+
+| 接口 | 必需？ | 作用 |
+|------|--------|------|
+| `LispExternal` | **必需** | `typeName` + `display()` |
+| `LispExternalEquatable` | 按需 | `equals(other: LispExternal): Bool`，用于 `=` 的语义；未实现则不能作 `HashMap` 键 |
+| `LispExternalIndexable` | 按需 | `length(): Int64` + `at(index: Int64): LispValue`，供 `length` 等内建分派 |
+| `LispExternalComparable` | 按需 | `compare(other: LispExternal): Int64`，供 `<` / `>` 等比较内建分派 |
+| `LispExternalCallable` | 按需 | `invoke(args: ArrayList<LispValue>): LispValue`，让外部值能被"调用" |
+
+Lisp 侧看到的效果（`make-counter` 由下面的宿主示例注册）：
+
+```lisp
+(external? (make-counter 5))       ; => true
+(external-type (make-counter 5))   ; => "counter-box"   实现方声明的 typeName
+(type-of (make-counter 5))         ; => "counter-box"
+(str (make-counter 7))             ; 走实现方的 display()
+(length (make-counter 5))          ; => 5   走 LispExternalIndexable
+(external? 42)                     ; => false   普通值
+(null? (external-type 1))          ; => true    非外部值返回 nil
+```
+
+完整示例（宿主侧实现一个外部类型）：
+
+```cangjie
+import ystyle::xisp.*          // LispInterpreter / withStdLib
+import ystyle::xisp.types.*    // LispValue / LispExternal / LispExternalIndexable
+import ystyle::xisp.bridge.*   // Bridge
+
+/** 定长计数器盒子：对外声明 typeName = "counter-box" */
+class CounterBox <: LispExternal & LispExternalIndexable {
+    let cap: Int64
+    init(cap: Int64) { this.cap = cap }
+
+    public prop typeName: String { get() { "counter-box" } }
+    public func display(): String { "#<counter-box cap=${this.cap}>" }
+    public func length(): Int64 { this.cap }
+    public func at(index: Int64): LispValue {
+        if (index >= 0 && index < this.cap) { LispValue.Int(index) } else { Nil }
+    }
+}
+
+let interpreter = LispInterpreter([withStdLib()])
+Bridge.registerFunc(interpreter.getEnvironment(), "make-counter", { args =>
+    let cap = match (args[0]) {
+        case LispValue.Int(n) => n
+        case _ => 0
+    }
+    LispValue.External(CounterBox(cap))
+})
+```
+
+> 上述 Lisp 侧输出（`external?` / `type-of` / `external-type` / `str` / `length`）
+> 由 `xisp_tests/src/external_value_test.cj` 用同一个 `CounterBox` 端到端验证，
+> AST 与字节码两个后端结果一致。
+
+::: warning 实现方须遵守的语义约定
+1. `=` 是**同一性 + 结构浅比较**，不做逐元素（逐元素比较请另立 `array-equal?` 之类的显式函数）；
+2. 外部值**恒为真**（对象存在即真），判空请用显式谓词；
+3. **可变外部值禁止作 `HashMap` 键**；
+4. FFI 资源由实现方自行实现 `Resource`，core 不引入 `close` 语义；
+5. 外部值**不参与**序列化；需要时实现 `LispConvertible.toLisp()` 显式转换；
+6. `display()` 的截断由**实现方**负责（core 统一截断会让"想打全量"无法表达）；
+7. `cloneValue()` 对外部值按**引用**复制（深拷会破坏零拷贝这一设计前提），可变性由实现方负责。
+:::
+
+### 能力接口与 Lisp 内建的对应关系
+
+五个能力接口都已在 core 里接上分派，对应关系如下（未实现的接口 = 该能力**不支持**，
+不是"静默成功"）：
+
+| 能力接口 | 被哪个 Lisp 内建消费 | 未实现时的行为 |
+|---|---|---|
+| `LispExternal`（`typeName` / `display`） | `type-of` / `external?` / `external-type` / `str` | 必需接口，不实现就不是外部值 |
+| `LispExternalIndexable`（`length` / `at`） | `length` / `nth` | `length` → `0`（与"非列表返回 0"一致）；`nth` → `nil` |
+| `LispExternalEquatable`（`equals`） | `=` / `!=` | 两个外部值**不相等**（外部值与其它类型恒不相等，不做隐式转换） |
+| `LispExternalComparable`（`compare`） | `<` `>` `<=` `>=` | 该比较恒为 `false`（注意不能当成"相等"，否则 `<=` 会误判） |
+| `LispExternalCallable`（`invoke`） | `((ext) args...)` 调用形式 | `TypeError`：non-callable external value |
+
+```lisp
+(= (make-counter 3) (make-counter 3))    ; => true    走 equals
+(< (make-counter 3) (make-counter 5))    ; => true    走 compare
+(nth (make-counter 5) 3)                 ; => 3       走 at(index)
+(nth '(10 20 30) 1)                      ; => 20      列表同样可用
+((make-doubler) 21)                      ; => 42      走 invoke
+```
+
+::: tip 为什么分派放在"能力接口"上
+core 不认识任何具体外部类型，只探测"它实现了哪个接口"。这样扩展族新增类型时
+core 无需改动，也符合"可裁剪 / 可替换"的设计前提（见设计文档 §7.2.1）。
+:::
 
 ### LispConvertible：仓颉 → Lisp
 
@@ -353,14 +465,6 @@ main() {
 需要先把各项装箱成 `LispValue`（`LispValue` 实现了 `LispConvertible`，`toLisp()` 为恒等转换）。
 :::
 
-::: tip 实参按值注入
-`call` 会把实参转换成 Lisp 值后**按值**传给目标函数：列表值（`Array` / `ArrayList` /
-`HashSet`）会包成 `(quote value)` 再进调用式，不会被求值器当作代码再次求值。
-
-正因为实参走的是 `Array<T>`（同构），要传「一个列表 + 一个标量」这类异构组合，
-需要先把各项装箱成 `LispValue`（`LispValue` 实现了 `LispConvertible`，`toLisp()` 为恒等转换）。
-:::
-
 ---
 
 ## 注意事项
@@ -372,6 +476,21 @@ main() {
 - **命名空间**：命名空间与函数名统一用双冒号 `::` 连接（`ns::name`），`interpreter.registerBridgeFunctionWithNS`
   与 `Bridge.registerFuncWithNS` 是同一约定、同一符号。
 - **类型转换**：`asXxx()` 类型不匹配时返回 `None`，用 `if let`/`match` 处理。
+- **`LispValue` 的 `match` 可能被 `External` 打断**：`LispValue` 是**封闭枚举**，新增 `External(LispExternal)`
+  变体后，宿主侧把所有变体逐一列出、且**没有 `case _` 兜底**的 `match` 会变成**非穷尽**（仓颉里这是
+  **编译错误**，不是警告）。升级后编译报 `non-exhaustive patterns` 的地方，补一个分支即可：
+
+  ```cangjie
+  match (value) {
+      case LispValue.Int(n) => …
+      case LispValue.Str(s) => …
+      case LispValue.External(ext) => ext.display()   // 新增的这个分支
+      case _ => …
+  }
+  ```
+
+  大多数宿主代码本来就有 `case _` 兜底，实际需要改动的位置很少（core 自身只有 `toString` 与
+  `cloneValue` 两处），但**升级前请先编译一遍**，让编译器把所有位置指出来。
 
 ## 参见
 

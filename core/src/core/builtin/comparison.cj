@@ -43,6 +43,21 @@ extend BuiltinFunctions {
                             result = false
                             break
                         }
+                    // 外部值：两边都实现 LispExternalEquatable 才谈得上相等，
+                    // 否则一律不等（未实现 `equals` 的外部值本就不能作 HashMap 键）
+                    case (LispValue.External(x), LispValue.External(y)) =>
+                        let eq = match ((x, y)) {
+                            case (a: LispExternalEquatable, b: LispExternalEquatable) => a.equals(b)
+                            case _ => false
+                        }
+                        if (!eq) {
+                            result = false
+                            break
+                        }
+                    case (LispValue.External(_), _) | (_, LispValue.External(_)) =>
+                        // 外部值与其它类型从不相等（不做隐式转换）
+                        result = false
+                        break
                     case _ =>
                         // 类型不同，不相等
                         result = false
@@ -83,6 +98,21 @@ extend BuiltinFunctions {
                         }
                     case (LispValue.Float(a), LispValue.Int(b)) =>
                         if (!(a < Float64(b))) {
+                            result = false
+                            break
+                        }
+                    case (LispValue.External(x), LispValue.External(y)) =>
+                        // 两边都实现 LispExternalComparable 才谈得上比大小；
+                        // 否则**不满足**该比较（不能当成相等，否则 `<=` 会误判为真）
+                        let cmp: Option<Int64> = match ((x, y)) {
+                            case (a: LispExternalComparable, b: LispExternalComparable) => Some(a.compare(b))
+                            case _ => None<Int64>
+                        }
+                        let ok = match (cmp) {
+                            case Some(c) => c < 0
+                            case None => false
+                        }
+                        if (!ok) {
                             result = false
                             break
                         }
@@ -130,6 +160,21 @@ extend BuiltinFunctions {
                             result = false
                             break
                         }
+                    case (LispValue.External(x), LispValue.External(y)) =>
+                        // 两边都实现 LispExternalComparable 才谈得上比大小；
+                        // 否则**不满足**该比较（不能当成相等，否则 `<=` 会误判为真）
+                        let cmp: Option<Int64> = match ((x, y)) {
+                            case (a: LispExternalComparable, b: LispExternalComparable) => Some(a.compare(b))
+                            case _ => None<Int64>
+                        }
+                        let ok = match (cmp) {
+                            case Some(c) => c > 0
+                            case None => false
+                        }
+                        if (!ok) {
+                            result = false
+                            break
+                        }
                     case _ =>
                         result = false
                         break
@@ -174,6 +219,21 @@ extend BuiltinFunctions {
                             result = false
                             break
                         }
+                    case (LispValue.External(x), LispValue.External(y)) =>
+                        // 两边都实现 LispExternalComparable 才谈得上比大小；
+                        // 否则**不满足**该比较（不能当成相等，否则 `<=` 会误判为真）
+                        let cmp: Option<Int64> = match ((x, y)) {
+                            case (a: LispExternalComparable, b: LispExternalComparable) => Some(a.compare(b))
+                            case _ => None<Int64>
+                        }
+                        let ok = match (cmp) {
+                            case Some(c) => c <= 0
+                            case None => false
+                        }
+                        if (!ok) {
+                            result = false
+                            break
+                        }
                     case _ =>
                         result = false
                         break
@@ -215,6 +275,21 @@ extend BuiltinFunctions {
                         }
                     case (LispValue.Float(a), LispValue.Int(b)) =>
                         if (!(a >= Float64(b))) {
+                            result = false
+                            break
+                        }
+                    case (LispValue.External(x), LispValue.External(y)) =>
+                        // 两边都实现 LispExternalComparable 才谈得上比大小；
+                        // 否则**不满足**该比较（不能当成相等，否则 `<=` 会误判为真）
+                        let cmp: Option<Int64> = match ((x, y)) {
+                            case (a: LispExternalComparable, b: LispExternalComparable) => Some(a.compare(b))
+                            case _ => None<Int64>
+                        }
+                        let ok = match (cmp) {
+                            case Some(c) => c >= 0
+                            case None => false
+                        }
+                        if (!ok) {
                             result = false
                             break
                         }

@@ -527,6 +527,25 @@ public enum ErrorType {
     | IOError             // IO 错误
     | ModuleError         // 模块错误
 
+    /**
+     * 类型名（与 `XispError.toString` 里的 `[Kind]` 一致）
+     *
+     * 供宿主与测试按种类分发；`ErrorType` 不支持 `toString()`，
+     * 各处分发只能靠 `match`，这里给出唯一的字符串口径。
+     */
+    public func name(): String {
+        match (this) {
+            case UnboundVariable => "UnboundVariable"
+            case UndefinedFunction => "UndefinedFunction"
+            case TypeError => "TypeError"
+            case ArityMismatch => "ArityMismatch"
+            case SyntaxError => "SyntaxError"
+            case RuntimeError => "RuntimeError"
+            case IOError => "IOError"
+            case ModuleError => "ModuleError"
+        }
+    }
+
     // 实现相等比较
     public operator func ==(right: ErrorType): Bool {
         match (this) {
@@ -597,17 +616,7 @@ public class XispError <: ToString {
      * 转换为字符串表示
      */
     public func toString(): String {
-        let kindStr = match (this.kind) {
-            case UnboundVariable => "UnboundVariable"
-            case UndefinedFunction => "UndefinedFunction"
-            case TypeError => "TypeError"
-            case ArityMismatch => "ArityMismatch"
-            case SyntaxError => "SyntaxError"
-            case RuntimeError => "RuntimeError"
-            case IOError => "IOError"
-            case ModuleError => "ModuleError"
-        }
-        var result = "[${kindStr}] ${this.message}"
+        var result = "[${this.kind.name()}] ${this.message}"
         if (!this.stack.isEmpty()) {
             result = "${result}\n  调用栈:"
             for (i in 0..this.stack.size) {

@@ -29,7 +29,7 @@ import std.unittest.testmacro.*
  */
 
 /** 测试用外部值：一个定长计数器盒子 */
-class CounterBox <: LispExternal & LispExternalIndexable & LispExternalEquatable {
+class CounterBox <: LispExternal & LispExternalIndexable & LispExternalEquatable & LispExternalComparable {
     let cap: Int64
 
     init(cap: Int64) {
@@ -61,6 +61,56 @@ class CounterBox <: LispExternal & LispExternalIndexable & LispExternalEquatable
         match (other) {
             case o: CounterBox => o.cap == this.cap
             case _ => false
+        }
+    }
+
+    public func compare(other: LispExternal): Int64 {
+        match (other) {
+            case o: CounterBox =>
+                if (o.cap == this.cap) {
+                    0
+                } else if (this.cap < o.cap) {
+                    -1
+                } else {
+                    1
+                }
+            case _ => 0
+        }
+    }
+}
+
+/** 不实现 Equatable/Comparable 的外部值：用于验证"未实现就不支持" */
+class OpaqueBox <: LispExternal {
+    init() {}
+
+    public prop typeName: String {
+        get() { "opaque-box" }
+    }
+
+    public func display(): String {
+        "#<opaque-box>"
+    }
+}
+
+/** 可被调用的外部值：验证 LispExternalCallable 分派 */
+class Doubler <: LispExternal & LispExternalCallable {
+    init() {}
+
+    public prop typeName: String {
+        get() { "doubler" }
+    }
+
+    public func display(): String {
+        "#<doubler>"
+    }
+
+    public func invoke(args: ArrayList<LispValue>): LispValue {
+        if (args.size != 1) {
+            return Nil
+        }
+        match (args[0]) {
+            case LispValue.Int(i) => LispValue.Int(i * 2)
+            case _ => Nil
         }
     }
 }
@@ -138,15 +188,88 @@ class ExternalValueTest {
         println("✓ (string-length \"abc\") = 3（取字符串长度需用专用函数）")
     }
 
+    /**
+     * 相等性走 `LispExternalEquatable`：**Lisp 层的 `=`** 必须分派到这里。
+     *
+     * 此前 `=` 只有数字分支，对外部值一律 `false` —— 于是"实现 equals 就能比相等"
+     * 只是文档里的承诺，Lisp 代码里并不成立。只断言仓颉侧 `box.equals(...)`
+     * 是不够的：那验证的是接口自己，不是 core 的分派。
+     */
     @TestCase
     func testEqualityViaCapability() {
-        println("\n=== 相等比较可按能力接口实现 ===")
+        println("\n=== 相等比较走能力接口（Lisp 层 = ） ===")
         let it = this.makeIt()
-        let box = CounterBox(3)
-        // 同一性：同一个对象
-        @Assert(box.equals(CounterBox(3)))
-        @Assert(!box.equals(CounterBox(4)))
-        println("✓ CounterBox(3) == CounterBox(3)，!= CounterBox(4)")
+        @Assert(this.evalIn(it, "(= (make-counter 3) (make-counter 3))") == "true")
+        println("✓ (= 3 号盒 3 号盒) = true")
+        @Assert(this.evalIn(it, "(= (make-counter 3) (make-counter 4))") == "false")
+        println("✓ (= 3 号盒 4 号盒) = false")
+        @Assert(this.evalIn(it, "(!= (make-counter 3) (make-counter 4))") == "true")
+        println("✓ (!= 3 号盒 4 号盒) = true")
+        // 外部值与其它类型从不相等
+        @Assert(this.evalIn(it, "(= (make-counter 3) 3)") == "false")
+        println("✓ (= 盒 3) = false（不做隐式转换）")
+    }
+
+    /** 未实现 `LispExternalEquatable` 的外部值：两个不等的对象也不能算等 */
+    @TestCase
+    func testEqualityRequiresCapability() {
+        println("\n=== 未实现 Equatable 的外部值不支持相等 ===")
+        let it = LispInterpreter([withQuietMode(), withStdLib()])
+        Bridge.registerFunc(it.getEnvironment(), "make-opaque", { _ => LispValue.External(OpaqueBox()) })
+        let r = this.evalIn(it, "(= (make-opaque) (make-opaque))")
+        @Assert(r == "false")
+        println("✓ (= 两个 opaque) = false（未实现 equals 就不相等）")
+    }
+
+    /** 大小比较走 `LispExternalComparable` */
+    @TestCase
+    func testOrderingViaCapability() {
+        println("\n=== 大小比较走能力接口 ===")
+        let it = this.makeIt()
+        @Assert(this.evalIn(it, "(< (make-counter 3) (make-counter 5))") == "true")
+        @Assert(this.evalIn(it, "(> (make-counter 5) (make-counter 3))") == "true")
+        @Assert(this.evalIn(it, "(<= (make-counter 5) (make-counter 5))") == "true")
+        @Assert(this.evalIn(it, "(>= (make-counter 3) (make-counter 5))") == "false")
+        println("✓ < > <= >= 均按 compare() 分派")
+
+        // 未实现 Comparable 的外部值：不满足任何顺序比较（不能当成"相等"，
+        // 否则 <= 会误判为真）
+        let opaque = LispInterpreter([withQuietMode(), withStdLib()])
+        Bridge.registerFunc(opaque.getEnvironment(), "make-opaque", { _ => LispValue.External(OpaqueBox()) })
+        @Assert(this.evalIn(opaque, "(<= (make-opaque) (make-opaque))") == "false")
+        @Assert(this.evalIn(opaque, "(< (make-opaque) (make-opaque))") == "false")
+        println("✓ 未实现 Comparable 时顺序比较恒为 false")
+    }
+
+    /** `nth` 对列表与外部值都可用；外部值走 `at(index)` */
+    @TestCase
+    func testNthDispatchesOnCapability() {
+        println("\n=== nth 对列表 / 外部值 ===")
+        let it = this.makeIt()
+        @Assert(this.evalIn(it, "(nth '(10 20 30) 0)") == "10")
+        @Assert(this.evalIn(it, "(nth '(10 20 30) 2)") == "30")
+        @Assert(this.evalIn(it, "(nth '(10 20 30) 9)") == "nil")
+        println("✓ 列表：nth 越界返回 nil")
+        // CounterBox.at(i) 返回 i 自身
+        @Assert(this.evalIn(it, "(nth (make-counter 5) 3)") == "3")
+        @Assert(this.evalIn(it, "(nth (make-counter 5) 9)") == "nil")
+        println("✓ 外部值：nth 走 at(index)")
+    }
+
+    /** `LispExternalCallable`：外部值可以被调用 */
+    @TestCase
+    func testCallableExternalValue() {
+        println("\n=== 可调用的外部值 ===")
+        let it = LispInterpreter([withQuietMode(), withStdLib()])
+        Bridge.registerFunc(it.getEnvironment(), "make-doubler", { _ => LispValue.External(Doubler()) })
+        @Assert(this.evalIn(it, "((make-doubler) 21)") == "42")
+        println("✓ ((make-doubler) 21) = 42")
+
+        // 不可调用的外部值：明确报错，不静默返回 nil
+        let it2 = this.makeIt()
+        let r = this.evalIn(it2, "((make-counter 3) 1)")
+        @Assert(r.contains("TypeError"))
+        println("✓ 不可调用的外部值报 TypeError：" + r)
     }
 
     /**

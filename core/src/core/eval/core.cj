@@ -363,6 +363,17 @@ extend Evaluator {
                     case Error(_) => this.injectStack(procResult)
                     case _ => procResult
                 }
+            // 外部值：实现 LispExternalCallable 的可以被调用
+            // （走 `applyFunction` 保证与宿主注册函数的回调路径同一套分派）
+            case External(ext) =>
+                let args = this.evalArguments(rest)
+                for (arg in args) {
+                    match (arg) {
+                        case Error(_) => return this.injectStack(arg)
+                        case _ => ()
+                    }
+                }
+                this.injectStack(this.applyFunction(funcValue, args))
             case Nil =>
                 if (let Symbol(fn) <- first) {
                     this.injectStack(LispValue.Error(XispError(ErrorType.UndefinedFunction, "Undefined function: '${fn}'")))

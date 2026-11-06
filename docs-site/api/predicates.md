@@ -1,6 +1,6 @@
 # 谓词
 
-本页覆盖类型检查与数值谓词，共 15 个函数。所有谓词都返回布尔值。
+本页覆盖类型检查与数值谓词，共 17 个函数。所有谓词都返回布尔值（`external-type` 例外，它返回类型名或 `nil`）。
 
 ---
 
@@ -83,12 +83,64 @@
 
 签名：`(procedure? x)`
 
-判断是否为可调用过程（内置函数或 `lambda`）。
+判断是否为可调用值：内置函数、`lambda`、用户定义函数、编译闭包，以及
+`map` / `filter` / `reduce` / `apply` / `for-each` / `eval` / `->` 这 7 个**②类符号的一等值**。
 
 ```lisp
 (procedure? +)                  ; => true   内置函数
+(procedure? car)                ; => true
 (procedure? (lambda (x) x))     ; => true   lambda
 (procedure? 42)                 ; => false
+
+; ②类符号已一等值化，可取作值
+(procedure? map)                ; => true
+(procedure? for-each)           ; => true
+(procedure? ->)                 ; => true
+```
+
+::: tip `procedure?` 对宏也返回 `true`
+`when`、`negate`、`and`、`or`、`condb`、`let*` 等**宏**同样是 `true`
+（它们与过程在 `isProcedure` 判断上归为一类），但 `type-of` 会把它们报成 `"macro"`。
+要区分宏与过程，请用 `type-of`：
+
+```lisp
+(procedure? negate)             ; => true
+(type-of negate)                ; => "macro"
+(type-of map)                   ; => "procedure"
+```
+
+真·特殊形式（`if` `quote` `lambda` `let` `define` `set!` `begin` `match` `import` `export`
+`macroexpand` `macroexpand-all`）在环境里**没有绑定**，取作值会报 `[UnboundVariable]`：
+
+```lisp
+(procedure? let)                ; => [UnboundVariable] Undefined variable: 'let'
+(procedure? if)                 ; => [UnboundVariable] Undefined variable: 'if'
+```
+:::
+
+### `external?` - 是否为外部值
+
+签名：`(external? x)`
+
+判断是否为**宿主 / 扩展模块注入的外部值**（`LispValue.External`）。普通的内建值一律 `false`。
+
+```lisp
+(external? 1)                   ; => false
+(external? "s")                 ; => false
+(external? (lambda (x) x))      ; => false
+```
+
+外部值由宿主用 `LispValue.External(...)` 产出，详见[桥接 - 外部值](../integration/bridge)。
+
+### `external-type` - 外部值的类型名
+
+签名：`(external-type x)`
+
+返回外部值实现方声明的 `typeName`（如 `"ndarray"`）；非外部值返回 `nil`。
+
+```lisp
+(null? (external-type 1))       ; => true    非外部值为 nil
+(null? (external-type "s"))     ; => true
 ```
 
 ### `hashmap?` - 是否为哈希映射
@@ -116,10 +168,41 @@
 (type-of #t)          ; => "boolean"
 (type-of {:a 1})      ; => "hashmap"
 (type-of +)           ; => "procedure"
+(type-of map)         ; => "procedure"   ②类符号的一等值
 (type-of (lambda (x) x))  ; => "procedure"
+(type-of negate)      ; => "macro"       宏
 ```
 
-返回名称汇总：`nil`、`boolean`、`integer`、`float`、`string`、`symbol`、`list`、`hashmap`、`procedure`、`macro`、`unknown`。
+编译闭包（字节码后端下的 `lambda`）与解释器过程**都报 `"procedure"`**，两个后端一致。
+
+外部值报其实现方声明的 `typeName`，而非笼统的 `"external"`：
+
+```lisp
+; 假设宿主注册了 (make-counter 5) 返回 typeName 为 "counter-box" 的外部值
+(type-of (make-counter 5))     ; => "counter-box"
+(external-type (make-counter 5))  ; => "counter-box"
+```
+
+> 外部值只能由宿主（仓颉侧）注入，命令行 `-c` 里造不出来；
+> 上面两行的实测由 `xisp_tests/src/external_value_test.cj` 覆盖（AST 与字节码两个后端一致）。
+
+返回名称汇总：`nil`、`boolean`、`integer`、`float`、`string`、`symbol`、`list`、`hashmap`、
+`procedure`、`macro`，以及外部值实现方的自定义 `typeName`。
+
+::: tip 编译闭包也报 `"procedure"`，没有单独的 `"closure"`
+字节码后端下的 `lambda` 在内部是 `Closure` 变体，但 `type-of` 对它与解释器过程**统一返回
+`"procedure"`**（两个后端必须一致）；`toString` 同样统一为 `#<procedure>`。
+所以返回名称列表里**没有** `"closure"` 这一项。
+:::
+
+::: tip 关于 `"unknown"`
+实现里保留了一个 `"unknown"` 兜底分支，但当前所有内建变体都已显式处理，
+正常求值路径下取不到它。参数个数不为 1 时返回 `"error"`：
+
+```lisp
+(type-of 1 2)         ; => "error"
+```
+:::
 
 ---
 

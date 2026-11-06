@@ -50,7 +50,7 @@ extend BuiltinFunctions {
     /** 列表：`cons car cdr list length append reverse` 等 */
     public static func domainList(): LispCapability {
         SimpleCapability("list",
-            ["cons", "car", "cdr", "list", "length", "append", "reverse", "range",
+            ["cons", "car", "cdr", "list", "length", "nth", "append", "reverse", "range",
              "car", "cdr", "first", "rest"],
             { ctx => registerListOps(ctx.env); registerHigherOrder(ctx.env) },
             escapable: false, hostPolicy: false, after: ["base"])

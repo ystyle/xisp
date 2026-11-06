@@ -285,8 +285,15 @@ extend Evaluator {
 
     /**
      * 处理 let 绑定列表（新版本，支持向量和 HashMap）
+     *
+     * 返回 `Nil` 表示全部绑定建立成功；返回 `Error` 表示某个初始化表达式出错，
+     * **应立即中止整个 let**（与字节码 VM 一致：VM 在求值实参/初值时遇错误即
+     * 从执行循环返回，`STORE_LOCAL` 不会执行）。
+     *
+     * 此前这里把错误值原样 `define` 进去，故障被推迟到读取该变量时才暴露，
+     * 且 `(let ((a (error "x"))) 42)` 会静默返回 42。
      */
-    func processBindingsNew(bindingsValue: LispValue, env: Environment) {
+    func processBindingsNew(bindingsValue: LispValue, env: Environment): LispValue {
         // 检查 bindings 是否为向量
         if (this.isVectorDestructurePattern(bindingsValue)) {
             // bindings 是向量：[pattern1 value1 pattern2 value2 ...]
@@ -296,6 +303,9 @@ extend Evaluator {
                 let pattern = elements[i]
                 let valueExpr = elements[i + 1]
                 let value = this.eval(valueExpr)
+                if (let Error(_) <- value) {
+                    return value
+                }
 
                 if (this.isVectorDestructurePattern(pattern)) {
                     // 嵌套向量解构
@@ -324,22 +334,33 @@ extend Evaluator {
                     if (this.isVectorDestructurePattern(binding) && let Cons(nextCell) <- currCell.cdr) {
                         // 向量解构：binding 是 pattern，下一个元素是值表达式
                         let value = this.eval(nextCell.car)
+                        if (let Error(_) <- value) {
+                            return value
+                        }
                         this.processVectorDestructure(binding, value, env)
                         // 跳过下一个元素
                         current = nextCell.cdr
                     } else if (this.isHashMapDestructurePattern(binding) && let Cons(nextCell) <- currCell.cdr) {
                         // HashMap 解构：binding 是 {:key1 var1 :key2 var2}
                         let value = this.eval(nextCell.car)
+                        if (let Error(_) <- value) {
+                            return value
+                        }
                         this.processHashMapDestructure(binding, value, env)
                         // 跳过下一个元素
                         current = nextCell.cdr
                     } else if (binding.isDottedPair()) {
                         // 传统点对绑定：((pattern . rest) value)
-                        // binding 本身是一个点对
+                        // binding 本身是一个点对，值在同级的**下一个元素**
                         if (let Cons(_) <- binding) {
                             let pattern = binding
-                            let valueExpr = if (let Cons(nextCell) <- currCell.cdr) { nextCell.car } else { currCell.cdr }
-                            let value = this.eval(valueExpr)
+                            let value = match (currCell.cdr) {
+                                case Cons(nextCell) => this.eval(nextCell.car)
+                                case _ => Nil
+                            }
+                            if (let Error(_) <- value) {
+                                return value
+                            }
 
                             match (pattern) {
                                 case Symbol(name) => env.define(name, value)
@@ -347,7 +368,15 @@ extend Evaluator {
                                 case _ => ()
                             }
                         }
-                        current = currCell.cdr
+                        // 点对绑定吃掉**两个**元素（模式 + 值）。此前只推进一个，
+                        // 于是值表达式会被当成下一个绑定的模式再处理一遍 ——
+                        // `(let ((x . y) (quote (1 2 3))) x)` 会把 `(quote (1 2 3))`
+                        // 当绑定 `(quote …)` 求值，报 "Attempt to call a non-function value: 1"。
+                        // 之前一直没暴露，是因为那个错误值被静默吞掉了。
+                        current = match (currCell.cdr) {
+                            case Cons(nextCell) => nextCell.cdr
+                            case _ => Nil
+                        }
                     } else {
                         // 普通绑定：(pattern value)
                         if (let Cons(bindingCell) <- binding) {
@@ -355,6 +384,9 @@ extend Evaluator {
                             let valueExpr = if (let Cons(cdrCell) <- bindingCell.cdr) { cdrCell.car } else { bindingCell.cdr }
 
                             let value = this.eval(valueExpr)
+                            if (let Error(_) <- value) {
+                                return value
+                            }
 
                             match (pattern) {
                                 case Symbol(name) => env.define(name, value)
@@ -378,12 +410,13 @@ extend Evaluator {
                 }
             }
         }
+        Nil
     }
 
     /**
      * 处理 let 绑定列表
      */
-    func processBindings(bindings: ConsCell, env: Environment) {
+    func processBindings(bindings: ConsCell, env: Environment): LispValue {
         this.processBindingsNew(Cons(bindings), env)
     }
 

@@ -20,6 +20,7 @@
 - ✅ M17: 分层目标澄清 —— 可替换
 - ✅ M18: 能力域文档按「可替换」重构
 - 🚧 M19: R5RS 级符号分层重构（gensym / 编译前宏展开 / ①收敛 / 域装配 / 宏包）
+- ✅ M21: 错误传播语义统一 + 三后端差分闸门
 
 ---
 
@@ -867,3 +868,79 @@ CLI 冒烟 `(println (+ 1 2))` → `3`、`(incf x)` → `6`、`when` 正常。
 **验证**：`cjpm build` 通过；`cjpm test` **501/501** 通过。
 
 **完成时间**: 2026-10-11
+
+---
+
+## M21: 错误传播语义统一 + 三后端差分闸门 ✅
+
+M20 的差分测试只覆盖 AST ↔ 字节码两模式、且**逐表达式**求值（不带文件上下文）。
+本轮把它扩成**三模式**（含 JIT）、补上**逐文件**层，一并暴露并修掉了一批
+"错误被当成正常值"的缺陷。
+
+### 1. 根本问题：`LispValue.Error` 是值，不是异常
+
+错误"要不要中止"完全由各处分发代码自己决定。历史实现AST 与字节码各走一半：
+
+| 写法 | AST（旧） | 字节码（旧） |
+|---|---|---|
+| `(define (f) (assert 假) 42) (f)` | `42` —— **assert 形同虚设** | `RuntimeError` |
+| `(begin (error "b") 42)` | `42` | `RuntimeError` |
+| `(let ((a (error "b"))) 42)` | `42` | `RuntimeError` |
+| `(if 未定义变量 1 2)` | `[UnboundVariable]` | `1`（错误当真值） |
+| `(+ 1 未定义变量)` | `[UnboundVariable]` | `[TypeError]` |
+| `(< 1 未定义变量)` / `(not 未定义变量)` | `[UnboundVariable]` | `false` |
+| `(match 未定义变量 … (else "other"))` | `"other"` | `[UnboundVariable]` |
+| `(foo 1)`（foo 未绑定） | `[UndefinedFunction]` | `[UnboundVariable]` |
+| `(apply 42 '(1 2))` | `nil` 静默 | `RuntimeError` |
+
+最有用户价值的是第一行：`assert` 是**给用户做参数校验的 API**，在 AST 下校验失败后
+函数继续算完并返回正常结果——保护作用为零。
+
+### 2. 统一语义：错误一旦产生就中止
+
+- AST：`evalBegin` 逐步检查、遇错即返；`define` / `set!` / `let` 的绑定初值出错时
+  **不建立绑定**直接传播；`match` 的被匹配表达式出错即中止；`apply` 同。
+- VM：`OP_POP` / `OP_JUMP_IF_FALSE` / `OP_AND_JF` / `OP_OR_JF` / `OP_NORM_FALSE` /
+  `OP_STORE_GLOBAL` / `OP_STORE_LOCAL` / `OP_BIN_LC` / `OP_CMP_LC_JF` 与七个栈式
+  二元算子（`+ - * / < > =`）、`OP_NOT` 全部加错误中止；`apply` 非可调用值统一成
+  `TypeError`。
+- 顶层**逐表达式**执行仍继续（`evalMultiple` 的行为不变）：中止的是出错的那条表达式。
+
+### 3. 顺带查出 3 个被静默吞错掩盖的真缺陷
+
+| # | 缺陷 | 为何一直没暴露 |
+|---|---|---|
+| 1 | **点对绑定只推进一个元素**，值表达式被当成下一个绑定的模式再处理 (`(let ((x . y) '(1 2 3)) x)` 报类型错误) | 错误被 begin 吞掉 |
+| 2 | **函数体内 `define` 一律发 `STORE_GLOBAL`**，而符号引用走帧槽（进帧时解析，变量尚未定义）→ `(define (f) (define r 5) r)` 字节码下 `UnboundVariable` | 单测没有"函数内 define"用例 |
+| 3 | `(apply 非函数 …)` 静默返回 `nil` | 其安全属性被"返回 nil 也算安全"误当成正确行为（`pure_env_test` 就 pin 了这个错误预期） |
+
+### 4. 三后端差分闸门（`BackendDiffTest`）
+
+- **逐文件**层：走 `evalFile`，因此相对导入、模块搜索路径、输出副作用序列都在覆盖内。
+- **逐表达式**层：把源码切成顶层表达式逐步比对，差异能定位到"第 N 步"。
+- 归一化：错误只比**种类**（文案由不同代码路径产出），并剥掉调用栈
+  （AST 有、字节码没有——诊断信息完整度差异，不是语义差异）。
+- 结果：**63 个文件逐文件一致 / 39 个文件逐步一致**，跳过 28 个（perf 基准、
+  REPL 演示、`module.lisp` 元数据清单——都是语料自身性质，不是覆盖缺口）。
+
+### 5. 接缝 3 的协议族从"只有定义"变成"真有分派"
+
+`docs-site` 同步时发现五个能力接口里四个只是定义、无人调用。本轮接通：
+
+| 接口 | 消费点 |
+|---|---|
+| `LispExternalEquatable` | `=` / `!=` |
+| `LispExternalComparable` | `<` `>` `<=` `>=`（未实现时恒 false，不能当"相等"） |
+| `LispExternalIndexable` | `length` + 新增的 `nth` |
+| `LispExternalCallable` | 调用形式 `((ext) args…)`（AST 与 VM 两侧） |
+
+### 6. 其它
+
+- `ErrorType` 新增 `name()`：此前只有 `XispError.toString()` 里有份内联 match，
+  宿主按种类分发时无处可取；`toString` 改为复用它，避免两份口径漂移。
+- 新增 `nth`（列表 + 外部值）；`length` 语义**保持**"非列表返回 0"（有意设计）。
+
+**验证**：`cjpm build` 通过；`cjpm test` **532/532** 通过；`bash lisp-tests/check-examples.sh`
+22/22；`cjpm ws check` 通过。
+
+**完成时间**: 2026-11-06（在 `feat/r5rs-symbol-layering` 分支，未合并 master）
