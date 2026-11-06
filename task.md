@@ -940,7 +940,21 @@ M20 的差分测试只覆盖 AST ↔ 字节码两模式、且**逐表达式**求
   宿主按种类分发时无处可取；`toString` 改为复用它，避免两份口径漂移。
 - 新增 `nth`（列表 + 外部值）；`length` 语义**保持**"非列表返回 0"（有意设计）。
 
-**验证**：`cjpm build` 通过；`cjpm test` **532/532** 通过；`bash lisp-tests/check-examples.sh`
+### 7. 后续追加修复（同一轮）
+
+补 `OP_CHECK_ERR` 让字节码在**实参求值前**先查函数值：AST 是「先算函数值、
+出错立即返回」，实参根本不求值；字节码原先把实参里的副作用也执行了
+（`(define x 1) (foo (set! x 2)) x` → AST 1 / 字节码 2）。JIT 两侧把该指令
+视为空操作（v1/R 形式的资格判据本就要求全局引用均为自身，检查恒不成立），
+资格表与 emit 分派同步更新，否则整段函数会失去 JIT。
+
+同时修正差分测试的输出捕获：`setOutputFn` 只接管解释器自身日志，Lisp 的
+`println` 是环境里的 `NativeFunc`、直接写 stdout —— 改为覆盖环境绑定后
+文件层才真正比对到输出序列（此前"63 个文件全一致"里输出根本没参与比对）。
+
+全量语料三后端**归一化后零语义差异**。
+
+**验证**：`cjpm build` 通过；`cjpm test` **535/535** 通过；`bash lisp-tests/check-examples.sh`
 22/22；`cjpm ws check` 通过。
 
 **完成时间**: 2026-11-06（在 `feat/r5rs-symbol-layering` 分支，未合并 master）
