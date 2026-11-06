@@ -1125,6 +1125,14 @@ public class BytecodeCompiler <: Compiler {
             let nameIdx = this.addConst(Str(name))
             this.emitWithArg(OP_PUSH_CONSTANT, nameIdx)
         }
+        // 函数值已求出、实参尚未求值：先查函数值本身是不是错误。
+        // AST 侧 `evalFunctionCallWithValue` 是先算函数值、出错立即返回，
+        // 实参**根本不求值**；字节码若直接压实参再 CALL，实参里的副作用
+        // （`(foo (set! x 2))`）就会多发生一次——实测 `(define x 1)
+        // (foo (set! x 2)) x` 在 AST 得 1、字节码得 2。
+        if (this.countArgs(args) > 0) {
+            this.emit(OP_CHECK_ERR)
+        }
         var current = args
         while (let Cons(cell) <- current) {
             // 关键字符号不做求值，作为符号直接压入

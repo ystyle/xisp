@@ -293,6 +293,25 @@ class ErrorPropagationTest {
         assertErrorAllBackends("(define (f) (nosuch 1)) (f)", "UndefinedFunction")
     }
 
+    /**
+     * 头位置未绑定时**实参不求值**（副作用不发生）。
+     *
+     * AST 侧 `evalFunctionCallWithValue` 先算函数值、出错立即返回，实参根本不求值；
+     * 字节码若先压实参再 CALL，实参里的副作用就会多发生一次。
+     * 用 `set!` 观测：AST 得 1、字节码曾得 2。
+     */
+    @TestCase
+    func testArgumentsNotEvaluatedWhenHeadUnbound() {
+        assertSameResultAllBackends("(define x 1) (foo (set! x 2)) x", "1")
+    }
+
+    /** 同上，用输出观测（副作用可见） */
+    @TestCase
+    func testArgumentsNotEvaluatedWhenHeadUnboundOutput() {
+        let code = "(begin (foo (println \"SHOULD-NOT-PRINT\")))"
+        assertErrorAllBackends(code, "UndefinedFunction")
+    }
+
     /** 局部变量形式的未绑定（非头位置）→ UnboundVariable */
     @TestCase
     func testUnboundVariableKindMatches() {

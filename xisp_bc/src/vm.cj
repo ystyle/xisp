@@ -828,6 +828,49 @@ public class BytecodeVM <: VM {
                     }
                 
 
+                    case 63 =>
+
+                    // 函数值已求出、实参尚未求值：先把"函数值本身就有问题"查出来。
+                    //
+                    // AST 侧 `evalFunctionCallWithValue` 是先算函数值、出错立即返回，
+                    // 实参**根本不求值**；字节码若直接压实参再 CALL，实参里的副作用
+                    // （`(foo (set! x 2))`）就会多发生一次——实测 `(define x 1)
+                    // (foo (set! x 2)) x` 在 AST 得 1、字节码得 2。
+                    //
+                    // 栈顶两种形态：
+                    //  · 函数体内的调用 → 已求出的函数**值**（可能是错误值）；
+                    //  · 顶层调用 → 待解析的**名字**常量（帧槽解析发生在进帧时，
+                    //    这里的名字要在 CALL 里才解析，故在此提前查一次环境）。
+                    // 字面量字符串当头位置不会编译到这条路径（`compileList` 只认
+                    // Symbol），因此不存在把 `("abc" 1)` 误判成未定义函数的风险。
+                    if (this.sp >= 0) {
+                        let v = this.registers[this.sp]
+                        match (v) {
+                            // 函数体内的调用：帧槽里存的是**已解析的值**，
+                            // 名字未绑定在这里就是一个 Error 值
+                            case Error(err) =>
+                                match (err.kind) {
+                                    case UnboundVariable =>
+                                        let quotedName = err.message.replace("Undefined variable: ", "")
+                                        return LispValue.Error(XispError(ErrorType.UndefinedFunction,
+                                            "Undefined function: ${quotedName}"))
+                                    case _ => return v
+                                }
+                            case Str(name) =>
+                                match (this.currentEnv.lookup(name)) {
+                                    case Error(err) =>
+                                        match (err.kind) {
+                                            case UnboundVariable =>
+                                                return LispValue.Error(XispError(ErrorType.UndefinedFunction,
+                                                    "Undefined function: '${name}'"))
+                                            case _ => return LispValue.Error(err)
+                                        }
+                                    case _ => ()
+                                }
+                            case _ => ()
+                        }
+                    }
+                
                     case 61 =>
 
                     // 环境作用域开始：压栈 currentEnv，创建 child（闭包共享捕获的宿主）

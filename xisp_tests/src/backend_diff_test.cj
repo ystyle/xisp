@@ -154,7 +154,40 @@ class BackendDiffTest {
     func runFile(path: String, backend: String): Array<String> {
         let out = ArrayList<String>()
         let it = this.makeInterpreter(backend)
-        it.setOutputFn({ line => out.add(line) })
+        // 脚本模式（与 CLI 执行 .lisp 时一致）：允许 `(import "./xxx.lisp")`。
+        // 默认的模块模式禁止相对导入 —— 不切过来，每个相对导入语料都会两侧
+        // 都报"模块上下文中不支持相对路径导入"，看起来"一致"，实际上什么都没验。
+        it.setScriptMode()
+        // 捕获 Lisp 侧的 println/print 输出。
+        //
+        // 不能用 `setOutputFn`：那只接管**解释器自身**的日志（verbose / 沙箱提示），
+        // Lisp 里的 `println` 是注册在环境里的 `NativeFunc`，直接写进程 stdout
+        // （`BuiltinFunctions.registerPrint` → `registerOutput(env, { s => print(s) })`）。
+        // 要抓它只能覆盖环境里那几个绑定。
+        let env = it.getEnvironment()
+        env.define("println", NativeFunc({ args =>
+            var line = ""
+            for (i in 0..args.size) {
+                if (i > 0) {
+                    line += " "
+                }
+                line += args[i].toString()
+            }
+            out.add(line)
+            out.add("\n")
+            Nil
+        }))
+        env.define("print", NativeFunc({ args =>
+            var line = ""
+            for (i in 0..args.size) {
+                if (i > 0) {
+                    line += " "
+                }
+                line += args[i].toString()
+            }
+            out.add(line)
+            Nil
+        }))
         var finalResult = ""
         try {
             finalResult = it.evalFile(path).toString()
