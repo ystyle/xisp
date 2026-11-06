@@ -280,6 +280,19 @@ class ErrorPropagationTest {
         assertErrorAllBackends("(no-such-fn 1)", "UndefinedFunction")
     }
 
+    /**
+     * **函数体内**的头位置未绑定也必须归一成 `UndefinedFunction`。
+     *
+     * 顶层那条已由 `testUndefinedFunctionKindMatches` 覆盖；但函数体内的调用
+     * 走的是编译帧槽（`CALL` 的分派拿到的只是错误**值**，没有名字），曾漏掉归一
+     * ——`(define (f) (nosuch 1)) (f)` 在字节码下报 `RuntimeError:
+     * expected function (got: [UnboundVariable] …)`。
+     */
+    @TestCase
+    func testUndefinedFunctionInsideFunctionBody() {
+        assertErrorAllBackends("(define (f) (nosuch 1)) (f)", "UndefinedFunction")
+    }
+
     /** 局部变量形式的未绑定（非头位置）→ UnboundVariable */
     @TestCase
     func testUnboundVariableKindMatches() {

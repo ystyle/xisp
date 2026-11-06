@@ -1440,6 +1440,21 @@ public class BytecodeVM <: VM {
                 } else {
                     LispValue.Error(XispError(ErrorType.RuntimeError, "Bytecode: invalid closure ID"))
                 }
+            // 被调位置上的值本身是错误：说明这个名字未绑定。
+            // 它在**头位置**，AST 侧 `evalFunctionCallWithValue` 会归一成
+            // `UndefinedFunction`（"Undefined function: 'foo'"）。此处拿不到名字
+            // （帧槽里只存了错误值），故沿用错误里的变量名重建该表述，保证
+            // `(define (f) (nosuch 1)) (f)` 在两个后端报同一种错误。
+            case Error(err) =>
+                match (err.kind) {
+                    case UnboundVariable =>
+                        // 只取错误消息里的名字部分（`Undefined variable: 'foo'` → `'foo'`），
+                        // 拼成与 AST 同一句表述
+                        let quotedName = err.message.replace("Undefined variable: ", "")
+                        LispValue.Error(XispError(ErrorType.UndefinedFunction,
+                            "Undefined function: ${quotedName}"))
+                    case _ => funcVal
+                }
             // 外部值：实现 LispExternalCallable 的可以被调用
             case External(ext) =>
                 match (ext) {
