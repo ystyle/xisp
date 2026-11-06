@@ -79,7 +79,7 @@ cjpm 工作区（`[workspace]`）：每个成员是独立发布的包。模块�
 ├── xisp_bc/         # 模块 ystyle::xisp_bc —— 字节码编译器 / 寄存器栈 VM / JIT（可选后端）
 ├── terminal/        # 模块 ystyle::xisp_terminal —— 终端能力（零 Lisp 依赖）
 ├── repl/            # 模块 ystyle::xisp_repl —— REPL；会话入口 runRepl / runSimpleRepl
-├── cli/             # 模块 ystyle::xisp_cli —— 命令行入口（不发布）
+├── cli/             # 模块 ystyle::xisp_cli —— 命令行入口（发布）
 ├── xisp_examples/   # 模块 ystyle::xisp_examples —— 仓颉示例（不发布）
 ├── xisp_tests/      # 模块 ystyle::xisp_tests —— 契约 / 集成测试（不发布）
 ├── docs/            # 设计文档、语法手册、集成指南

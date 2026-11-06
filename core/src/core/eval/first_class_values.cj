@@ -37,7 +37,8 @@ import std.collection.ArrayList
  * - **值位置** `(procedure? map)` / `(go map)`：从环境取到那个 `NativeFunc`。
  *
  * 而"让位"判据也随之调整：core 自己注册的值会被标记为**非用户所有**，
- * 用户覆盖后才让位（见 `first_class_owner.cj`）。
+ * 用户覆盖后才让位（判据在 `defer_special_form.cj` 的 `hasUserBinding`，
+ * 依靠 `Environment.markCoreInstalled` / `isCoreInstalled` 区分"core 装的"与"用户装的"）。
  */
 /** 提供一等值的②类符号名 */
 let FIRST_CLASS_NAMES: Array<String> = ["map", "filter", "reduce", "for-each", "apply", "eval", "->"]
@@ -88,7 +89,8 @@ extend Evaluator {
             this.eval(consValue(headFn, tail))
         })
         env.define(name, value)
-        // 标记为"core 安装的一等值"，供让位判据区分（见 first_class_owner.cj）
+        // 标记为"core 安装的一等值"，供让位判据区分
+        // （`defer_special_form.cj` 的 hasUserBinding → Environment.isCoreInstalled）
         env.markCoreInstalled(name)
     }
 }

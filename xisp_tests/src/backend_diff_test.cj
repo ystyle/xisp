@@ -288,8 +288,14 @@ class BackendDiffTest {
      * 且都在对应文档里写明。
      */
     func isNotRunnableScript(f: String): Bool {
-        // 性能基准：输出含耗时，本身不稳定；由 lisp-tests/perf/run.sh 另行度量
-        if (f.contains("/perf/") || f.contains("benchmark")) {
+        // `lisp-tests/perf/**`：**输出是确定的**（实测 15 个语料两两重跑哈希一致，
+        // 耗时靠外部 `time`/`perf/run.sh` 度量，脚本内不打印时间）。跳过的真实理由
+        // 是**太慢**：`01-fib-direct` 单次 AST 就要 15~20 秒，15 个语料 × 3 后端
+        // 会把这份回归网拖成几分钟级。它们由 `lisp-tests/perf/run.sh` 单独度量。
+        //
+        // 注意别把这条写成"输出含耗时、不稳定"—— 那与事实不符，会让后来人
+        // 误以为这些语料的**语义**不参与验证是合理的。
+        if (f.contains("/perf/")) {
             return true
         }
         // REPL 交互演示：需要 TTY 与 `,lang zh` 等 REPL 命令，不是独立脚本

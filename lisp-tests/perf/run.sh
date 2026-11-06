@@ -4,8 +4,17 @@
 # 输出：每场景 AST/BC 中位数（ms）与加速比
 set -u
 ROUNDS=${1:-5}
-BIN=./target/release/bin/ystyle::xisp.cli
+BIN=./target/release/bin/ystyle::xisp_cli
 DIR=$(dirname "$0")
+
+# 二进制不存在就**当场失败**。工作区化把包名从 xisp 改成 xisp_cli 后，
+# 本脚本的路径失配，却仍然"跑完"并给出一整张 0~1ms 的表 —— 看起来跑过了，
+# 实际每次都是 `No such file` 的瞬间失败。set -u 挡不住这种（不是未定义变量）。
+if [ ! -x "$BIN" ]; then
+    echo "错误: 未找到 $BIN，请先 cjpm build" >&2
+    exit 2
+fi
+
 RES=$(mktemp -d)
 
 for f in "$DIR"/*.lisp; do

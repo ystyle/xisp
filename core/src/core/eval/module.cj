@@ -736,16 +736,25 @@ extend Evaluator {
                 if (exportedSymbols.isEmpty()) {
                     LispValue.Error(XispError(ErrorType.ArityMismatch, "export requires at least one symbol"))
                 } else {
-                    // 将符号添加到当前模块的导出列表
+                    // 记两处：
+                    //
+                    // 1. **当前环境**（`env.exportedSymbols`）—— 相对导入（`(import "./x.lisp")`
+                    //    与 `(import "./pkg")`）走的是"在独立 child env 里加载、再按
+                    //    `getExportedBindings()` 白名单绑出"，那条路径**不设** `currentModule`
+                    //    （它只对模块导入有意义）。此前这里只写 `currentModule`，于是相对
+                    //    导入时 `export` 静默无效、`getExportedBindings()` 恒为空、
+                    //    加载方退回"全部符号都导出"—— 未导出符号可以直接调用。
+                    // 2. 当前模块（模块导入路径按 `getAllExportedSymbols()` 取）。
+                    for (sym in exportedSymbols) {
+                        this.env.addExportedSymbol(sym)
+                    }
                     match (this.currentModule) {
                         case Some(module) =>
                             for (sym in exportedSymbols) {
                                 module.exportSymbol(sym)
                             }
                             Nil
-                        case None =>
-                            // 如果没有当前模块，只返回 nil（在全局环境中 export 无效）
-                            Nil
+                        case None => Nil
                     }
                 }
 

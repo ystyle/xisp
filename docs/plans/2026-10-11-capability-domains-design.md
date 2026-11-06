@@ -1,7 +1,9 @@
 # Xisp 能力分层与扩展接缝设计
 
-> **状态**：机制设计，**未实施**
-> **目标版本**：待定（0.5.0 已发布，本设计的破坏性变更须并入下一个破坏性版本）
+> **状态**：**已实施**（接缝 0 / 0a~0e、1、1b、2、3、4、6 均已完成，见 §8.1、§11、§12）；
+> 当前位于分支 `feat/r5rs-symbol-layering`，**未合并 master、未发版**
+> **目标版本**：待定（0.5.0 已发布，本设计的破坏性变更须并入下一个破坏性版本；
+> 当前在分支上，合入时按 lockstep 推进 0.6.0）
 > **前置**：工作区化（模块划分）已完成并发布，见
 > [`2026-09-27-workspace-modularization.md`](2026-09-27-workspace-modularization.md)
 > **下游规划**：科学计算族（`xisp_array` / `linalg` / `stats` / `signal` / `io` / `sci`）见
@@ -52,6 +54,10 @@
 
 **所以真正顶不掉的只有"求值器直接拦截"的那批 + ①类。**
 
+> **2026-11-06 补**：上表是 2026-10-11 的实测快照。让位机制（§3.2）与一等值化（§11.4）
+> 实施后，②类也能被用户 `define` 顶掉（`(define map (lambda (f l) …))` 后调用走用户实现），
+> 只剩①类仍不可替换。见 §8.1 接缝 0b / 0e 与 §12。
+
 ### 1.3 判别方法：空环境探测
 
 判断一个符号属哪层，最简办法是看它在**空环境**（`Environment()` + `Evaluator`，不注册任何东西）里：
@@ -94,6 +100,12 @@ if (let NativeFunc(proc) <- args[0]) { … }   // Lisp 闭包被静默跳过
 > **2026-10-11 进展**：`and` / `or` 已从③（注册函数）**降为④（宏）**，两个后端的短路语义随之统一。
 > 详见 §2.5。`let` / `let*` / `condb` / `if-let` / `when-let*` / `->` 的降级可行性已实测（§2.5），
 > 待实施。
+>
+> **2026-11-06 订正**（表内"现状"列已过时，按实际记录）：②类已**一等值化 + 可拦 + 可替换**
+> —— `(procedure? map)` → `true`、用户 `define` 同名即让位（§8.1 接缝 0b/0e、§11.4、§12）；
+> `let*` / `condb` / `if-let` / `when-let*` 已在 `core/src/core/builtin/macros.cj` 以 `defmacro`
+> 提供、`core.cj` 里不再有对应 `case`（即已属④层）；
+> `for-each` 已从③**移入②**（求值器实现，`core/src/core/eval/for_each.cj`，见 §12）。
 | **③ 注册函数** | `+ - * / < > =`、`and` `or`、`cons` `car` `cdr` `list` `length` `append` `not` `eq?` `number?` `str` `print` `for-each` … | 仓颉 `registerXxx`（部分带快速路径） | ✅ | ✅※ | ✅ | ✅ |
 | **④ Lisp 层宏** | `when` `unless` `incf` `decf` `swap` `push` `pop` `negate` `do` `defun` | **Lisp 源码**（`BuiltinMacros`，启动时 `eval`） | ❌（是 Macro） | — | ✅ | ✅ |
 
@@ -735,7 +747,7 @@ public interface LispExternalCallable <: LispExternal {
 | 1 | 域抽象 `LispCapability` + preset + `withDomains` | §4 | **✅ 已完成**（2026-10-11）：9 个 core 内置域、`presetFull`/`presetPure`（后者按属性推导）、`orderDomains`（after 拓扑序）、`replace` 独占装配 | 可不要 + 可替换 + 可定制 |
 | 2 | `CapabilityContext`（中断注入、类型声明、`invoke`、`evalSource`） | §3.3 | **✅ 已完成**（2026-10-11） | 域装配 |
 | 1b | **宏包即域**（④层用 `evalSource` 形态安装） | §4.2 | **✅ 已完成**（2026-10-11）：16 个内建宏合并为单一 Lisp 源码 | 可替换（④层） |
-| 3 | `External` 变体 + `LispExternal` 协议族 | §7 | **待做**，破坏性变更 | 下游 sci 族 |
+| 3 | `External` 变体 + `LispExternal` 协议族 | §7 | **✅ 已完成**：变体 + 5 个能力接口（2026-10-11）；5 个接口**全部接通分派**于 2026-11-06 补齐（`=`/`!=` → Equatable、`<`/`>`/`<=`/`>=` → Comparable、`length`/`nth` → Indexable、调用形式 → Callable），见 §12.3 | 下游 sci 族 |
 | 4 | `funcChecker` 覆盖可逃逸特殊形式（②类） | §5.4 | **✅ 已完成**（2026-10-11）：`withSandbox()` 的 `blockFunctions(["eval","apply"])` 终于生效 | 沙箱正确性 |
 | 6 | **AST ↔ 字节码差分测试**（91 个语料逐表达式比对） | §5.5 | **✅ 已完成**（2026-10-11）：从 726 处差异降到 **0**，修复 7 处真不兼容 | 兼容性 |
 | 5 | 外部模块的**中断义务** | §3.3 | 机制已有，契约待写进模块 README | 宿主可控性 |
@@ -750,11 +762,10 @@ public interface LispExternalCallable <: LispExternal {
    - 0 六个派生形式降为宏；`and`/`or` 的 4 处 AST/BC 语义分歧归零
    **效果**：core 自带的同能力实现全部可被用户顶掉 —— "可替换"目标达成。
 
-   **仍欠一项**：0e `(procedure? map)` 为真 / 可作值传递。
-   形态建议：照搬算术符号已验证的模式 —— core 把 `map` 等**注册成值**（一等值），
-   同时保留求值器快速路径，守卫判据改为"绑定是否仍为 core 注册的那份"；
-   用户替换后自动让位。**不急于做**：目前 `map` 作为值传入高阶函数仍是
-   `UnboundVariable`，但"可替换"本身已成立。
+   **0e（原文记作"仍欠一项"）已随 2026-10-11 实施完成**：`(procedure? map)` 为真 / 可作值传递，
+   见 §11.4：core 把 `map` 等**注册成值**（一等值），
+   同时保留求值器快速路径，守卫判据为"绑定是否仍为 core 注册的那份"，用户替换后自动让位。
+   实测 `(procedure? map)` → `true`、`(define f map) (f (lambda (x) (* x 2)) (list 1 2 3))` → `(2 4 6)`。
 2. ~~**接缝 1 / 2（域装配）**~~ —— **✅ 已完成**（2026-10-11）：
    `LispCapability` + `CapabilityContext` + 9 个 core 内置域；
    `presetFull` / `presetPure`（后者按 `!escapable && !hostPolicy` **推导**）；
@@ -764,11 +775,13 @@ public interface LispExternalCallable <: LispExternal {
    **边界如实记录**（并有测试锁定）：即便独占装配，①语言原语（`if`/`let`/`lambda`）
    与②求值器拦截（`map`/`eval`）**仍然可用** —— 它们不在环境里，域装配动不了。
    域装配只覆盖③注册函数。
-3. **接缝 4（`funcChecker` 覆盖）**：①②类接上权限检查（可与第 1 步合并）。
-4. **接缝 3（`External` 变体）**：`types` 加协议族 + 变体 → 编译驱动修 core 内那 12 处，
-   补单元测试；core 通用语义按能力接口分派（`print` / `type-of` / `=` / `length` / `nth` / 谓词）。
-5. **用一个测试用假扩展端到端验证**（如 `ExternalDemo`：极简外部计数器值）
-   —— 注册域 → 产生 External → `print` / `=` / 中断全部走通。
+3. ~~**接缝 4（`funcChecker` 覆盖）**~~ —— **✅ 已完成**（2026-10-11）：①②类接上权限检查，见 §11.3。
+4. ~~**接缝 3（`External` 变体）**~~ —— **✅ 已完成**（变体与协议族 2026-10-11；能力接口分派 2026-11-06 补齐，见 §12.3）：
+   `types` 加协议族 + 变体，编译驱动修 core 内非穷尽 match（实测只有 2 处，其余已有 `case _` 兜底）；
+   core 通用语义按能力接口分派（`print` / `type-of` / `external?` / `=` / `<` / `length` / `nth` / 调用）。
+5. ~~**用一个测试用假扩展端到端验证**~~ —— **✅ 已完成**（2026-10-11）：
+   `xisp_tests/src/external_value_test.cj` 的 `CounterBox` / `Doubler`
+   —— 注册域 → 产生 External → `print` / `=` / `<` / `length` / `nth` / 调用全部走通。
 6. **之后才开科学计算族的地基模块**（见下游文档）。
 
 ---
@@ -779,10 +792,10 @@ public interface LispExternalCallable <: LispExternal {
 
 | # | 项 | 说明 |
 |---|---|---|
-| C11 | ②类符号收敛的具体形态 | 目标是"真一等值"，有两条路：① 求值器保留原语语义、额外注册一个一等值（值即能力）；② 改为"取函数值再调用"（把控制流语义移进函数）。后者更干净但需改求值器核心，前者改动小但两套语义仍在。**待定** |
-| C13 | **可替换性的边界** | ①明确不可替换；②③④应可替换。需定：用户顶掉 core 实现时**静默生效还是需显式声明**（如 `withOverride("map", …)`）？静默容易被误覆盖，显式则更啰嗦。**待定** |
+| C11 | ②类符号收敛的具体形态 | 目标是"真一等值"，有两条路：① 求值器保留原语语义、额外注册一个一等值（值即能力）；② 改为"取函数值再调用"（把控制流语义移进函数）。后者更干净但需改求值器核心，前者改动小但两套语义仍在。**待定** —— **✅ 已决（2026-10-11 实施）：取①「双轨」**，保留求值器快速路径，另注册等价 `NativeFunc` 作一等值（把实参拼成调用式交回原路径，不重复实现）。依据 `core/src/core/eval/first_class_values.cj` 头注释「## 做法：**双轨**」：调用位置 `(map f lst)` 走快速路径（性能与栈深不变），值位置 `(procedure? map)` / `(go map)` 从环境取那个 `NativeFunc`。未选②的原因见 §11.4 的三条实测约束 |
+| C13 | **可替换性的边界** | ①明确不可替换；②③④应可替换。需定：用户顶掉 core 实现时**静默生效还是需显式声明**（如 `withOverride("map", …)`）？静默容易被误覆盖，显式则更啰嗦。**待定** —— **✅ 已决（2026-10-11 实施）：静默生效**，用户 `define` 同名符号即顶掉 core 实现，无需显式声明。依据 `core/src/core/eval/defer_special_form.cj`：`shouldDeferToUser`（第 58 行）用 `Environment.defineVersion` 版本号守卫查缓存，`hasUserBinding`（第 94 行）判据为"环境里有该名字的绑定、且不是 core 自己安装的那份"。实测 `(define map (lambda (f l) 'mine))` 后 `(map f lst)` 返回 `mine`。注意这条**只覆盖让位**（调用位置交给普通调用路径），与 C11 的"双轨"是两件事 |
 | C14 | ②类"让位"的性能代价 | **算术部分已解决**：`+ - * / < > =` 用 `env.arithVersion` 版本号缓存做守卫，热路径无额外开销。②类照此模式即可，**不要每次调用都查环境** |
-| C16 | `for-each` 的语义定位 | 它现在是③（注册），但语义上属"高阶函数"。修好 `invoke` 后：留下（用 `invoke`）还是并入 `map` 家族？**待定** |
+| C16 | `for-each` 的语义定位 | 它现在是③（注册），但语义上属"高阶函数"。修好 `invoke` 后：留下（用 `invoke`）还是并入 `map` 家族？**待定** —— **✅ 已决（2026-10-11 实施）：并入 `map` 家族（②类一等值）**，实现从注册函数移到求值器（`core/src/core/eval/for_each.cj`），与 `map`/`filter`/`reduce` 走同一条内部应用路径（能调闭包），同时进可让位集合与一等值集合。实测 `(procedure? for-each)` → `true`；`(for-each (lambda (x) (print x)) (list 1 2))` → 打印 `12`（不再静默跳过闭包） |
 
 ### 9.2 域装配模型
 
@@ -859,3 +872,41 @@ public interface LispExternalCallable <: LispExternal {
 故采用**双轨**：调用位置走求值器快速路径，值位置取另注册的等价 `NativeFunc`
 （把实参拼成调用式交回原路径，不重复实现）。`Environment` 增 core 安装标记，
 使让位判据不把自己的注册误判成用户实现；`define` 会清除标记，用户覆盖后仍正常让位。
+
+---
+
+## 12. 本轮实施记录（2026-11-06）
+
+### 12.1 错误传播语义统一（AST / BC / JIT 三后端一致）
+
+`LispValue.Error` 是**值**而非异常，故"错误发生后要不要中止"过去由各处分发代码各自决定，
+三后端因此分道扬镳（典型：`(begin (error "b") 42)` AST 返回 `42`、BC 报错；
+`(define (f) (assert 假) 42)` 在 AST 下 `assert` 形同虚设）。
+
+现统一为：**错误一旦产生即中止当前求值链**，一路返回到最外层；**绑定初值出错时不建立绑定**
+（不把错误值塞进变量）。三后端共用同一套判定，用例见 `xisp_tests/src/error_propagation_test.cj`
+（`assertErrorAllBackends` / `assertSameResultAllBackends`）。
+
+### 12.2 三后端差分闸门
+
+`xisp_tests/src/backend_diff_test.cj` 从"AST ↔ 字节码"两后端扩为 **AST / BC / JIT 三后端**，
+并分**两层**：`testFileDifferential`（逐文件，覆盖相对导入、模块搜索路径、副作用序列）
+与 `testCorpusDifferential`（逐表达式，能定位到"第 N 步不一致"）。
+比较时错误只比**种类**、不比文案（两侧由不同代码路径产出）；当前**零语义差异**。
+差分网继续挖出并修掉了四处：VM 中函数值出错时实参不再求值（求值顺序与 AST 一致）、
+函数体内头位置未绑定归一为 `UndefinedFunction`、字节码补 `OP_CHECK_ERR`（实参求值前先查函数值）、
+以及差分测试自身的输出捕获（此前 Lisp 的 `println` 直接写 stdout，输出根本没参与比对）。
+
+### 12.3 `LispExternal*` 五个能力接口全部接通分派
+
+接缝 3 首轮只接通了 `length`（`LispExternalIndexable`）。本轮补完其余四个消费点：
+
+| 能力接口 | 分派点 | 效果 |
+|---|---|---|
+| `LispExternalEquatable` | `core/src/core/builtin/comparison.cj:50`（`=`） | 两侧都实现才谈相等，否则恒不等；`!=` 经 `=` 反向得值 |
+| `LispExternalComparable` | `comparison.cj:108/167/226/285`（`<` `>` `<=` `>=`） | 未实现则该顺序比较恒为 `false` |
+| `LispExternalIndexable` | `core/src/core/builtin/list.cj:60`（`length`）、`:89`（`nth`） | 未实现时 `length` 按既有约定返回 `0`、`nth` 返回 `nil` |
+| `LispExternalCallable` | `core/src/core/eval/apply_function.cj:54`（`applyFunction`）、`core.cj:366`（调用位置）；`isCallableValue`（`apply_function.cj:80`） | 可被调用；不可调用时明确报 `TypeError`，不静默返回 `nil` |
+
+验证：`xisp_tests/src/external_value_test.cj` 的 `CounterBox`（Indexable + Equatable + Comparable）
+与 `Doubler`（Callable）走通全链路。

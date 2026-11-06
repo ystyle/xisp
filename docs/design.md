@@ -246,7 +246,7 @@ let interpreter = LispInterpreter()
 
 ```cangjie
 // 求值单个表达式
-let result = interpreter.eval("(+ 1 2 3)")  // => Number(6.0)
+let result = interpreter.eval("(+ 1 2 3)")  // => LispValue.Int(6)
 
 // 求值多个表达式
 let code = "
@@ -254,7 +254,7 @@ let code = "
     (define y 20)
     (+ x y)
 "
-let result2 = interpreter.evalMultiple(code)  // => Number(30.0)
+let result2 = interpreter.evalMultiple(code)  // => LispValue.Int(30)
 ```
 
 ### 4.3 注册自定义函数
@@ -262,21 +262,24 @@ let result2 = interpreter.evalMultiple(code)  // => Number(30.0)
 在仓颉中注册函数到 Lisp 环境：
 
 ```cangjie
+import ystyle::xisp.*          // LispInterpreter / 选项
+import ystyle::xisp.types.*    // LispValue / XispError / ErrorType
+
 // 注册不带命名空间的函数
 interpreter.registerBridgeFunction("square", { args =>
-    if (args.size > 0 && let Number(n) <- args[0]) {
-        Number(n * n)
+    if (args.size > 0 && let LispValue.Int(n) <- args[0]) {
+        LispValue.Int(n * n)
     } else {
-        Str("Error: argument must be a number")
+        LispValue.Error(XispError(ErrorType.TypeError, "square: expected a number"))
     }
 })
 
 // 注册带命名空间的函数
 interpreter.registerBridgeFunctionWithNS("mycalc", "add", { args =>
-    if (args.size >= 2 && let Number(a) <- args[0] && let Number(b) <- args[1]) {
-        Number(a + b)
+    if (args.size >= 2 && let LispValue.Int(a) <- args[0] && let LispValue.Int(b) <- args[1]) {
+        LispValue.Int(a + b)
     } else {
-        Str("Error: requires 2 numbers")
+        LispValue.Error(XispError(ErrorType.TypeError, "add: requires 2 numbers"))
     }
 })
 ```
@@ -285,10 +288,10 @@ interpreter.registerBridgeFunctionWithNS("mycalc", "add", { args =>
 
 ```lisp
 ;; 调用无命名空间函数
-(square 5)  ; => 25.0
+(square 5)  ; => 25
 
 ;; 调用带命名空间的函数
-(mycalc::add 3 4)  ; => 7.0
+(mycalc::add 3 4)  ; => 7
 ```
 
 ### 4.4 类型转换
@@ -298,23 +301,23 @@ interpreter.registerBridgeFunctionWithNS("mycalc", "add", { args =>
 ```cangjie
 // 数值类型
 let num: Int64 = 42
-let lispNum = num.toLisp()  // Number(42.0)
+let lispNum = num.toLisp()  // LispValue.Int(42)
 
 // 字符串
 let str: String = "Hello"
-let lispStr = str.toLisp()  // Str("Hello")
+let lispStr = str.toLisp()  // LispValue.Str("Hello")
 
 // ArrayList
 let numbers = ArrayList<Int64>()
 numbers.append(1)
 numbers.append(2)
-let lispList = numbers.toLisp()  // (1.0 2.0)
+let lispList = numbers.toLisp()  // (1 2)
 
 // HashMap
 let map = HashMap<String, Int64>()
 map["a"] = 1
 map["b"] = 2
-let lispMap = map.toLisp()  // (("a" 1.0) ("b" 2.0))
+let lispMap = map.toLisp()  // LispValue.HashMap(...)，打印形式为 {a 1 b 2}
 ```
 
 ### 4.5 标准库桥接

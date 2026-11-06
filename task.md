@@ -19,8 +19,9 @@
 - ✅ M16: 符号分层实测 + 两级装配模型
 - ✅ M17: 分层目标澄清 —— 可替换
 - ✅ M18: 能力域文档按「可替换」重构
-- 🚧 M19: R5RS 级符号分层重构（gensym / 编译前宏展开 / ①收敛 / 域装配 / 宏包）
+- ✅ M19: R5RS 级符号分层重构（gensym / 编译前宏展开 / ①收敛 / 域装配 / 宏包）
 - ✅ M21: 错误传播语义统一 + 三后端差分闸门
+- ✅ M22: 收尾审计（5 个「看起来在跑、实际没跑」的东西）
 
 ---
 
@@ -766,7 +767,7 @@ Lisp 层要复刻 `map`/`for-each`，必须能从注册函数调用任意 Lisp �
 
 ---
 
-## M19: R5RS 级符号分层重构 🚧
+## M19: R5RS 级符号分层重构 ✅
 
 **目标**：让"除了最基本的，所有其它都可以不要，且同能力 core 带了也能被用户用宏自行替换"
 （即 **可替换**，对应"lisp 实现 lisp 所有"）。
@@ -808,18 +809,15 @@ Lisp 层要复刻 `map`/`for-each`，必须能从注册函数调用任意 Lisp �
 | **③ 注册函数** | `+ - * / < > =` `cons` `car` … | ✅ |
 | **④ Lisp 层宏**（16） | `when` `unless` `condb` `if-let` `let*` `when-let*` `and` `or` `incf` `decf` `swap` `negate` `push` `pop` `do` `defun` | ✅ |
 
-### 遗留
+### 遗留（均已收口，见 M20 / M21）
 
-- **0e**：②类**一等值化**（`(procedure? map)` 为真、可作值传递）。目前"可替换"已成立，
-  但 `map` 作为值传入高阶函数仍是 `UnboundVariable`。形态建议：照搬算术符号已验证的模式
-  （core 注册成值 + 保留快速路径，守卫判据改为"绑定是否仍为 core 那份"）。
-- **接缝 3**（`External` 变体）与 **接缝 4**（`funcChecker` 覆盖①②类）未做。
-- 合并回 master 时是破坏性变更，按仓库约定需 `cjpm ws bump` 推进版本（**待用户决定**）。
+- ~~**0e**：②类一等值化~~ → M20 完成（双轨）。
+- ~~**接缝 3**（`External` 变体）与 **接缝 4**（`funcChecker` 覆盖①②类）~~ → M20 完成。
+- 合并回 master：破坏性变更，需 `cjpm ws bump` 推进版本（**待决定**，当前按要求不合）。
 
-**验证**：`cjpm build` 通过；`cjpm test` **481/481** 通过；`cjpm ws check` 通过；
-CLI 冒烟 `(println (+ 1 2))` → `3`、`(incf x)` → `6`、`when` 正常。
+**验证**（当时）：`cjpm build` 通过；`cjpm test` 481/481；`cjpm ws check` 通过。
 
-**完成时间**: 2026-10-11（阶段完成，待合并）
+**完成时间**: 2026-10-11（阶段完成；收尾见 M20/M21）
 
 ---
 
@@ -956,5 +954,61 @@ M20 的差分测试只覆盖 AST ↔ 字节码两模式、且**逐表达式**求
 
 **验证**：`cjpm build` 通过；`cjpm test` **535/535** 通过；`bash lisp-tests/check-examples.sh`
 22/22；`cjpm ws check` 通过。
+
+**完成时间**: 2026-11-06（在 `feat/r5rs-symbol-layering` 分支，未合并 master）
+
+---
+
+## M22: 收尾审计 —— 5 个「看起来在跑、实际没跑」的东西 ✅
+
+合入前的完整性审计。逐项都是"存在且看似正确，实际未生效"的同一类问题。
+
+### 1. `lisp-tests/perf/run.sh` 二进制路径又写的是旧包名
+
+`BIN=./target/release/bin/ystyle::xisp.cli`（工作区化前的名字），文件不存在 →
+每次调用都是瞬时失败 → 整张表输出 **0~1 ms**。`set -u` 挡不住（不是未定义变量）。
+**与 `check-examples.sh` 是同一个 bug 的第二次出现**：改包名时漏了一个脚本。
+修法：路径改正 + **加二进制存在性闸门**（`exit 2`）。修好后真实数字
+（01-fib-direct）：AST 21779ms / BC 3785ms / JIT 40ms。
+
+### 2. 相对文件导入不尊重 `export`
+
+`(import "./utils.lisp")` 把被导入文件的**所有** `define` 灌进调用方环境，
+于是 `(export processData)` 里没列出的 `internalHelper` 照样能调用。
+更微妙的是根因：`evalExport` 只往 `currentModule` 记，而相对导入路径**不设**
+`currentModule`（它只对模块导入有意义），于是 `getExportedBindings()` 恒为空，
+加载方退回"全都导出"分支。
+修法：`evalExport` 同时记进 `env.exportedSymbols`；`loadRelativeFile` 改为在
+独立 child env 加载后按白名单绑出（与目录包导入、模块导入一致）。
+**兼容保留**：文件里一个 `export` 都没写时仍视为全公开（老脚本不受影响）。
+新增 2 条用例（`testRelativeFileImportRespectsExport` / `...WithoutExportStillWorks`）。
+
+### 3. 5 个语料用了语言不存在的 `try/catch`
+
+`grep -rn '"try"' core/ xisp_bc/` 全仓零实现。于是那 5 个文件里
+`(try … ) catch (e) …` 展开成 4 条错误，而 `"✓ 正确：…"` 是**无条件打印**的——
+**无论被测行为对不对都会打勾**。这些是死测试代码。
+修法：改成不捕获、直接执行，靠 stderr 里的错误种类作为证据
+（`check-examples.sh` 收 stderr；`xisp_tests` 断言错误种类）。
+
+### 4. 差分测试跳过 perf 的理由写错了
+
+注释说"输出含耗时，本身不稳定"。实测 15 个 perf 语料**两两重跑哈希一致**，
+脚本内根本不打印时间（耗时靠外部 `time`）。真实理由只是**太慢**
+（01-fib-direct 单次 AST 15~20 秒）。已按事实改写注释，并把 `benchmark.lisp`
+纳入差分（它跑 0.9 秒、输出确定）。
+
+### 5. 文档状态与事实脱节
+
+- 能力域设计文档状态写"**未实施**"，实际全部完成。
+- `AGENTS.md` 写 `cli` "不发布"，而 `workspace.toml` 明确"cli 也可分发"、
+  中心仓**已有** `ystyle::xisp_cli 0.5.0`。
+- `docs/design.md` 7 处 `Number(...)` 是早已删除的变体。
+- `first_class_values.cj` 两处注释指向不存在的 `first_class_owner.cj`。
+
+### 6. 结果
+
+`cjpm test` **537/537**、`check-examples.sh` 22/22、三后端差分
+**64 个文件逐文件一致 / 40 个文件逐步一致**、`cjpm ws check` 通过。
 
 **完成时间**: 2026-11-06（在 `feat/r5rs-symbol-layering` 分支，未合并 master）
