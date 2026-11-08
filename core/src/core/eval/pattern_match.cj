@@ -85,9 +85,26 @@ extend Evaluator {
         match (elem) {
             case Symbol(_) => true
             case Cons(_) => true
-            case LispValue.Int(_) => true  // 数字也算作模式（用于列表模式中的常量）
-            case LispValue.Float(_) => true  // 数字也算作模式（用于列表模式中的常量）
-            case _ => false  // 其他（字符串、布尔值）不是模式
+            case _ => false
+        }
+    }
+
+    /**
+     * 判断子句头是否为**自求值字面量**（数字 / 字符串 / 布尔 / nil）。
+     *
+     * 用于区分两种子句写法：
+     * - `(1 "one")`  —— 字面量模式 + 结果（`match` 的常规写法）
+     * - `(x y z) "…"` —— 列表模式；此时子句头是符号/嵌套列表，不是字面量
+     *
+     * 此前 `isPatternElement` 把数字也当作"模式元素"，于是 `(1 "one")` 被误判成
+     * **列表模式**，对值 `1` 匹配失败并报 "No matching pattern"；
+     * 而字节码后端按"字面量模式 + 结果"处理、结果正确 —— 实测两后端不一致
+     * （`lisp-tests/comprehensive_test.lisp` 的 `(match 1 (1 1) (2 2) (else 0))`）。
+     */
+    private func isLiteralPattern(elem: LispValue): Bool {
+        match (elem) {
+            case LispValue.Int(_) | LispValue.Float(_) | Str(_) | Boolean(_) | Nil => true
+            case _ => false
         }
     }
 
@@ -98,6 +115,14 @@ extend Evaluator {
         if (let Cons(cell) <- expr) {
             // 求值要匹配的表达式
             let value = this.eval(cell.car)
+
+            // 被匹配的表达式求值出错 → 中止。错误值不匹配任何模式，只会一路落到
+            // else 分支，于是 `(match 未定义变量 (1 "one") (else "other"))` 静默
+            // 返回 "other"（实测），把故障伪装成正常结果。
+            match (value) {
+                case Error(_) => return value
+                case _ => ()
+            }
 
             // 遍历所有模式分支
             var clauses = cell.cdr
@@ -153,6 +178,9 @@ extend Evaluator {
                                     false  // 使用单元素模式，守卫条件在 rest 中
                                 } else if (isHashMapPattern) {
                                     true  // HashMap 模式，整个clause是模式，结果在下一个元素
+                                } else if (this.isLiteralPattern(clauseCons.car)) {
+                                    // 子句头是字面量（如 `(1 "one")`）→ pattern + result
+                                    false
                                 } else if (this.isPatternElement(clauseCons.car)) {
                                     var allPatterns = true
                                     var current = rest

@@ -14,23 +14,13 @@ extend BuiltinFunctions {
      * 注册所有基础函数到环境
      */
     public static func registerAll(env: Environment): Unit {
-        // 注册基础字面量（nil 需要定义为符号，因为解析器不处理 nil）
-        env.define("nil", Nil)
-
-        registerArithmetic(env)
-        registerModulo(env)
-        registerMath(env)
-        registerComparison(env)
-        registerListOps(env)
-        registerHigherOrder(env)
-        registerLogic(env)
-        registerPredicates(env)
-        registerPrint(env)
-        registerHashMap(env)
-        BuiltinMacros.registerAll(env)
-        registerRedisAliases(env)     // Redis 风格别名
-        registerModernAliases(env)      // 最后注册别名，确保所有原函数已注册
-        registerErrorHelpers(env)
+        // 全量装配 = `presetFull` 的域并集。
+        //
+        // 不再逐个调注册器：那份"平行清单"曾与域集合漂移（`domainPrint` 不在
+        // `coreDomains()` 里、`registerModernAliases` 不属任何域），而两份清单
+        // 各自的测试都只覆盖自己那条路径，漂移不会被发现。
+        // 现在只有**一份**装配逻辑；`testPresetFullCoversRegisterAll` 反向钉住等价性。
+        installDomains(env, presetFull())
     }
 
     /**
@@ -48,23 +38,9 @@ extend BuiltinFunctions {
      * @param output 输出接收器（每个文本片段一次回调，换行以 "\n" 片段表达）
      */
     public static func registerPure(env: Environment, output!: Option<(String) -> Unit> = None): Unit {
-        // 注册基础字面量（nil 需要定义为符号，因为解析器不处理 nil）
-        env.define("nil", Nil)
-
-        registerArithmetic(env)
-        registerModulo(env)
-        registerMath(env)
-        registerComparison(env)
-        registerListOps(env)
-        registerHigherOrder(env)
-        registerLogic(env)
-        registerPredicates(env)
-        registerHashMap(env)
-        registerStringOps(env)
-        BuiltinMacros.registerAll(env)
-        registerRedisAliases(env)     // 哈希表别名
-        registerModernAliases(env)    // 最后注册别名，确保所有原函数已注册
-        registerErrorHelpers(env)
+        // 纯函数子集 = `presetPure`（按 `!escapable && !hostPolicy` 推导）的域并集。
+        // 输出通道是 `hostPolicy` 域、默认被排除，由调用方用 `output` 显式接管。
+        installDomains(env, presetPure())
 
         match (output) {
             case Some(sink) => registerOutput(env, sink)
@@ -103,36 +79,5 @@ extend BuiltinFunctions {
             }
         }))
 
-        // (for-each proc lst1 lst2 ...) - 对每个元素应用过程，返回 nil
-        env.define("for-each", NativeFunc({ args =>
-            if (args.size < 2) {
-                return Nil
-            }
-            if (let NativeFunc(proc) <- args[0]) {
-                let lists = ArrayList<ArrayList<LispValue>>()
-                for (i in 1..args.size) {
-                    let list = ArrayList<LispValue>()
-                    var cell = args[i]
-                    while (let Cons(c) <- cell) {
-                        list.add(c.car)
-                        cell = c.cdr
-                    }
-                    lists.add(list)
-                }
-                let minLen = lists[0].size
-                var minLenVar = minLen
-                for (i in 1..lists.size) {
-                    if (lists[i].size < minLenVar) { minLenVar = lists[i].size }
-                }
-                for (i in 0..minLenVar) {
-                    let procArgs = ArrayList<LispValue>()
-                    for (j in 0..lists.size) {
-                        procArgs.add(lists[j][i])
-                    }
-                    proc(procArgs)
-                }
-            }
-            Nil
-        }))
     }
 }

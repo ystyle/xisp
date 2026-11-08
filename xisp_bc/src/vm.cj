@@ -294,28 +294,44 @@ public class BytecodeVM <: VM {
 
                     case 4 =>
 
-                    if (this.sp >= 0) { this.sp-- }
+                    // 丢弃栈顶值。若被丢弃的是**错误值**，说明上一条表达式求值失败：
+                    // 必须中止，而不是把错误悄悄丢掉继续跑（begin 体、match 子句、
+                    // and/or 清理都会走到这里）。AST 侧统一在 evalBegin 中止，与此对齐。
+                    if (this.sp >= 0) {
+                        let popped = this.registers[this.sp]
+                        this.sp--
+                        if (let Error(_) <- popped) {
+                            return popped
+                        }
+                    }
                 
 
                     case 8 =>
                     if (this.sp >= 1) {
                         let b = this.pop()
                         let a = this.pop()
-                        if (let Int(ai) <- a && let Int(bi) <- b) {
+                        // 操作数是错误值（如上一步求值失败）→ 原样传播该错误。
+                        // 拿它当普通值参与运算会让 AST 报 UnboundVariable、
+                        // 字节码却报 TypeError（或比较直接得 false）——实测不一致。
+                        if (let Error(_) <- a) {
+                            return a
+                        } else if (let Error(_) <- b) {
+                            return b
+                        } else if (let Int(ai) <- a && let Int(bi) <- b) {
                             this.push(LispValue.Int(ai + bi))
                         } else {
                             let result = match (a) {
                                 case Int(ai) => match (b) {
                                     case Float(bf) => LispValue.Float(Float64(ai) + bf)
-                                    case _ => LispValue.Error(XispError(ErrorType.TypeError, "Bytecode: + expected number"))
+                                    case _ => LispValue.Error(XispError(ErrorType.TypeError, "+: expected a number"))
                                 }
                                 case Float(af) => match (b) {
                                     case Int(bi) => LispValue.Float(af + Float64(bi))
                                     case Float(bf) => LispValue.Float(af + bf)
-                                    case _ => LispValue.Error(XispError(ErrorType.TypeError, "Bytecode: + expected number"))
+                                    case _ => LispValue.Error(XispError(ErrorType.TypeError, "+: expected a number"))
                                 }
                                 case Str(s) => Str(s + b.toString())
-                                case _ => LispValue.Error(XispError(ErrorType.TypeError, "Bytecode: + expected number"))
+                                case _ => LispValue.Error(XispError(ErrorType.TypeError, "+: expected a number"))
                             }
                             this.push(result)
                         }
@@ -327,20 +343,27 @@ public class BytecodeVM <: VM {
                     if (this.sp >= 1) {
                         let b = this.pop()
                         let a = this.pop()
-                        if (let Int(ai) <- a && let Int(bi) <- b) {
+                        // 操作数是错误值（如上一步求值失败）→ 原样传播该错误。
+                        // 拿它当普通值参与运算会让 AST 报 UnboundVariable、
+                        // 字节码却报 TypeError（或比较直接得 false）——实测不一致。
+                        if (let Error(_) <- a) {
+                            return a
+                        } else if (let Error(_) <- b) {
+                            return b
+                        } else if (let Int(ai) <- a && let Int(bi) <- b) {
                             this.push(LispValue.Int(ai - bi))
                         } else {
                             let result = match (a) {
                                 case Int(ai) => match (b) {
                                     case Float(bf) => LispValue.Float(Float64(ai) - bf)
-                                    case _ => LispValue.Error(XispError(ErrorType.TypeError, "Bytecode: - expected number"))
+                                    case _ => LispValue.Error(XispError(ErrorType.TypeError, "-: expected a number"))
                                 }
                                 case Float(af) => match (b) {
                                     case Int(bi) => LispValue.Float(af - Float64(bi))
                                     case Float(bf) => LispValue.Float(af - bf)
-                                    case _ => LispValue.Error(XispError(ErrorType.TypeError, "Bytecode: - expected number"))
+                                    case _ => LispValue.Error(XispError(ErrorType.TypeError, "-: expected a number"))
                                 }
-                                case _ => LispValue.Error(XispError(ErrorType.TypeError, "Bytecode: - expected number"))
+                                case _ => LispValue.Error(XispError(ErrorType.TypeError, "-: expected a number"))
                             }
                             this.push(result)
                         }
@@ -352,20 +375,27 @@ public class BytecodeVM <: VM {
                     if (this.sp >= 1) {
                         let b = this.pop()
                         let a = this.pop()
-                        if (let Int(ai) <- a && let Int(bi) <- b) {
+                        // 操作数是错误值（如上一步求值失败）→ 原样传播该错误。
+                        // 拿它当普通值参与运算会让 AST 报 UnboundVariable、
+                        // 字节码却报 TypeError（或比较直接得 false）——实测不一致。
+                        if (let Error(_) <- a) {
+                            return a
+                        } else if (let Error(_) <- b) {
+                            return b
+                        } else if (let Int(ai) <- a && let Int(bi) <- b) {
                             this.push(LispValue.Int(ai * bi))
                         } else {
                             let result = match (a) {
                                 case Int(ai) => match (b) {
                                     case Float(bf) => LispValue.Float(Float64(ai) * bf)
-                                    case _ => LispValue.Error(XispError(ErrorType.TypeError, "Bytecode: * expected number"))
+                                    case _ => LispValue.Error(XispError(ErrorType.TypeError, "*: expected a number"))
                                 }
                                 case Float(af) => match (b) {
                                     case Int(bi) => LispValue.Float(af * Float64(bi))
                                     case Float(bf) => LispValue.Float(af * bf)
-                                    case _ => LispValue.Error(XispError(ErrorType.TypeError, "Bytecode: * expected number"))
+                                    case _ => LispValue.Error(XispError(ErrorType.TypeError, "*: expected a number"))
                                 }
-                                case _ => LispValue.Error(XispError(ErrorType.TypeError, "Bytecode: * expected number"))
+                                case _ => LispValue.Error(XispError(ErrorType.TypeError, "*: expected a number"))
                             }
                             this.push(result)
                         }
@@ -377,20 +407,27 @@ public class BytecodeVM <: VM {
                     if (this.sp >= 1) {
                         let b = this.pop()
                         let a = this.pop()
-                        if (let Int(ai) <- a && let Int(bi) <- b) {
+                        // 操作数是错误值（如上一步求值失败）→ 原样传播该错误。
+                        // 拿它当普通值参与运算会让 AST 报 UnboundVariable、
+                        // 字节码却报 TypeError（或比较直接得 false）——实测不一致。
+                        if (let Error(_) <- a) {
+                            return a
+                        } else if (let Error(_) <- b) {
+                            return b
+                        } else if (let Int(ai) <- a && let Int(bi) <- b) {
                             this.push(if (bi == 0) { Nil } else { LispValue.Float(Float64(ai) / Float64(bi)) })
                         } else {
                             let result = match (a) {
                                 case Int(ai) => match (b) {
                                     case Float(bf) => LispValue.Float(Float64(ai) / bf)
-                                    case _ => LispValue.Error(XispError(ErrorType.TypeError, "Bytecode: / expected number"))
+                                    case _ => LispValue.Error(XispError(ErrorType.TypeError, "/: expected a number"))
                                 }
                                 case Float(af) => match (b) {
                                     case Int(bi) => LispValue.Float(af / Float64(bi))
                                     case Float(bf) => LispValue.Float(af / bf)
-                                    case _ => LispValue.Error(XispError(ErrorType.TypeError, "Bytecode: / expected number"))
+                                    case _ => LispValue.Error(XispError(ErrorType.TypeError, "/: expected a number"))
                                 }
-                                case _ => LispValue.Error(XispError(ErrorType.TypeError, "Bytecode: / expected number"))
+                                case _ => LispValue.Error(XispError(ErrorType.TypeError, "/: expected a number"))
                             }
                             this.push(result)
                         }
@@ -402,7 +439,14 @@ public class BytecodeVM <: VM {
                     if (this.sp >= 1) {
                         let b = this.pop()
                         let a = this.pop()
-                        if (let Int(ai) <- a && let Int(bi) <- b) {
+                        // 操作数是错误值（如上一步求值失败）→ 原样传播该错误。
+                        // 拿它当普通值参与运算会让 AST 报 UnboundVariable、
+                        // 字节码却报 TypeError（或比较直接得 false）——实测不一致。
+                        if (let Error(_) <- a) {
+                            return a
+                        } else if (let Error(_) <- b) {
+                            return b
+                        } else if (let Int(ai) <- a && let Int(bi) <- b) {
                             this.push(LispValue.Boolean(ai < bi))
                         } else {
                             let result = match (a) {
@@ -428,7 +472,14 @@ public class BytecodeVM <: VM {
                     if (this.sp >= 1) {
                         let b = this.pop()
                         let a = this.pop()
-                        if (let Int(ai) <- a && let Int(bi) <- b) {
+                        // 操作数是错误值（如上一步求值失败）→ 原样传播该错误。
+                        // 拿它当普通值参与运算会让 AST 报 UnboundVariable、
+                        // 字节码却报 TypeError（或比较直接得 false）——实测不一致。
+                        if (let Error(_) <- a) {
+                            return a
+                        } else if (let Error(_) <- b) {
+                            return b
+                        } else if (let Int(ai) <- a && let Int(bi) <- b) {
                             this.push(LispValue.Boolean(ai > bi))
                         } else {
                             let result = match (a) {
@@ -454,7 +505,14 @@ public class BytecodeVM <: VM {
                     if (this.sp >= 1) {
                         let b = this.pop()
                         let a = this.pop()
-                        if (let Int(ai) <- a && let Int(bi) <- b) {
+                        // 操作数是错误值（如上一步求值失败）→ 原样传播该错误。
+                        // 拿它当普通值参与运算会让 AST 报 UnboundVariable、
+                        // 字节码却报 TypeError（或比较直接得 false）——实测不一致。
+                        if (let Error(_) <- a) {
+                            return a
+                        } else if (let Error(_) <- b) {
+                            return b
+                        } else if (let Int(ai) <- a && let Int(bi) <- b) {
                             this.push(LispValue.Boolean(ai == bi))
                         } else {
                             this.push(if (this.equalValue(a, b)) { Boolean(true) } else { Boolean(false) })
@@ -466,6 +524,10 @@ public class BytecodeVM <: VM {
 
                     if (this.sp >= 0) {
                         let v = this.pop()
+                        // 错误值参与 not 会静默得到 false（实测 AST 报错、字节码得 false）
+                        if (let Error(_) <- v) {
+                            return v
+                        }
                         let result = match (v) {
                             case Boolean(b) => LispValue.Boolean(!b)
                             case Nil => LispValue.Boolean(true)
@@ -487,6 +549,10 @@ public class BytecodeVM <: VM {
                     if (ip < currentFunc.code.size) {
                         let nameIdx = currentFunc.code[ip]; ip++
                         let value = this.pop()
+                        // 初值是错误值：不绑定、直接中止（AST 的 evalDefine 同样不绑定）
+                        if (let Error(_) <- value) {
+                            return value
+                        }
                         match (currentFunc.constants[nameIdx]) {
                             case Str(name) =>
                                 this.currentEnv.define(name, value)
@@ -523,6 +589,11 @@ public class BytecodeVM <: VM {
                         let target = currentFunc.code[ip]; ip++
                         if (this.sp >= 0) {
                             let v = this.pop()
+                            // 条件求值出错必须中止：错误值 isTruthy() 为真，不查就会走 then，
+                            // 于是 `(if 未定义变量 1 2)` 在字节码下静默返回 1（实测不一致）。
+                            if (let Error(_) <- v) {
+                                return v
+                            }
                             // 与 AST 的 isTruthy 语义一致：nil/false/0/0.0 为假
                             if (!v.isTruthy()) {
                                 ip = target
@@ -651,6 +722,10 @@ public class BytecodeVM <: VM {
                         let constIdx = currentFunc.code[ip]; ip++
                         let a = this.getReg(this.bp + localIdx)
                         let b = currentFunc.constants[constIdx]
+                        // 操作数是错误值 → 中止（同 OP_ADD 等栈式算子）
+                        if (let Error(_) <- a) {
+                            return a
+                        }
                         let result = match (binKind) {
                             case 0 => this.binNum(a, b, 0)
                             case 1 => this.binNum(a, b, 1)
@@ -674,6 +749,10 @@ public class BytecodeVM <: VM {
                         let target = currentFunc.code[ip]; ip++
                         let a = this.getReg(this.bp + localIdx)
                         let b = currentFunc.constants[constIdx]
+                        // 操作数是错误值 → 中止（否则比较恒为 false，条件被静默吞掉）
+                        if (let Error(_) <- a) {
+                            return a
+                        }
                         let cond = match (cmpKind) {
                             case 0 => this.compareLT(a, b)
                             case 1 => this.compareGT(a, b)
@@ -691,6 +770,10 @@ public class BytecodeVM <: VM {
                         let target = currentFunc.code[ip]; ip++
                         if (this.sp >= 0) {
                             let v = this.registers[this.sp]
+                            // 错误值 isTruthy() 为真 → 不查就会继续求值后续项，把错丢掉
+                            if (let Error(_) <- v) {
+                                return v
+                            }
                             if (!v.isTruthy()) {
                                 // and 假值语义：规范化为 Boolean(false)（与 AST NativeFunc 一致）
                                 this.registers[this.sp] = LispValue.Boolean(false)
@@ -706,6 +789,10 @@ public class BytecodeVM <: VM {
                         let target = currentFunc.code[ip]; ip++
                         if (this.sp >= 0) {
                             let v = this.registers[this.sp]
+                            // 错误值 isTruthy() 为真 → 会被当成"真"短路成该错误值
+                            if (let Error(_) <- v) {
+                                return v
+                            }
                             if (v.isTruthy()) {
                                 ip = target
                             }
@@ -732,12 +819,58 @@ public class BytecodeVM <: VM {
 
                     if (this.sp >= 0) {
                         let v = this.registers[this.sp]
+                        if (let Error(_) <- v) {
+                            return v
+                        }
                         if (!v.isTruthy()) {
                             this.registers[this.sp] = LispValue.Boolean(false)
                         }
                     }
                 
 
+                    case 63 =>
+
+                    // 函数值已求出、实参尚未求值：先把"函数值本身就有问题"查出来。
+                    //
+                    // AST 侧 `evalFunctionCallWithValue` 是先算函数值、出错立即返回，
+                    // 实参**根本不求值**；字节码若直接压实参再 CALL，实参里的副作用
+                    // （`(foo (set! x 2))`）就会多发生一次——实测 `(define x 1)
+                    // (foo (set! x 2)) x` 在 AST 得 1、字节码得 2。
+                    //
+                    // 栈顶两种形态：
+                    //  · 函数体内的调用 → 已求出的函数**值**（可能是错误值）；
+                    //  · 顶层调用 → 待解析的**名字**常量（帧槽解析发生在进帧时，
+                    //    这里的名字要在 CALL 里才解析，故在此提前查一次环境）。
+                    // 字面量字符串当头位置不会编译到这条路径（`compileList` 只认
+                    // Symbol），因此不存在把 `("abc" 1)` 误判成未定义函数的风险。
+                    if (this.sp >= 0) {
+                        let v = this.registers[this.sp]
+                        match (v) {
+                            // 函数体内的调用：帧槽里存的是**已解析的值**，
+                            // 名字未绑定在这里就是一个 Error 值
+                            case Error(err) =>
+                                match (err.kind) {
+                                    case UnboundVariable =>
+                                        let quotedName = err.message.replace("Undefined variable: ", "")
+                                        return LispValue.Error(XispError(ErrorType.UndefinedFunction,
+                                            "Undefined function: ${quotedName}"))
+                                    case _ => return v
+                                }
+                            case Str(name) =>
+                                match (this.currentEnv.lookup(name)) {
+                                    case Error(err) =>
+                                        match (err.kind) {
+                                            case UnboundVariable =>
+                                                return LispValue.Error(XispError(ErrorType.UndefinedFunction,
+                                                    "Undefined function: '${name}'"))
+                                            case _ => return LispValue.Error(err)
+                                        }
+                                    case _ => ()
+                                }
+                            case _ => ()
+                        }
+                    }
+                
                     case 61 =>
 
                     // 环境作用域开始：压栈 currentEnv，创建 child（闭包共享捕获的宿主）
@@ -949,6 +1082,10 @@ public class BytecodeVM <: VM {
                     if (ip < currentFunc.code.size) {
                         let idx = currentFunc.code[ip]; ip++
                         let val = this.pop()
+                        // 绑定初值出错：中止（AST 的 processBindings 同样不绑定）
+                        if (let Error(_) <- val) {
+                            return val
+                        }
                         let targetIdx = this.bp + idx
                         while (targetIdx >= this.registers.size) {
                             this.registers.add(Nil)
@@ -1216,8 +1353,12 @@ public class BytecodeVM <: VM {
                 } else {
                     LispValue.Error(XispError(ErrorType.RuntimeError, "Bytecode: invalid closure ID"))
                 }
+            // 函数值本身是错误（如未定义变量）→ 原样传播，不要包成 TypeError
+            // （AST 的 evalApply 在 elif 处就返回该错误）
+            case Error(_) => funcVal
             case other =>
-                LispValue.Error(XispError(ErrorType.RuntimeError, "Bytecode: apply expected function (got: ${other.toString()})"))
+                // 与 AST 的 evalApply 同类错误（TypeError），文案各自保留
+                LispValue.Error(XispError(ErrorType.TypeError, "apply: expected a callable value (got: ${other.toString()})"))
         }
     }
 
@@ -1263,6 +1404,34 @@ public class BytecodeVM <: VM {
         }
         this.sp -= argCount
 
+        // 头位置名字未绑定 → 先于实参报出。
+        // AST 侧 `evalFunctionCallWithValue` 先算函数值、再算实参，因此 `(a zzz)`
+        // 在 AST 下报 "Undefined function: 'a'"；VM 若先扫实参就会报 'zzz' ——
+        // 同一表达式两种错误，调用方无从判断。
+        if (let Str(name) <- funcVal) {
+            match (this.currentEnv.lookup(name)) {
+                case Error(err) =>
+                    match (err.kind) {
+                        case UnboundVariable =>
+                            return LispValue.Error(XispError(ErrorType.UndefinedFunction,
+                                "Undefined function: '${name}'"))
+                        case _ => return LispValue.Error(err)
+                    }
+                case _ => ()
+            }
+        }
+
+        // 实参求值出错时**短路**：AST 侧 `evalFunctionCallWithValue` 会先扫一遍实参，
+        // 遇到 Error 直接返回（不调用函数本体）。VM 此前不查，把 Error 值当普通实参
+        // 传进函数 —— 于是 `(println (+ 1 #t))` 在 AST 下报 TypeError、
+        // 在字节码下被 println 打印出来并返回 nil（实测两后端不一致）。
+        for (a in args) {
+            match (a) {
+                case Error(_) => return a
+                case _ => ()
+            }
+        }
+
         match (funcVal) {
             case Str(name) =>
                 let value = this.currentEnv.lookup(name)
@@ -1281,7 +1450,24 @@ public class BytecodeVM <: VM {
                         } else {
                             LispValue.Error(XispError(ErrorType.RuntimeError, "Bytecode: invalid closure ID"))
                         }
-                    case Error(_) => value
+                    // 头位置的名字未绑定：AST 侧 `evalFunctionCallWithValue` 会把它
+                    // 归一成 `UndefinedFunction`（"Undefined function: 'foo'"），
+                    // 而不是 `UnboundVariable`。两后端错误种类必须一致，否则
+                    // 同一个脚本换后端就换了一种错误，调用方无从判断。
+                    case External(ext) =>
+                        match (ext) {
+                            case c: LispExternalCallable => c.invoke(args)
+                            case _ =>
+                                LispValue.Error(XispError(ErrorType.TypeError,
+                                    "Attempt to call a non-callable external value (${ext.typeName})"))
+                        }
+                    case Error(err) =>
+                        match (err.kind) {
+                            case UnboundVariable =>
+                                LispValue.Error(XispError(ErrorType.UndefinedFunction,
+                                    "Undefined function: '${name}'"))
+                            case _ => value
+                        }
                     case _ =>
                         LispValue.Error(XispError(ErrorType.RuntimeError, "Bytecode: cannot call '${name}'"))
                 }
@@ -1296,6 +1482,29 @@ public class BytecodeVM <: VM {
                     this.callProcedure(compiledFunc.params, compiledFunc.body, closureEnv, args)
                 } else {
                     LispValue.Error(XispError(ErrorType.RuntimeError, "Bytecode: invalid closure ID"))
+                }
+            // 被调位置上的值本身是错误：说明这个名字未绑定。
+            // 它在**头位置**，AST 侧 `evalFunctionCallWithValue` 会归一成
+            // `UndefinedFunction`（"Undefined function: 'foo'"）。此处拿不到名字
+            // （帧槽里只存了错误值），故沿用错误里的变量名重建该表述，保证
+            // `(define (f) (nosuch 1)) (f)` 在两个后端报同一种错误。
+            case Error(err) =>
+                match (err.kind) {
+                    case UnboundVariable =>
+                        // 只取错误消息里的名字部分（`Undefined variable: 'foo'` → `'foo'`），
+                        // 拼成与 AST 同一句表述
+                        let quotedName = err.message.replace("Undefined variable: ", "")
+                        LispValue.Error(XispError(ErrorType.UndefinedFunction,
+                            "Undefined function: ${quotedName}"))
+                    case _ => funcVal
+                }
+            // 外部值：实现 LispExternalCallable 的可以被调用
+            case External(ext) =>
+                match (ext) {
+                    case c: LispExternalCallable => c.invoke(args)
+                    case _ =>
+                        LispValue.Error(XispError(ErrorType.TypeError,
+                            "Attempt to call a non-callable external value (${ext.typeName})"))
                 }
             case other =>
                 LispValue.Error(XispError(ErrorType.RuntimeError, "Bytecode: expected function (got: ${other.toString()})"))
@@ -1491,7 +1700,7 @@ public class BytecodeVM <: VM {
         }
         match (result) {
             case Some(v) => this.setReg(rd, v)
-            case None => this.setReg(rd, LispValue.Error(XispError(ErrorType.TypeError, "Bytecode: expected number")))
+            case None => this.setReg(rd, LispValue.Error(XispError(ErrorType.TypeError, "expected a number")))
         }
     }
 
@@ -1500,7 +1709,7 @@ public class BytecodeVM <: VM {
         match (a) {
             case LispValue.Int(ai) => this.setReg(rd, LispValue.Int(-ai))
             case LispValue.Float(af) => this.setReg(rd, LispValue.Float(-af))
-            case _ => this.setReg(rd, LispValue.Error(XispError(ErrorType.TypeError, "Bytecode: expected number")))
+            case _ => this.setReg(rd, LispValue.Error(XispError(ErrorType.TypeError, "expected a number")))
         }
     }
 
@@ -1526,7 +1735,7 @@ public class BytecodeVM <: VM {
                             case 2 => LispValue.Float(Float64(ai) * bf)
                             case _ => LispValue.Float(Float64(ai) / bf)
                         }
-                    case _ => LispValue.Error(XispError(ErrorType.TypeError, "Bytecode: expected number"))
+                    case _ => LispValue.Error(XispError(ErrorType.TypeError, "expected a number"))
                 }
             case LispValue.Float(af) =>
                 match (b) {
@@ -1544,9 +1753,9 @@ public class BytecodeVM <: VM {
                             case 2 => LispValue.Float(af * bf)
                             case _ => LispValue.Float(af / bf)
                         }
-                    case _ => LispValue.Error(XispError(ErrorType.TypeError, "Bytecode: expected number"))
+                    case _ => LispValue.Error(XispError(ErrorType.TypeError, "expected a number"))
                 }
-            case _ => LispValue.Error(XispError(ErrorType.TypeError, "Bytecode: expected number"))
+            case _ => LispValue.Error(XispError(ErrorType.TypeError, "expected a number"))
         }
     }
 
@@ -1613,8 +1822,19 @@ public class BytecodeVM <: VM {
             return af == bf
         }
         match (a) {
-            case LispValue.Int(ai) => match (b) { case LispValue.Int(bi) => ai == bi; case _ => false }
-            case LispValue.Float(af) => match (b) { case LispValue.Float(bf) => af == bf; case _ => false }
+            // 数值跨类型比较：AST 侧注册的 `=` 会把 Int 提升为 Float 再比
+            // （comparison.cj 的 `case (Int(a), Float(b))`），
+            // 这里若只认同类型，`(= 2 (/ 6 3))` 会 AST 得 true、BC 得 false —— 实测不兼容。
+            case LispValue.Int(ai) => match (b) {
+                case LispValue.Int(bi) => ai == bi
+                case LispValue.Float(bf) => Float64(ai) == bf
+                case _ => false
+            }
+            case LispValue.Float(af) => match (b) {
+                case LispValue.Float(bf) => af == bf
+                case LispValue.Int(bi) => af == Float64(bi)
+                case _ => false
+            }
             case Str(sa) => match (b) { case Str(sb) => sa == sb; case _ => false }
             case Boolean(ba) => match (b) { case Boolean(bb) => ba == bb; case _ => false }
             case Nil => match (b) { case Nil => true; case _ => false }

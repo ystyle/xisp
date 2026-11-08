@@ -40,6 +40,28 @@ extend BuiltinFunctions {
         }))
 
         // (symbol? x) - 是否为符号
+        // (external? x) - 是否为外部值（宿主/扩展模块提供的值）
+        env.define("external?", NativeFunc({ args =>
+            if (args.size != 1) {
+                return LispValue.Boolean(false)
+            }
+            match (args[0]) {
+                case External(_) => LispValue.Boolean(true)
+                case _ => LispValue.Boolean(false)
+            }
+        }))
+
+        // (external-type x) - 外部值的类型名；非外部值返回 nil
+        env.define("external-type", NativeFunc({ args =>
+            if (args.size != 1) {
+                return Nil
+            }
+            match (args[0]) {
+                case External(ext) => Str(ext.typeName)
+                case _ => Nil
+            }
+        }))
+
         env.define("symbol?", NativeFunc({ args =>
             if (args.size != 1) {
                 return LispValue.Boolean(false)
@@ -145,7 +167,17 @@ extend BuiltinFunctions {
                 case HashMap(_) => Str("hashmap")
                 case NativeFunc(_) => Str("procedure")
                 case Procedure(_, _, _) => Str("procedure")
+                case ProcedureFromParams(_, _, _) => Str("procedure")
+                // 编译闭包：与解释器过程同属"过程"，两个后端的 type-of 必须一致
+                case Closure(_, _) => Str("procedure")
                 case Macro(_, _, _) => Str("macro")
+                case MacroFromParams(_, _, _) => Str("macro")
+                // 外部值报告实现方声明的类型名（如 "ndarray"），而非笼统的 "external"
+                case External(ext) => Str(ext.typeName)
+                // 错误值也是 LispValue 的一员：宿主/桥接在检查返回值类型时会拿到它，
+                // 报 "unknown" 等于说"我不认识这个变体"，与实际不符。
+                // （脚本侧通常看不到：实参里出现错误值时调用会先短路传播。）
+                case Error(_) => Str("error")
                 case _ => Str("unknown")
             }
         }))

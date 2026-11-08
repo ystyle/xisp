@@ -73,11 +73,41 @@ public class ScriptLoader <: Loader {
                 "Cannot import module '${relativePath}' using relative import. Use (import moduleName) instead."))
         }
 
-        if (this.moduleLoader.loadFile(fullPath, this.evaluator.env)) {
+        // 在**独立包环境**里加载，再由 export 白名单无前缀导出到当前环境。
+        //
+        // 此前直接 loadFile 到当前环境：所有 `define` 原样进调用方作用域，
+        // 于是 `(export processData)` 里**没列出的** `internalHelper` 也能直接调用
+        // —— `export` 对文件导入形同虚设（与目录包导入、模块导入的行为不一致，
+        // 也与 docs-site/guide/05-modules.md 的「用 export 控制可见性」相矛盾）。
+        let packageEnv = this.evaluator.env.createChild()
+        if (this.moduleLoader.loadFile(fullPath, packageEnv)) {
+            this.bindFileSymbols(packageEnv)
             Nil
         } else {
             LispValue.Error(XispError(ErrorType.IOError,
                 "failed to load file '${relativePath}'"))
+        }
+    }
+
+    /**
+     * 把单文件导入的符号无前缀导出到当前环境。
+     *
+     * 判定与目录包一致：文件里声明了 `export` 就只导出那些；
+     * 一个都没声明则视为**整个文件都是公开的**（保持向后兼容，
+     * 也符合"单文件脚本"的直觉），仍跳过以下划线开头的内部名。
+     */
+    private func bindFileSymbols(packageEnv: Environment): Unit {
+        let exportedBindings = packageEnv.getExportedBindings()
+        if (exportedBindings.isEmpty()) {
+            for (key in packageEnv.getKeys()) {
+                if (!key.startsWith("_")) {
+                    this.evaluator.env.define(key, packageEnv.lookup(key))
+                }
+            }
+        } else {
+            for ((key, value) in exportedBindings) {
+                this.evaluator.env.define(key, value)
+            }
         }
     }
 

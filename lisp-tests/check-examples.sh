@@ -13,7 +13,7 @@
 set -u
 cd "$(dirname "$0")/.."
 
-BIN=./target/release/bin/ystyle::xisp.cli
+BIN=./target/release/bin/ystyle::xisp_cli
 MODPATH=$(pwd)/examples/05-modules/modules_demo
 
 if [ ! -x "$BIN" ]; then

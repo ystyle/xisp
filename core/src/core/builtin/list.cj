@@ -45,13 +45,64 @@ extend BuiltinFunctions {
         }))
 
         // (length list) - 列表长度
+        // (length x) - 列表长度；外部值若实现 LispExternalIndexable 则按其 length()
         env.define("length", NativeFunc({ args =>
             if (args.size != 1) {
                 return Nil
             }
             match (args[0]) {
                 case Cons(cell) => LispValue.Int(cell.length())
+                case Nil => LispValue.Int(0)
+                // 能力接口分派：外部值靠"是否实现 LispExternalIndexable"获得内建支持，
+                // 无需 core 认识任何具体外部类型（能力域设计 §7.2.1）
+                case External(ext) =>
+                    match (ext) {
+                        case idx: LispExternalIndexable => LispValue.Int(idx.length())
+                        // 与"非列表返回 0"的既有约定一致
+                        case _ => LispValue.Int(0)
+                    }
+                // 保持既有语义：**非列表返回 0**（文档 docs-site/api/list.md 明确如此）。
+                // 外部值若不实现 LispExternalIndexable，同样按此约定返回 0。
                 case _ => LispValue.Int(0)
+            }
+        }))
+
+        // (nth x index) - 按下标取元素
+        //
+        // 列表按链表走；外部值若实现 `LispExternalIndexable` 则走其 `at(index)`
+        // —— 这是 `LispExternalIndexable` 的**唯一消费点**，没有它"可下标"这条
+        // 能力就只有定义、没有分派。越界一律返回 nil（与 `first`/`second` 一致）。
+        env.define("nth", NativeFunc({ args =>
+            if (args.size != 2) {
+                return Nil
+            }
+            let index = match (args[1]) {
+                case LispValue.Int(i) => i
+                case _ => return Nil
+            }
+            if (index < 0) {
+                return Nil
+            }
+            match (args[0]) {
+                case External(ext) =>
+                    match (ext) {
+                        case idx: LispExternalIndexable => idx.at(index)
+                        case _ => Nil
+                    }
+                case _ =>
+                    var current = args[0]
+                    var i: Int64 = 0
+                    while (i < index) {
+                        match (current) {
+                            case Cons(cell) => current = cell.cdr
+                            case _ => return Nil
+                        }
+                        i++
+                    }
+                    match (current) {
+                        case Cons(cell) => cell.car
+                        case _ => Nil
+                    }
             }
         }))
 

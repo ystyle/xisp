@@ -65,7 +65,8 @@ public class JitCodegenInt {
                 case _ => 0
             }
             let supported = match (op) {
-                case 0 | 1 | 2 | 3 | 4 | 7 | 8 | 9 | 10 | 11 | 12 | 13 | 14 | 15 | 16 | 17 | 23 | 24 | 25 | 43 | 52 | 56 | 99 => true
+                // 63 = OP_CHECK_ERR：见 emit 分派处的说明（本形式下恒为空操作）
+                case 0 | 1 | 2 | 3 | 4 | 7 | 8 | 9 | 10 | 11 | 12 | 13 | 14 | 15 | 16 | 17 | 23 | 24 | 25 | 43 | 52 | 56 | 63 | 99 => true
                 case _ => false
             }
             if (!supported) { return false }
@@ -140,6 +141,10 @@ public class JitCodegenInt {
                 case 43 => this.emitReturn(ip)
                 case 52 => this.emitBinLC(this.argAt(code, ip), this.argAt(code, ip + 1), this.argAt(code, ip + 2), ip + 3)
                 case 56 => this.emitCmpLCJF(this.argAt(code, ip), this.argAt(code, ip + 1), this.argAt(code, ip + 2), this.argAt(code, ip + 3), ip + 4)
+                // OP_CHECK_ERR：本形式要求所有全局引用都是本函数自身（isEligible 的前提），
+                // 即每次调用的头位置必然是自身、一定已定义 → 该检查恒不成立，空操作。
+                // 不发射任何指令，但保留它在资格表里，避免整段函数因这条检查而失去 JIT。
+                case 63 => Some(ip)
                 case 99 => this.emitReturn(ip)
                 case _ => return None
             }

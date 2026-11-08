@@ -42,7 +42,7 @@ extend BuiltinFunctions {
                     match (arg) {
                         case LispValue.Int(i) => result = result + Float64(i)
                         case LispValue.Float(f) => result = result + f
-                        case _ => return Nil
+                        case other => return typeMismatch("+", other)
                     }
                 }
                 LispValue.Float(result)
@@ -52,7 +52,7 @@ extend BuiltinFunctions {
                 for (arg in args) {
                     match (arg) {
                         case LispValue.Int(i) => result = result + i
-                        case _ => return Nil
+                        case other => return typeMismatch("+", other)
                     }
                 }
                 LispValue.Int(result)
@@ -85,7 +85,7 @@ extend BuiltinFunctions {
                             match (args[i]) {
                                 case LispValue.Int(iv) => result = result - Float64(iv)
                                 case LispValue.Float(f) => result = result - f
-                                case _ => return Nil
+                                case other => return typeMismatch("-", other)
                             }
                         }
                         LispValue.Float(result)
@@ -95,7 +95,7 @@ extend BuiltinFunctions {
                         for (i in 1..args.size) {
                             match (args[i]) {
                                 case LispValue.Int(iv) => result = result - iv
-                                case _ => return Nil
+                                case other => return typeMismatch("-", other)
                             }
                         }
                         LispValue.Int(result)
@@ -106,11 +106,11 @@ extend BuiltinFunctions {
                         match (args[i]) {
                             case LispValue.Int(iv) => result = result - Float64(iv)
                             case LispValue.Float(f) => result = result - f
-                            case _ => return Nil
+                            case other => return typeMismatch("-", other)
                         }
                     }
                     LispValue.Float(result)
-                case _ => Nil
+                case other => typeMismatch("-", other)
             }
         }))
 
@@ -136,7 +136,7 @@ extend BuiltinFunctions {
                     match (arg) {
                         case LispValue.Int(i) => result = result * Float64(i)
                         case LispValue.Float(f) => result = result * f
-                        case _ => return Nil
+                        case other => return typeMismatch("*", other)
                     }
                 }
                 LispValue.Float(result)
@@ -146,7 +146,7 @@ extend BuiltinFunctions {
                 for (arg in args) {
                     match (arg) {
                         case LispValue.Int(i) => result = result * i
-                        case _ => return Nil
+                        case other => return typeMismatch("*", other)
                     }
                 }
                 LispValue.Int(result)
@@ -174,7 +174,7 @@ extend BuiltinFunctions {
                                     return Nil  // 除零错误
                                 }
                                 result = result / f
-                            case _ => return Nil
+                            case other => return typeMismatch("/", other)
                         }
                     }
                     LispValue.Float(result)
@@ -192,11 +192,11 @@ extend BuiltinFunctions {
                                     return Nil
                                 }
                                 result = result / f
-                            case _ => return Nil
+                            case other => return typeMismatch("/", other)
                         }
                     }
                     LispValue.Float(result)
-                case _ => Nil
+                case other => typeMismatch("/", other)
             }
         }))
     }
@@ -232,7 +232,7 @@ extend BuiltinFunctions {
                         return Nil
                     }
                     LispValue.Float(fmod(f1, f2))
-                case _ => Nil
+                case (a, b) => typeMismatch("mod", a)
             }
         }))
     }
@@ -269,7 +269,7 @@ extend BuiltinFunctions {
                 case LispValue.Float(f) =>
                     let multiplier = BuiltinFunctions.pow10Static(Float64(digitsVal))
                     LispValue.Float(round(f * multiplier) / multiplier)
-                case _ => Nil
+                case other => typeMismatch("round", other)
             }
         }))
     }
@@ -295,5 +295,17 @@ extend BuiltinFunctions {
             }
             result
         }
+    }
+
+    /**
+     * 统一的算术类型错误
+     *
+     * 此前这些位置 `return Nil` —— **静默吞掉类型错误**，而字节码后端会报
+     * `TypeError`。同一段脚本在两个后端下一个悄悄算错、一个明确报错，
+     * 属实测确认的不兼容。改为与后端一致的明确错误。
+     */
+    static func typeMismatch(op: String, value: LispValue): LispValue {
+        LispValue.Error(XispError(ErrorType.TypeError,
+            "${op}: expected a number (got: ${value.toString()})"))
     }
 }

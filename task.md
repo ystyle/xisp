@@ -15,6 +15,16 @@
 - ✅ M5: 工作区化拆分（阶段 1）
 - ✅ M6: 字节码后端拆分（阶段 2）
 - ✅ M14: 桥接反向调用与命名空间统一
+- ✅ M15: 设计文档拆分（工作区化 / 能力域 / 科学计算族）
+- ✅ M16: 符号分层实测 + 两级装配模型
+- ✅ M17: 分层目标澄清 —— 可替换
+- ✅ M18: 能力域文档按「可替换」重构
+- ✅ M19: R5RS 级符号分层重构（gensym / 编译前宏展开 / ①收敛 / 域装配 / 宏包）
+- ✅ M20: 兼容性修复 + 接缝 0e / 3 / 4
+- ✅ M21: 错误传播语义统一 + 三后端差分闸门
+- ✅ M22: 收尾审计（5 个「看起来在跑、实际没跑」的东西）
+- ✅ M23: 域装配 5 处缺陷订正 + 两档装配收敛
+- ✅ M24: 装配档位 XispLevel（Expr / Pure / Script）
 
 ---
 
@@ -757,3 +767,432 @@ Lisp 层要复刻 `map`/`for-each`，必须能从注册函数调用任意 Lisp �
 - [x] 内容完整性核对 33 项关键结论/数据/代码片段，无丢失
 
 **完成时间**: 2026-10-11
+
+---
+
+## M19: R5RS 级符号分层重构 ✅
+
+**目标**：让"除了最基本的，所有其它都可以不要，且同能力 core 带了也能被用户用宏自行替换"
+（即 **可替换**，对应"lisp 实现 lisp 所有"）。
+
+**独立工作树**：`../xisp-r5rs`（分支 `feat/r5rs-symbol-layering`），主工作树保持可用可发布。
+**不做**：不 bump 版本、不 publish（原"中间发布无意义"的判断）。
+
+### 完成情况
+
+| 步 | 内容 | 提交 | 验证 |
+|---|---|---|---|
+| 1 | **`gensym`** —— 非卫生宏的唯一符号来源 | `c70b15f` | 9 个用例；200 次无重复 |
+| 2 | **宏改为编译前展开** —— 消除运行时反复展开与语义偏差 | `054aa9a` | 含宏递归 **10767us → 971us**；展开次数不再随调用增长；AST/BC 8/8 一致 |
+| 3 | **①收敛** —— `and`/`or`/`condb`/`if-let`/`let*`/`when-let*` 降为宏 | `978521c` `93e4aa1` | ① 由 33 条 → **10 条**；`and`/`or` 的 4 处 AST/BC 分歧归零 |
+| 4 | **接缝 0a/0b** —— 函数值调用入口 + 特殊形式让位 | `23452fd` | 7 个符号可被顶替且双后端一致；顺带修 `for-each` 静默失败 |
+| 5 | **域抽象** —— `LispCapability` + preset + `withDomains` | `c094677` | 9 个 core 域；`presetPure` 按属性推导；`replace` 独占装配 |
+| 6 | **宏包即域** —— 16 个内建宏合并为单一 Lisp 源码 | `c979390` | `macros.cj` 286 → 150 行；`swap` 卫生性修复 |
+
+### 关键实测（都推翻了先前判断）
+
+1. **"降级为宏会毁掉字节码"是错的**：那是修复**前**的现象（宏在运行时展开导致整树回退 AST）。
+   编译前展开后，宏版 `let` 字节码 1043us vs 内建 1011us（几乎无差），AST 模式反而更快
+   （24671 vs 36978us）。
+2. **宏收语法不收值**：用"辅助宏"做值层变换会栈溢出 —— `(%helper x)` 传的是符号 `x` 本身。
+   需值层运算时用普通函数（`reverse`/`car`/`map`）。
+3. **点对参数深一层**：`(. cs)` 收到的是子句列表，判定子句头要 `(car (car cs))`。
+4. **让位必须先于编译**：否则用户 `define apply` 后 AST 走用户实现而 BC 仍按 core 编译。
+5. **`for-each` 旧实现静默失败**：只认 `NativeFunc` 回调，传 `lambda` 什么都不做也不报错。
+6. **域装配的边界**：即便独占装配，①语言原语与②求值器拦截**仍然可用**
+   —— 它们不在环境里。域装配只覆盖③注册函数。
+
+### 最终符号分层
+
+| 层 | 成员 | 可替换 |
+|---|---|---|
+| **① 核心原语**（6） | `quote` `lambda` `if` `set!` `define` `defmacro` | ❌（这就是"最基本的"） |
+| **① 编译可见形式**（4） | `let`（含解构） `match` `import` `export` | ❌ |
+| **② 求值器拦截**（7） | `map` `filter` `reduce` `apply` `eval` `->` `for-each` | ✅ 让位机制 |
+| **③ 注册函数** | `+ - * / < > =` `cons` `car` … | ✅ |
+| **④ Lisp 层宏**（16） | `when` `unless` `condb` `if-let` `let*` `when-let*` `and` `or` `incf` `decf` `swap` `negate` `push` `pop` `do` `defun` | ✅ |
+
+### 遗留（均已收口，见 M20 / M21）
+
+- ~~**0e**：②类一等值化~~ → M20 完成（双轨）。
+- ~~**接缝 3**（`External` 变体）与 **接缝 4**（`funcChecker` 覆盖①②类）~~ → M20 完成。
+- 合并回 master：破坏性变更，需 `cjpm ws bump` 推进版本（**待决定**，当前按要求不合）。
+
+**验证**（当时）：`cjpm build` 通过；`cjpm test` 481/481；`cjpm ws check` 通过。
+
+**完成时间**: 2026-10-11（阶段完成；收尾见 M20/M21）
+
+---
+
+## M20: 兼容性修复 + 接缝 0e / 3 / 4（M19 收尾）✅
+
+用户指定的三件（0e 一等值化、接缝 3 `External` 变体、接缝 4 `funcChecker` 覆盖），
+外加回答"字节码兼容做好了吗"时新增的兼容性工作。
+
+### 1. 字节码兼容性：新增差分测试 + 修 7 处真不兼容
+
+**先回答"做好了吗"**：此前**没有任何测试验证两个后端语义一致**，只是被假设。
+新增 `BackendDiffTest`（91 个 `.lisp` 语料逐表达式比对），一上线暴露 **726 处差异**。
+现 32 个可比对文件**全部一致**（其余跳过原因见测试注释）。
+
+| # | 问题 | 性质 |
+|---|---|---|
+| 1 | `println` 吞掉实参错误（AST 短路、VM 不查） | **静默算错** |
+| 2 | 关键字别名（`setq`/`progn`）BC 下失效 | **静默不生效** |
+| 3 | `+ - * / mod round` 类型错误静默返 `nil` | 静默 |
+| 4 | `(= 2 2.0)` AST true / BC false | 语义分歧 |
+| 5 | 编译闭包不被认作过程（`procedure?`/`type-of`） | 语义分歧 |
+| 6 | 裸关键字符号 `:ok` BC 下未绑定 | 语义分歧 |
+| 7 | `(match 1 (1 "one") …)` 字面量模式被误判为列表模式 | 语义分歧 |
+
+另修语料自身 bug：`combination_functions_test.lisp` 缺右括号。
+
+### 2. 接缝 4：`funcChecker` 覆盖②类
+
+`withSandbox()` 的 `blockFunctions(["eval","apply"])` 此前**形同虚设**（实测拦不住）；
+现在②类（`map`/`filter`/`reduce`/`apply`/`eval`/`->`/`for-each`）均可拦，
+①语言原语刻意不拦（语法结构，拦掉语言不可用）。
+
+### 3. 接缝 0e：②类一等值化
+
+三条实测约束决定不能简单改成普通函数：纯 Lisp 版 `map` **500 元素爆栈**、
+`apply`/`eval` 纯 Lisp 无法表达、求值器有专门迭代实现。
+故用**双轨**：调用走快速路径，值位置取另注册的等价 `NativeFunc`。
+
+### 4. 接缝 3：`External` 变体 + 协议族
+
+`LispValue.External(LispExternal)` + 五个协议接口；`type-of` 报告实现方 typeName；
+`length` 改为能力接口分派；`external?`/`external-type`。
+破坏面比预估小得多（编译器只指出 2 处，其余有 `case _` 兜底）。
+端到端用假扩展 `CounterBox` 验证，含双后端一致。
+
+**验证**：`cjpm build` 通过；`cjpm test` **501/501** 通过。
+
+**完成时间**: 2026-10-11
+
+---
+
+## M21: 错误传播语义统一 + 三后端差分闸门 ✅
+
+M20 的差分测试只覆盖 AST ↔ 字节码两模式、且**逐表达式**求值（不带文件上下文）。
+本轮把它扩成**三模式**（含 JIT）、补上**逐文件**层，一并暴露并修掉了一批
+"错误被当成正常值"的缺陷。
+
+### 1. 根本问题：`LispValue.Error` 是值，不是异常
+
+错误"要不要中止"完全由各处分发代码自己决定。历史实现AST 与字节码各走一半：
+
+| 写法 | AST（旧） | 字节码（旧） |
+|---|---|---|
+| `(define (f) (assert 假) 42) (f)` | `42` —— **assert 形同虚设** | `RuntimeError` |
+| `(begin (error "b") 42)` | `42` | `RuntimeError` |
+| `(let ((a (error "b"))) 42)` | `42` | `RuntimeError` |
+| `(if 未定义变量 1 2)` | `[UnboundVariable]` | `1`（错误当真值） |
+| `(+ 1 未定义变量)` | `[UnboundVariable]` | `[TypeError]` |
+| `(< 1 未定义变量)` / `(not 未定义变量)` | `[UnboundVariable]` | `false` |
+| `(match 未定义变量 … (else "other"))` | `"other"` | `[UnboundVariable]` |
+| `(foo 1)`（foo 未绑定） | `[UndefinedFunction]` | `[UnboundVariable]` |
+| `(apply 42 '(1 2))` | `nil` 静默 | `RuntimeError` |
+
+最有用户价值的是第一行：`assert` 是**给用户做参数校验的 API**，在 AST 下校验失败后
+函数继续算完并返回正常结果——保护作用为零。
+
+### 2. 统一语义：错误一旦产生就中止
+
+- AST：`evalBegin` 逐步检查、遇错即返；`define` / `set!` / `let` 的绑定初值出错时
+  **不建立绑定**直接传播；`match` 的被匹配表达式出错即中止；`apply` 同。
+- VM：`OP_POP` / `OP_JUMP_IF_FALSE` / `OP_AND_JF` / `OP_OR_JF` / `OP_NORM_FALSE` /
+  `OP_STORE_GLOBAL` / `OP_STORE_LOCAL` / `OP_BIN_LC` / `OP_CMP_LC_JF` 与七个栈式
+  二元算子（`+ - * / < > =`）、`OP_NOT` 全部加错误中止；`apply` 非可调用值统一成
+  `TypeError`。
+- 顶层**逐表达式**执行仍继续（`evalMultiple` 的行为不变）：中止的是出错的那条表达式。
+
+### 3. 顺带查出 3 个被静默吞错掩盖的真缺陷
+
+| # | 缺陷 | 为何一直没暴露 |
+|---|---|---|
+| 1 | **点对绑定只推进一个元素**，值表达式被当成下一个绑定的模式再处理 (`(let ((x . y) '(1 2 3)) x)` 报类型错误) | 错误被 begin 吞掉 |
+| 2 | **函数体内 `define` 一律发 `STORE_GLOBAL`**，而符号引用走帧槽（进帧时解析，变量尚未定义）→ `(define (f) (define r 5) r)` 字节码下 `UnboundVariable` | 单测没有"函数内 define"用例 |
+| 3 | `(apply 非函数 …)` 静默返回 `nil` | 其安全属性被"返回 nil 也算安全"误当成正确行为（`pure_env_test` 就 pin 了这个错误预期） |
+
+### 4. 三后端差分闸门（`BackendDiffTest`）
+
+- **逐文件**层：走 `evalFile`，因此相对导入、模块搜索路径、输出副作用序列都在覆盖内。
+- **逐表达式**层：把源码切成顶层表达式逐步比对，差异能定位到"第 N 步"。
+- 归一化：错误只比**种类**（文案由不同代码路径产出），并剥掉调用栈
+  （AST 有、字节码没有——诊断信息完整度差异，不是语义差异）。
+- 结果：**63 个文件逐文件一致 / 39 个文件逐步一致**，跳过 28 个（perf 基准、
+  REPL 演示、`module.lisp` 元数据清单——都是语料自身性质，不是覆盖缺口）。
+
+### 5. 接缝 3 的协议族从"只有定义"变成"真有分派"
+
+`docs-site` 同步时发现五个能力接口里四个只是定义、无人调用。本轮接通：
+
+| 接口 | 消费点 |
+|---|---|
+| `LispExternalEquatable` | `=` / `!=` |
+| `LispExternalComparable` | `<` `>` `<=` `>=`（未实现时恒 false，不能当"相等"） |
+| `LispExternalIndexable` | `length` + 新增的 `nth` |
+| `LispExternalCallable` | 调用形式 `((ext) args…)`（AST 与 VM 两侧） |
+
+### 6. 其它
+
+- `ErrorType` 新增 `name()`：此前只有 `XispError.toString()` 里有份内联 match，
+  宿主按种类分发时无处可取；`toString` 改为复用它，避免两份口径漂移。
+- 新增 `nth`（列表 + 外部值）；`length` 语义**保持**"非列表返回 0"（有意设计）。
+
+### 7. 后续追加修复（同一轮）
+
+补 `OP_CHECK_ERR` 让字节码在**实参求值前**先查函数值：AST 是「先算函数值、
+出错立即返回」，实参根本不求值；字节码原先把实参里的副作用也执行了
+（`(define x 1) (foo (set! x 2)) x` → AST 1 / 字节码 2）。JIT 两侧把该指令
+视为空操作（v1/R 形式的资格判据本就要求全局引用均为自身，检查恒不成立），
+资格表与 emit 分派同步更新，否则整段函数会失去 JIT。
+
+同时修正差分测试的输出捕获：`setOutputFn` 只接管解释器自身日志，Lisp 的
+`println` 是环境里的 `NativeFunc`、直接写 stdout —— 改为覆盖环境绑定后
+文件层才真正比对到输出序列（此前"63 个文件全一致"里输出根本没参与比对）。
+
+全量语料三后端**归一化后零语义差异**。
+
+**验证**：`cjpm build` 通过；`cjpm test` **535/535** 通过；`bash lisp-tests/check-examples.sh`
+22/22；`cjpm ws check` 通过。
+
+**完成时间**: 2026-11-06（在 `feat/r5rs-symbol-layering` 分支，未合并 master）
+
+---
+
+## M22: 收尾审计 —— 5 个「看起来在跑、实际没跑」的东西 ✅
+
+合入前的完整性审计。逐项都是"存在且看似正确，实际未生效"的同一类问题。
+
+### 1. `lisp-tests/perf/run.sh` 二进制路径又写的是旧包名
+
+`BIN=./target/release/bin/ystyle::xisp.cli`（工作区化前的名字），文件不存在 →
+每次调用都是瞬时失败 → 整张表输出 **0~1 ms**。`set -u` 挡不住（不是未定义变量）。
+**与 `check-examples.sh` 是同一个 bug 的第二次出现**：改包名时漏了一个脚本。
+修法：路径改正 + **加二进制存在性闸门**（`exit 2`）。修好后真实数字
+（01-fib-direct）：AST 21779ms / BC 3785ms / JIT 40ms。
+
+### 2. 相对文件导入不尊重 `export`
+
+`(import "./utils.lisp")` 把被导入文件的**所有** `define` 灌进调用方环境，
+于是 `(export processData)` 里没列出的 `internalHelper` 照样能调用。
+更微妙的是根因：`evalExport` 只往 `currentModule` 记，而相对导入路径**不设**
+`currentModule`（它只对模块导入有意义），于是 `getExportedBindings()` 恒为空，
+加载方退回"全都导出"分支。
+修法：`evalExport` 同时记进 `env.exportedSymbols`；`loadRelativeFile` 改为在
+独立 child env 加载后按白名单绑出（与目录包导入、模块导入一致）。
+**兼容保留**：文件里一个 `export` 都没写时仍视为全公开（老脚本不受影响）。
+新增 2 条用例（`testRelativeFileImportRespectsExport` / `...WithoutExportStillWorks`）。
+
+### 3. 5 个语料用了语言不存在的 `try/catch`
+
+`grep -rn '"try"' core/ xisp_bc/` 全仓零实现。于是那 5 个文件里
+`(try … ) catch (e) …` 展开成 4 条错误，而 `"✓ 正确：…"` 是**无条件打印**的——
+**无论被测行为对不对都会打勾**。这些是死测试代码。
+修法：改成不捕获、直接执行，靠 stderr 里的错误种类作为证据
+（`check-examples.sh` 收 stderr；`xisp_tests` 断言错误种类）。
+
+### 4. 差分测试跳过 perf 的理由写错了
+
+注释说"输出含耗时，本身不稳定"。实测 15 个 perf 语料**两两重跑哈希一致**，
+脚本内根本不打印时间（耗时靠外部 `time`）。真实理由只是**太慢**
+（01-fib-direct 单次 AST 15~20 秒）。已按事实改写注释，并把 `benchmark.lisp`
+纳入差分（它跑 0.9 秒、输出确定）。
+
+### 5. 文档状态与事实脱节
+
+- 能力域设计文档状态写"**未实施**"，实际全部完成。
+- `AGENTS.md` 写 `cli` "不发布"，而 `workspace.toml` 明确"cli 也可分发"、
+  中心仓**已有** `ystyle::xisp_cli 0.5.0`。
+- `docs/design.md` 7 处 `Number(...)` 是早已删除的变体。
+- `first_class_values.cj` 两处注释指向不存在的 `first_class_owner.cj`。
+
+### 6. 结果
+
+`cjpm test` **537/537**、`check-examples.sh` 22/22、三后端差分
+**64 个文件逐文件一致 / 40 个文件逐步一致**、`cjpm ws check` 通过。
+
+**完成时间**: 2026-11-06（在 `feat/r5rs-symbol-layering` 分支，未合并 master）
+
+---
+
+## M23: 域装配 5 处缺陷 + 两档装配收敛 ✅
+
+对着 `coreDomains()` 与 `registerAll` **逐符号比对**发现的。这些缺陷全都只在
+`replace: true`（"只留所选域"，即"可裁剪"的唯一路径）下暴露 —— 默认追加装配会把它们掩盖。
+
+| # | 缺陷 | 后果 |
+|---|---|---|
+| 1 | `domainPrint` 不在 `coreDomains()` | `presetFull` 独占装配下 `println` / `print` / `display` / `newline` / `princ` 全缺 |
+| 2 | `registerStringOps` 与 `registerOutput` 同挤在 `hostPolicy` 的 `print` 域 | `presetPure` 连 `str` / `string-length` 都没有（`registerPure` 一直有） |
+| 3 | `registerModernAliases` **不属任何域** | 16 个别名全缺（`first` / `rest` / `second` / `setq` / `progn` / `string-append`…），而 `domainList.symbols` 却声明了 `first` / `rest` |
+| 4 | `macros.core` 标 `escapable: true` | 纯环境里 `(when #t 1)` 都不可用；宏是代码变换器、不提供逃逸手段，应为 `false` |
+| 5 | `domainArithmetic.symbols` 声明了 `abs` | `abs` 从未实现（全仓无 `env.define("abs")`）——域声明是对外契约，多声明等于谎报 |
+
+### 修法
+
+- 拆 `domainString()`（纯）/ `domainPrint()`（hostPolicy）；新增 `domainAliases()`
+  （`after: ["base","list","string"]`，把"别名最后注册"的隐式约束显式化 = C17）；
+- `macros.core` 改 `escapable: false`，`after` 补 `symbols`（`swap`/`or` 展开用 `gensym`）；
+- `domainArithmetic.symbols` 移除 `abs`、补 `round`；
+- **`registerAll` / `registerPure` 改为 `installDomains(env, presetFull()/presetPure())` 的委托**，
+  消除两份平行清单（C9 收口）。
+
+### 新增 4 条"反向钉住"用例（`capability_domain_test.cj`）
+
+| 用例 | 钉住什么 |
+|---|---|
+| `testPresetFullCoversRegisterAll` | 独占 `presetFull` 后，`registerAll` 的每个符号都必须存在 |
+| `testPresetPureCoversRegisterPure` | 同上针对 pure；且宏包可用 |
+| `testDeclaredSymbolsActuallyInstalled` | 每个域 `symbols` 声明都必须真的装上（防声明撒谎） |
+| `testAliasesAvailableUnderExclusiveAssembly` | 12 条别名在两种独占装配下逐个可用 |
+
+另纠正一处错误断言：原先断言 `presetPure` **排除** `macros.core`（注释称"保守判定"），
+实际是语义错误。
+
+### 接缝 5 同轮收口
+
+外部模块的**中断义务**契约写进 `core/README.md`：`CapabilityContext.isInterrupted` 的
+调用时机（元素数相关循环必须周期查）、中止形式（错误值 + `INTERRUPTED_MESSAGE`，
+不是抛异常）、粒度建议，以及"不查中断宿主就杀不掉"的后果。**§8.1 的 12 条接缝至此全部完成。**
+
+### §9 同轮收口的四条 + 一条不适用
+
+| 项 | 结论 |
+|---|---|
+| **C9** `registerPure` 归宿 | 保留函数签名、内部改 `installDomains(env, presetPure())` 委托；调用方无需改动 |
+| **C12** PRESET_PURE 推导 | `SimpleCapability.escapable!` 默认确为 `true`（`capability.cj:127`），新增域默认落在 pure 之外；同时发现推导把 3 个纯域误判（见上表 #2/#4） |
+| **C15** `evalSource` 沙箱影响 | 属**宿主安装期**，不经过脚本侧权限检查；用例 `testEvalSourceInstallSurvivesSandbox` 钉住"沙箱下 `(eval …)` 被拦、`when`/`unless`/`incf` 正常" |
+| **C17** 域 `after` 完整性 | 显式化：`domainAliases()` + `macros.core` 补 `symbols` 依赖 |
+| **C7** stdx 环境变量 | **不适用**——全工作区无 stdx 依赖（核实 7 个 `cjpm.toml`） |
+
+### C6 / C8 也落了（原为"建议项"）
+
+**C6 —— `LispValue` 新增变体的编译期闸门**：不改 lint（静态判定"哪些 `match` 作用在
+`LispValue` 上"不可靠），改用**编译期强制**：`xisp_tests/src/lispvalue_matrix_test.cj`
+的 `variantTag` 对 16 个变体**穷尽匹配、无 `case _`**。将来加变体 → 该文件编译失败 →
+作者必须先登记新变体并回答横切语义，才有机会去核对那些 `case _` 兜底处。
+
+它**上线即查出**一个真缺陷：`type-of` 对 `Error` 变体返回 `"unknown"`（已修，报 `"error"`）。
+另附三条横切契约：显示非空、`cloneValue()` 保形、`type-of` 不得为 `"unknown"`；
+以及真值矩阵（只有 `nil`/`false`/`0`/`0.0` 为假，`External` 恒真）。
+
+**C8 —— 成员配置闸门**：新增 `scripts/check-members.sh` 并接进 CI（`Member config gate`）。
+只查 `cjpm ws check` **管不到**的部分：
+
+- `version` 与 `workspace.toml` 一致、各成员 `cjc-version` 一致；
+- 库成员（`static`）**禁用 `[replace]`**（工作区硬规则：只对本仓生效，下游照样冲突）；
+- 平台相关配置（`bin-dependencies` / `standard-library` / `link-option`）必须在
+  `NATIVE_ALLOWED` 白名单内（当前为空：xisp 零原生依赖）；
+- 发布成员：`include` 显式且**锚定**（0.4.0 就栽在未锚定/漏配，制品把整个 docs-site 打进去）、
+  `license`/`authors`/`repository`/`description` 齐全、目录内有 `README.md`。
+
+已用两处**故意破坏**验证确实会拦（把 `include` 改成未锚定 → exit 1；给 `core` 加 `[replace]` → exit 1）。
+
+### C1 域边界对齐（2026-11-08）
+
+**结论：C1 之前不是"待宿主诉求"，而是根本还没开始。** 域边界与注册器边界不一致，
+导致"声明 ≠ 安装"，粒度无从谈起。
+
+实测（只装单个域，不是 `presetFull`）：
+
+```
+只装 arithmetic 域： (sum '(1 2)) => UndefinedFunction   ← 声明里有 sum
+只装 list 域：       (sum '(1 2)) => 3                   ← sum 实际挂这里
+```
+
+| # | 错位 | 修法 |
+|---|---|---|
+| 1 | `sum`/`product`/`max`/`min` 声明在 arithmetic，随 `registerHigherOrder` 挂在 list | 拆出 `registerAggregates`，归 arithmetic |
+| 2 | `reverse`/`range` 与聚合混在 `registerHigherOrder` | 拆出 `registerListExtras`，归 list |
+| 3 | `not`/`eq?` 与 14 个类型谓词同挤 logic | 拆成 `logic` + 新域 `predicates` |
+| 4 | `first`/`rest` 声明在 list 域，实际由 aliases 域注册 | 从 list 声明移除 |
+| 5 | `hashmap?` 由 `registerHashMap` 注册却不属任何域声明 | 归 hashmap 域；同时补齐该域漏声明的 9 个 Redis 别名 |
+
+域数 **12 → 13**。护栏：`testEachDomainDeclaresTruthfully` —— **每个域单独安装
+（连同 `after` 依赖的传递闭包）后，其 `symbols` 必须全部可用**。它上来就抓出第 5 条；
+此前只测"全装 `presetFull`"，A 域声明、B 域注册的错位在里面照样通过。
+
+C1 现在能回答的部分：
+
+- 粒度**只作用于③类注册函数**。①原语与②求值器拦截（`map`/`filter`/`reduce`/`apply`/
+  `eval`/`->`/`for-each`）**不属任何域**，域装配动不了 → 原始例子"不要高阶函数"**做不到**，
+  根因在②类（§5.3 已记录的边界），不是粒度。
+- 能做的现在成立了：只装 `arithmetic` 确实没有 `sum/max`，只装 `list` 确实没有聚合，
+  只装 `logic` 确实没有谓词。
+- 真实诉求现状：下游 `atelier`（`ptc/runtime.cj:88`）与 `cordis_xisp`（`runtime.cj:184`）
+  都只用 `registerPure(env, output:)` 一档，**没有宿主在挑域**。所以"要不要更细"仍无驱动；
+  但两档已等价，将来换 `withPreset(presetPure()` 不会变行为。
+
+### 范围内仍未做（均需外部输入）
+
+- **C1 的更细拆分 / C2 / C10**：是否把 `arithmetic` 再拆 `math`、`predicates` 按族拆
+  （需真实诉求，多一个域宿主就多记一个名字）；域装配与 `ExecutionBackend` 接缝合并
+  "成熟后再说"；网络域待调研。
+- **C3 / C5**：`External` 专用变体归属、符号命名策略 —— 属下游 sci 族决策，不阻塞本次重构。
+
+**验证**：`cjpm build` 通过；`cjpm test` **547/547**；`check-examples.sh` 22/22；`scripts/check-members.sh` 通过；
+三后端差分 64 文件逐文件一致 + 40 文件逐步一致；`cjpm ws check` 通过。
+
+**完成时间**: 2026-11-08（在 `feat/r5rs-symbol-layering` 分支，未合并 master）
+
+---
+
+## M24: 装配档位 `XispLevel` ✅
+
+宿主不想逐个挑 13 个域，于是再上一层：**命名档位**。
+
+```cangjie
+public enum XispLevel { | Expr | Pure | Script }
+public func withLevel(level: XispLevel): InterpreterOption
+```
+
+| 档位 | 域集合 | 说明 |
+|---|---|---|
+| `Expr` | `exprDomains()` = `presetPure` − `macros.core` − `symbols` | 纯计算：**无宏、无 `gensym`、无输出**，只要"算出一个值" |
+| `Pure` | `presetPure()` | `Expr` + ④层宏包 + `gensym`；仍无输出 |
+| `Script` | `presetFull()` + `std.io`/`std.fs`/`std.collection` | 脚本 / CLI 全量 |
+
+### 三条不变量（均有用例）
+
+1. **严格包含** `Expr ⊂ Pure ⊂ Script` —— 实测符号数 **92 / 109 / 114**；
+2. **独占装配**：先 `clearEnvironmentBindings()` + `markDomainsExclusive()`，
+   结果与"解释器默认装了什么"无关；之后再 `withDomains(...)` 只追加；
+3. **与策略正交**：档位管"装哪些能力"，`withSandbox`/`withTimeout`/`withMaxStackDepth`
+   管"允许做什么"，可任意叠加。
+
+档位不维护第四套清单：`Expr` 由 `presetPure` 推导，`Pure` = `presetPure`，
+`Script` = `presetFull` + 桥接。新增域只需判断属性，档位自动跟上。
+
+### 顺带修掉 `clearEnvironmentBindings()` 的两个后遗症
+
+都是"换环境后没把**持有环境引用的组件**一起换掉"：
+
+| # | 后遗症 | 现象 | 修法 |
+|---|---|---|---|
+| 1 | 不重建 ②类一等值 | `withDomains(…, replace: true)` 后 `(procedure? map)` → `UnboundVariable`，而 `(map f lst)` 照样能跑（快速路径）→ 看着"还能用"，实际不能作值传递 | 重置 `firstClassValuesInstalled` 并按开关立即重建 |
+| 2 | 桥接仍指向旧环境 | `withLevel(Script)` 后 `cangjie::exists?` 不存在，默认构造却有 | 新增 `BridgeManager.retarget(env)`，清空时同步调用 |
+
+`reset()` 因为重建了整个 `BridgeManager` 没踩到第 2 条；`clearEnvironmentBindings()`
+没重建才暴露。
+
+### 文档
+
+- 用户文档 `docs-site/integration/options.md`：新增「装配档位（宿主首选）」与
+  **「能力域装配」**两节（后者此前**完全没有**——13 个域、两个预置、自定义域、
+  `CapabilityContext`、中断义务、以及"域装配动不了①②类"的边界都是首次成文）；
+  速查表补 `withLevel` / `withDomains` / `withPreset` / `presetFull` / `presetPure` /
+  `withNoFirstClassValues`。
+- 设计文档：新增 §4.5.1（档位三条不变量）与 §12.6（档位落地 + 两个后遗症）。
+
+### 用例
+
+`xisp_tests/src/level_test.cj` 6 条：档位内容 / 严格包含 / 独占装配 / 与沙箱叠加 /
+`replace` 后一等值仍在 / `withNoFirstClassValues` 仍生效。
+
+**验证**：`cjpm build` 通过；`cjpm test` **554/554**；`check-examples.sh` 22/22；
+`scripts/check-members.sh` 通过。
+
+**完成时间**: 2026-11-08（分支 `feat/r5rs-symbol-layering`，未合 master）

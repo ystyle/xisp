@@ -161,7 +161,157 @@ public func withStdLib(): InterpreterOption {
     }
 }
 
+/**
+ * 关闭②类符号的一等值（接缝 0e）
+ *
+ * 默认开启：`map` / `filter` / `reduce` / `apply` / `eval` / `->` / `for-each`
+ * 既可被调用（走求值器快速路径），也可作为**值**传递（`(procedure? map)` 为真）。
+ * 关闭后它们只在调用位置可用，环境里没有绑定。
+ */
+public func withNoFirstClassValues(): InterpreterOption {
+    { interpreter => interpreter.setFirstClassValues(false) }
+}
+
+// ==================== 能力域装配 ====================
+
+/**
+ * 安装一组能力域（能力域设计 §4）
+ *
+ * 组合的语义是**并集**：按 `after` 约束排序后逐个安装。宿主要么用预置组合
+ * （`withPreset(PRESET_FULL)`），要么自己拼：
+ *
+ * ```cangjie
+ * LispInterpreter([
+ *     withDomains([BuiltinFunctions.domainArithmetic(), BuiltinFunctions.domainList()])
+ * ])
+ * ```
+ *
+ * 也可用自定义域顶替 core 的同名域（域只是"注册集合"，后装者覆盖先装者）。
+ */
+public func withDomains(domains: Array<LispCapability>): InterpreterOption {
+    withDomains(domains, replace: false)
+}
+
+/**
+ * 安装一组能力域，并可指定是否**独占**。
+ *
+ * `replace = true` 时先清空环境（含 `LispInterpreter()` 默认装的全量内建），
+ * 只留所声明的域 —— 这是"宿主自己选择要哪些能力"的完整语义。
+ * `replace = false`（默认）为追加：在默认全量之上再装（适合只加自定义域）。
+ *
+ * 注意：即使 `replace = true`，①语言原语（`if`/`let`/`lambda`…）与②求值器拦截
+ * （`map`/`eval`…）**仍然可用** —— 它们不在环境里，域装配动不了（设计文档 §5.3）。
+ */
+public func withDomains(domains: Array<LispCapability>, replace!: Bool): InterpreterOption {
+    { interpreter =>
+        if (replace) {
+            interpreter.clearEnvironmentBindings()
+            interpreter.markDomainsExclusive()
+        } else if (interpreter.isDomainsExclusive()) {
+            // 已经独占装配过：后续 withDomains 只做追加，不重装默认全量
+            ()
+        }
+        BuiltinFunctions.installDomains(
+            interpreter.getEnvironment(),
+            domains,
+            isInterrupted: Some({ => interpreter.isInterruptedNow() })
+        )
+    }
+}
+
+/**
+ * 安装一个预置组合（`PRESET_FULL` / `PRESET_PURE`，或宿主自造的组合）
+ */
+public func withPreset(preset: Array<LispCapability>, replace!: Bool = false): InterpreterOption {
+    withDomains(preset, replace: replace)
+}
+
+/**
+ * 全量预置组合：所有 core 内置域
+ */
+public func presetFull(): Array<LispCapability> {
+    BuiltinFunctions.presetFull()
+}
+
+/**
+ * 纯函数子集预置组合：按 `!escapable && !hostPolicy` **推导**（非手写清单）
+ *
+ * 注意不含输出域 —— 导出通道由宿主用 `withOutputFn` / `registerPure(output:)` 接管，
+ * 与既有语义一致。
+ */
+public func presetPure(): Array<LispCapability> {
+    BuiltinFunctions.presetPure()
+}
+
 // ==================== 其他配置选项 ====================
+
+/**
+ * 装配档位：宿主"选一档"而不是"逐个挑域"。
+ *
+ * | 档位 | 装什么 | 典型用途 |
+ * |---|---|---|
+ * | `Expr` | 表达式层：纯计算，**无宏、无 `gensym`、无输出** | 公式 / 规则求值，只要算出一个值 |
+ * | `Pure` | 纯函数子集：`Expr` + ④层宏包 + `gensym` | 需要 `when` / `unless` / `defun` 等语法糖的嵌入场景 |
+ * | `Script` | 全量域 + `std.io` / `std.fs` / `std.collection` | 脚本 / CLI：读写文件、模块加载、打印 |
+ *
+ * 三档是**严格包含**关系（`Expr ⊂ Pure ⊂ Script`），每一档都**独占装配**：
+ * 先把环境清空，只装该档的域，因此结果与"解释器默认装了什么"无关，可复现。
+ *
+ * **档位只管"装哪些能力"，不管"允许做什么"**：`withSandbox` / `withTimeout` /
+ * `withMaxStackDepth` 等策略选项与之正交，可任意叠加。
+ *
+ * 需要更细的控制时，用 `withDomains` / `withPreset` 自己组合。
+ */
+public enum XispLevel {
+    /** 表达式层：纯计算，无元编程 */
+    | Expr
+
+    /** 纯函数子集：表达式 + 宏包 */
+    | Pure
+
+    /** 脚本层：全量能力 + 标准库桥接 */
+    | Script
+}
+
+/**
+ * 按**装配档位**一次性配好解释器（`withLevel`）。
+ *
+ * ```cangjie
+ * // 只要算表达式：没有 println、没有宏，也不可能读写文件
+ * let calc = LispInterpreter([withLevel(XispLevel.Expr)])
+ * calc.eval("(+ 1 2)")            // => 3
+ * calc.eval("(println 1)")        // => UndefinedFunction
+ *
+ * // 脚本：全量 + 标准库，再叠一层沙箱
+ * let script = LispInterpreter([withLevel(XispLevel.Script), withSandbox()])
+ * ```
+ *
+ * 独占装配会清空环境，故**只应有一个档位选项**；多个时以最后应用的为准。
+ */
+public func withLevel(level: XispLevel): InterpreterOption {
+    { interpreter =>
+        interpreter.clearEnvironmentBindings()
+        interpreter.markDomainsExclusive()
+        let domains = match (level) {
+            case Expr => BuiltinFunctions.exprDomains()
+            case Pure => BuiltinFunctions.presetPure()
+            case Script => BuiltinFunctions.presetFull()
+        }
+        BuiltinFunctions.installDomains(
+            interpreter.getEnvironment(),
+            domains,
+            isInterrupted: Some({ => interpreter.isInterruptedNow() })
+        )
+        match (level) {
+            case Script =>
+                // 标准库桥接也是环境绑定，清空后要重建
+                interpreter.registerStdIO()
+                interpreter.registerStdFS()
+                interpreter.registerStdCollection()
+            case _ => ()
+        }
+    }
+}
 
 /**
  * 静默模式（不显示 Banner）

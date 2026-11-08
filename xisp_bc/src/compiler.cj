@@ -111,7 +111,13 @@ public class BytecodeCompiler <: Compiler {
                 this.emit(OP_PUSH_NIL)
                 true
             case Symbol(s) =>
-                if (this.envVars.contains(s)) {
+                // 关键字符号（以 : 开头）是**自求值**的（AST 语义，见 core.cj 的 evalInner）。
+                // 漏掉这条会让裸 `:ok` 在字节码下被当变量查找 → UnboundVariable，
+                // 而 AST 下正常返回 `:ok`（实测不一致）。
+                if (s.size > 0 && s.startsWith(":")) {
+                    this.emitWithArg(OP_PUSH_CONSTANT, this.addConst(Symbol(s)))
+                    true
+                } else if (this.envVars.contains(s)) {
                     this.emitWithArg(OP_LOAD_GLOBAL, this.addConst(Str(s)))
                     true
                 } else if (this.locals.contains(s)) {
@@ -172,7 +178,7 @@ public class BytecodeCompiler <: Compiler {
                     case "apply" => this.compileApply(cell.cdr)
                     case "->" => this.compileThreadFirst(cell.cdr)
                     case "eval" | "macroexpand" | "macroexpand-all" => false  // 运行时求值/语法树操作，回退 AST
-                    case "map" | "filter" | "reduce" => false  // AST 高阶循环（回调经 VM 执行）
+                    case "map" | "filter" | "reduce" | "for-each" => false  // AST 高阶循环（回调经 VM 执行）
                     case _ => this.compileCall(s, cell.cdr)
                 }
             case _ => false
@@ -187,10 +193,26 @@ public class BytecodeCompiler <: Compiler {
                         // (define name value)
                         match (cell.cdr) {
                             case Cons(cell2) =>
-                                if (this.compileExpr(cell2.car)) {
-                                    this.emitWithArg(OP_STORE_GLOBAL, this.addConst(Str(name)))
-                                    true
-                                } else { false }
+                                if (!this.compileExpr(cell2.car)) { return false }
+                                // 函数体内的 `define` 定义的是**本帧局部**，不是全局。
+                                // AST 侧 evalDefine 写的是 `this.env`，而调用过程时
+                                // eval 的是 `closureEnv.createChild()` —— 于是函数内
+                                // define 只在该次调用内可见（实测：函数外读不到）。
+                                // 此前这里一律发 STORE_GLOBAL，而符号引用走帧槽
+                                // （globalRefs 在**进帧时**解析，那时变量还没定义），
+                                // 于是 `(define (f) (define r 5) r)` 在字节码下报
+                                // UnboundVariable、AST 下正常返回 5。
+                                if (this.compilingFuncBody && !this.locals.contains(name)) {
+                                    let slot = this.localCount
+                                    this.locals[name] = slot
+                                    this.localCount++
+                                    // 保留表达式值（define 的返回值就是那个值）
+                                    this.emit(OP_DUP)
+                                    this.emitWithArg(OP_STORE_LOCAL, slot)
+                                    return true
+                                }
+                                this.emitWithArg(OP_STORE_GLOBAL, this.addConst(Str(name)))
+                                true
                             case _ => false
                         }
                     case Cons(nameCell) =>
@@ -204,6 +226,15 @@ public class BytecodeCompiler <: Compiler {
                                             case Some((bodyFunc, caps)) =>
                                                 this.functions.add(bodyFunc)
                                                 this.emitMakeClosure(this.functions.size - 1, caps)
+                                                // 同 (define name value)：函数体内的 define 是**本帧局部**
+                                                if (this.compilingFuncBody && !this.locals.contains(name)) {
+                                                    let slot = this.localCount
+                                                    this.locals[name] = slot
+                                                    this.localCount++
+                                                    this.emit(OP_DUP)
+                                                    this.emitWithArg(OP_STORE_LOCAL, slot)
+                                                    return true
+                                                }
                                                 this.emitWithArg(OP_STORE_GLOBAL, this.addConst(Str(name)))
                                                 true
                                             case None => false
@@ -1093,6 +1124,14 @@ public class BytecodeCompiler <: Compiler {
         } else {
             let nameIdx = this.addConst(Str(name))
             this.emitWithArg(OP_PUSH_CONSTANT, nameIdx)
+        }
+        // 函数值已求出、实参尚未求值：先查函数值本身是不是错误。
+        // AST 侧 `evalFunctionCallWithValue` 是先算函数值、出错立即返回，
+        // 实参**根本不求值**；字节码若直接压实参再 CALL，实参里的副作用
+        // （`(foo (set! x 2))`）就会多发生一次——实测 `(define x 1)
+        // (foo (set! x 2)) x` 在 AST 得 1、字节码得 2。
+        if (this.countArgs(args) > 0) {
+            this.emit(OP_CHECK_ERR)
         }
         var current = args
         while (let Cons(cell) <- current) {

@@ -126,6 +126,35 @@
 (length '(1 2 3))    ; => 3
 (length '())         ; => 0
 (length "abc")       ; => 0   非列表返回 0
+(length 42)          ; => 0   非列表返回 0
+```
+
+::: warning `length` 只处理列表，字符串也是「非列表」
+`length` 对**非列表一律返回 `0`**（这是有意设计，不是缺陷）——字符串同样如此。
+取字符串长度请用 [`string-length`](string)：
+
+```lisp
+(length "hello")        ; => 0
+(string-length "hello") ; => 5
+(string-length "中文")  ; => 6    按 UTF-8 字节数，不是字符数
+```
+
+宿主注入的外部值若实现了 `LispExternalIndexable`，`length` 会按该接口取长度；
+未实现则同样按「非列表返回 `0`」处理。见[桥接 - 外部值](../integration/bridge)。
+:::
+
+### `nth` - 按下标取元素
+
+签名：`(nth x index)`
+
+列表按链表走，下标从 `0` 开始；**越界返回 `nil`**（与 `first`/`second` 一致）。
+外部值若实现 `LispExternalIndexable`，则走其 `at(index)`。
+
+```lisp
+(nth '(10 20 30) 0)     ; => 10
+(nth '(10 20 30) 2)     ; => 30
+(nth '(10 20 30) 9)     ; => nil   越界
+(nth '(10 20 30) -1)    ; => nil   负下标
 ```
 
 ### 传统 C 系列组合函数（兼容）
@@ -145,8 +174,26 @@
 
 ## 高阶操作
 
-::: warning 特殊形式
-`map`、`filter`、`reduce`、`apply` 是**特殊形式**而非普通函数，参数不按普通规则求值。它们不能作为值直接传递，例如 `(map map lst)` 无效。
+::: tip 特殊形式，同时是一等值
+`map`、`filter`、`reduce`、`apply`、`for-each`、`eval`、`->` 这 7 个符号走的是**双轨**：
+
+- **调用位置**（`(map f lst)`）：仍由求值器直接分派（快速路径，参数按求值器语义处理，不走普通的"先求值全部参数"规则）；
+- **值位置**（`(procedure? map)`、把 `map` 当参数传出去）：环境里有与之一致的可调用值。
+
+```lisp
+(procedure? map)          ; => true
+(type-of map)             ; => "procedure"
+
+(define (go f) (f (lambda (x) (* x 2)) '(1 2 3)))
+(go map)                  ; => (2 4 6)
+```
+
+需要注意：取作值之后**调用时仍按求值器语义执行**（尤其是列表实参），不是纯函数语义；
+把 `map` / `apply` 这类"自己接收过程"的符号当作被映射的元素时也不会得到期望结果
+（`(map map '((1 2) (3 4)))` → `(nil nil)`）。
+
+其它**真·特殊形式**（`if` `quote` `define` `lambda` `let` `set!` `begin` `match` `import` `export`
+`macroexpand` `macroexpand-all`）不在此列，取作值仍是 `[UnboundVariable]`。
 :::
 
 ### `map` - 映射
@@ -196,9 +243,34 @@
 ; 打印三行 10 / 20 / 30，返回 nil
 ```
 
-::: warning 限制
-`for-each` 目前**只能接受原生内置函数**（如 `println`）作为过程；传入用户定义的 `lambda` 时不会执行任何调用，直接返回 `nil`。
-:::
+支持任意可调用值（含 `lambda` 与其它用户定义函数）。非可调用值会返回 `TypeError` 而不是静默跳过：
+
+```lisp
+(for-each 42 '(1 2))          ; => [TypeError] for-each: expected a procedure, got 42
+(for-each negate '(1 2 3))    ; => [TypeError] for-each: expected a procedure, got #<macro>
+```
+
+> `negate` / `swap` / `when` 这类是**宏**，不能当过程传（`procedure?` 虽为 `true`，`type-of` 是 `"macro"`）。
+> 需要时包一层：`(for-each (lambda (x) (negate x)) '(1 2 3))`。
+
+②类符号的一等值则可以正常传入或取出使用：
+
+```lisp
+; 从列表里取出 map 当函数用
+((first (list map for-each)) (lambda (x) (* x 2)) '(1 2 3))   ; => (2 4 6)
+```
+
+多列表时以**最短列表**为准；过程返回 `Error` 时立即中止并返回该错误。
+
+```lisp
+(for-each (lambda (a b) (println a b)) '(1 2 3) '(4 5))
+; 只打印两行：1 4 / 2 5（以最短列表为准）
+
+(for-each (lambda (x) (if (= x 2) (error "boom") x)) '(1 2 3))
+; => [RuntimeError] "boom"   立即中止
+```
+
+`for-each` 与其它高阶函数一样**可由用户重新定义顶替**：`(define for-each 我的实现)` 之后调用即走用户实现。
 
 ### `apply` - 展开调用
 

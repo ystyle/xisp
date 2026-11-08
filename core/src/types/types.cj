@@ -44,6 +44,16 @@ public open class Environment {
     private var bindings: HashMap<String, LispValue>
 
     /**
+     * 由 **core 自己安装**的一等值名（②类符号，见 core/eval/first_class_values.cj）。
+     *
+     * 用途：区分"core 注册的值"与"用户覆盖的值"。
+     * 让位判据是"环境里有绑定即让位"，若 core 也注册这些名字，
+     * 就会把自己的注册误判成用户实现、导致快速路径被跳过。
+     * 故 core 注册时打标记，查找时沿链向上找（与 bindings 同构）。
+     */
+    private var coreInstalledNames: HashSet<String> = HashSet<String>()
+
+    /**
      * 关键字别名映射表
      * 用于支持多语言关键字（如：定义 -> define）
      * 惰性初始化：大多数环境不使用别名，避免每次 createChild 都分配
@@ -101,6 +111,11 @@ public open class Environment {
      */
     public func define(name: String, value: LispValue): Unit {
         this.bindings[name] = value
+        // 任何一次普通 define 都视为"用户写入"：清掉 core 安装标记，
+        // 使让位判据把该名字当成用户实现（core 安装自己的一等值时会随后重新打标记）。
+        if (this.coreInstalledNames.contains(name)) {
+            this.coreInstalledNames.remove(name)
+        }
         Environment.defineVersion.value = Environment.defineVersion.value + 1
         if (Environment.isArithOp(name)) {
             this.arithVersion.value = this.arithVersion.value + 1
@@ -184,6 +199,37 @@ public open class Environment {
     /**
      * 创建子环境
      */
+    /**
+     * 移除一个绑定（供卸载 core 安装的一等值使用）
+     */
+    public func removeBinding(name: String): Unit {
+        this.bindings.remove(name)
+        if (this.coreInstalledNames.contains(name)) {
+            this.coreInstalledNames.remove(name)
+        }
+        Environment.defineVersion.value = Environment.defineVersion.value + 1
+    }
+
+    /**
+     * 标记某名字是 core 安装的一等值
+     */
+    public func markCoreInstalled(name: String): Unit {
+        this.coreInstalledNames.add(name)
+    }
+
+    /**
+     * 该名字是否由 core 安装（沿父环境链查找）
+     */
+    public func isCoreInstalled(name: String): Bool {
+        if (this.coreInstalledNames.contains(name)) {
+            return true
+        }
+        match (this.parent) {
+            case Some(p) => p.isCoreInstalled(name)
+            case None => false
+        }
+    }
+
     public func createChild(): Environment {
         let env = Environment()
         env.parent = Some(this)
@@ -481,6 +527,25 @@ public enum ErrorType {
     | IOError             // IO 错误
     | ModuleError         // 模块错误
 
+    /**
+     * 类型名（与 `XispError.toString` 里的 `[Kind]` 一致）
+     *
+     * 供宿主与测试按种类分发；`ErrorType` 不支持 `toString()`，
+     * 各处分发只能靠 `match`，这里给出唯一的字符串口径。
+     */
+    public func name(): String {
+        match (this) {
+            case UnboundVariable => "UnboundVariable"
+            case UndefinedFunction => "UndefinedFunction"
+            case TypeError => "TypeError"
+            case ArityMismatch => "ArityMismatch"
+            case SyntaxError => "SyntaxError"
+            case RuntimeError => "RuntimeError"
+            case IOError => "IOError"
+            case ModuleError => "ModuleError"
+        }
+    }
+
     // 实现相等比较
     public operator func ==(right: ErrorType): Bool {
         match (this) {
@@ -551,17 +616,7 @@ public class XispError <: ToString {
      * 转换为字符串表示
      */
     public func toString(): String {
-        let kindStr = match (this.kind) {
-            case UnboundVariable => "UnboundVariable"
-            case UndefinedFunction => "UndefinedFunction"
-            case TypeError => "TypeError"
-            case ArityMismatch => "ArityMismatch"
-            case SyntaxError => "SyntaxError"
-            case RuntimeError => "RuntimeError"
-            case IOError => "IOError"
-            case ModuleError => "ModuleError"
-        }
-        var result = "[${kindStr}] ${this.message}"
+        var result = "[${this.kind.name()}] ${this.message}"
         if (!this.stack.isEmpty()) {
             result = "${result}\n  调用栈:"
             for (i in 0..this.stack.size) {
@@ -656,6 +711,18 @@ public enum LispValue <: ToString {
       * 包含：字节码函数索引、捕获的环境
       */
      | Closure(Int64, Environment)
+
+     /**
+      * 外部值（宿主 / 扩展模块提供的值）
+      *
+      * core 只认识 `LispExternal` 协议（`typeName` + `display()`），
+      * **不认识任何具体外部类型** —— NDArray、分布对象、句柄等的内存布局与算法
+      * 一行都不进 core。见 `lisp_external.cj` 与能力域设计 §7。
+      *
+      * 这是整份设计中唯一"只有 core 能给"的东西：外部模块要把自己的值交给
+      * Lisp 层，就必须有一个 core 承认的值形态。
+      */
+     | External(LispExternal)
 
      /**
      * 哈希映射（字典）
@@ -779,6 +846,10 @@ public enum LispValue <: ToString {
             case Macro(_, _, _) => true
             case MacroFromParams(_, _, _) => true
             case NativeFunc(_) => true
+            // 编译闭包在语言层面同样是"过程"。
+            // 漏掉它会使 (procedure? <编译闭包>) 在字节码下返回 false 而 AST 下返回 true
+            // —— 同一段脚本两个后端行为不同（实测）。
+            case Closure(_, _) => true
             case _ => false
         }
     }
@@ -843,7 +914,12 @@ public enum LispValue <: ToString {
             case Macro(_, _, _) => "#<macro>"
             case MacroFromParams(_, _, _) => "#<macro>"
             case NativeFunc(_) => "#<native-function>"
-            case Closure(_, _) => "#<closure>"
+            // 编译闭包与解释器过程在语言层面都是"过程"：
+            // 显示名必须一致，否则同一段脚本在 AST 与字节码后端下打印结果不同
+            // （实测 `(define (f x) x)` 的返回值 AST 打 #<procedure>、BC 打 #<closure>）。
+            case Closure(_, _) => "#<procedure>"
+            // 外部值的 repr 由**实现方**提供（含截断策略，见 lisp_external.cj 第 6 条）
+            case External(ext) => ext.display()
             case HashMap(map) => hashmapToString(map)
             case Error(err) => err.toString()
         }
@@ -867,6 +943,9 @@ public enum LispValue <: ToString {
             case MacroFromParams(params, body, env) => MacroFromParams(params, body, env.clone())
             case NativeFunc(f) => NativeFunc(f)  // 原生函数不需要克隆
             case Closure(id, env) => Closure(id, env.clone())
+            // 外部值**按引用**复制：它的内部缓冲可能很大（NDArray 的连续内存），
+            // 深拷会破坏"零拷贝"这一设计前提；可变性由实现方自行负责。
+            case External(ext) => External(ext)
             case HashMap(map) => HashMap(map)  // HashMap 是不可变的，直接复制引用
             case Error(err) => Error(err)  // 错误是不可变的，直接复制引用
         }

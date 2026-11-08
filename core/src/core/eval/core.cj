@@ -38,10 +38,45 @@ extend Evaluator {
             this.compileSuspended = false
         }
         if (!this.compileSuspended && let Some(b) <- this.backend) {
-            if (this.isMacroCallExpr(expr)) {
-                // 宏调用：展开体可能引用调用点局部（AST 环境），本树禁用编译（AST 展开）
+            // 关键字别名必须先于编译解析：编译器不认识别名表，`setq` 会被当普通函数
+            // 调用（环境里并无此绑定）→ **静默什么都不做**，脚本悄悄算错。
+            // 解析只动头位置（见 alias_for_compile.cj）。
+            var toCompile = expr
+            match (this.resolveHeadAlias(expr)) {
+                case Some(resolved) => toCompile = resolved
+                case None => ()
+            }
+            // 让位优先于编译：若表达式头是"已被用户重定义"的可让位符号
+            // （map / filter / reduce / apply / eval / -> / for-each），必须回退 AST
+            // —— 否则后端会按 core 的语义编译它，用户实现被绕过
+            // （实测：用户 define apply 后 AST 走用户实现，BC 仍返回 core 的结果）。
+            if (this.headIsDeferred(toCompile)) {
                 this.compileSuspended = true
-            } else if (let Some(code) <- b.compile(expr)) {
+            } else if (this.containsMacroCall(toCompile) || this.containsAliasCall(toCompile)) {
+                // 宏是语法层的东西：必须在编译前展开，否则会被后端编译成"运行时调宏"
+                // （每次调用重新展开，且参数已被求值 → 与 AST 语义可能不等价）。
+                // 展开后重新走本函数，让展开产物正常编译。
+                // 先做零分配探测：绝大多数表达式不含宏，不付展开成本。
+                let expanded = this.expandForCompile(toCompile)
+                match (expanded) {
+                    case Error(_) => return expanded
+                    case _ =>
+                        if (!this.isMacroCallExpr(expanded)) {
+                            // 展开产物里可能仍有别名（expandForCompile 已一并解析，
+                            // 但宏产出可能新增别名），此处再兜一次头位置
+                            var finalExpr = expanded
+                            match (this.resolveHeadAlias(expanded)) {
+                                case Some(r) => finalExpr = r
+                                case None => ()
+                            }
+                            if (let Some(code) <- b.compile(finalExpr)) {
+                                return b.execute(code, this.env)
+                            }
+                        }
+                        // 仍含宏（如 defmacro 体等边界内）或编译失败：走 AST
+                        this.compileSuspended = true
+                }
+            } else if (let Some(code) <- b.compile(toCompile)) {
                 return b.execute(code, this.env)
             } else {
                 // 编译失败：回退 AST，本树禁用后续编译
@@ -118,6 +153,28 @@ extend Evaluator {
      * 避免对每个特殊形式符号（如 + < if 等）都遍历环境链查询关键字别名。
      */
     private func trySpecialForm(sym: String, rest: LispValue): Option<LispValue> {
+        // 让位：map / filter / reduce / apply / eval / -> 若已被用户重新定义，
+        // 则不拦截，交给普通调用路径（判据与缓存见 defer_special_form.cj）。
+        // 算术符号（+ - * / < > =）的让位走各自 evalXxx 内部的 isNativeArith 守卫。
+        if (this.shouldDeferToUser(sym)) {
+            return None
+        }
+
+        // 权限检查覆盖特殊形式（能力域设计 §5.4 接缝 4）
+        //
+        // 此前 `funcChecker` 只挂在普通调用路径（`evalFunctionCallWithValue`），
+        // 而特殊形式在分派时从不经过那里 —— 于是 `withSandbox()` 明确声明的
+        // `blockFunctions(["eval", "apply"])` **实测拦不住**（`(eval …)` / `(apply …)`
+        // 照常执行），而③类注册函数（如 `length`）能被正常拦住。
+        //
+        // 特殊形式是**能绕过检查**的那一类（`registerPure` 的文档注释已论证：
+        // `eval`/`apply`/`map`/`filter`/`reduce`/`for-each` 会先于检查执行），
+        // 因此这里必须显式检查，否则沙箱的核心意图失效。
+        if (this.specialFormBlocked(sym)) {
+            return Some(LispValue.Error(XispError(ErrorType.UndefinedFunction,
+                "Function '${sym}' is not allowed")))
+        }
+
         match (sym) {
             case "+" => Some(this.evalAdd(rest))
             case "-" => Some(this.evalSub(rest))
@@ -137,16 +194,13 @@ extend Evaluator {
             case "lambda" => Some(this.evalLambda(rest))
             case "begin" => Some(this.evalBegin(rest))
             case "let" => Some(this.evalLet(rest))
-            case "let*" => Some(this.evalLetStar(rest))
-            case "when-let*" => Some(this.evalWhenLetStar(rest))
-            case "if-let" => Some(this.evalIfLet(rest))
-            case "condb" => Some(this.evalCondb(rest))
             case "apply" => Some(this.evalApply(rest))
             case "eval" => Some(this.evalEval(rest))
             case "->" => Some(this.evalThreadFirst(rest))
             case "map" => Some(this.evalMap(rest))
             case "filter" => Some(this.evalFilter(rest))
             case "reduce" => Some(this.evalReduce(rest))
+            case "for-each" => Some(this.evalForEach(rest))
             case "match" => Some(this.evalMatch(rest))
             case "macroexpand" => Some(this.evalMacroexpand(rest))
             case "macroexpand-all" => Some(this.evalMacroexpandAll(rest))
@@ -309,6 +363,17 @@ extend Evaluator {
                     case Error(_) => this.injectStack(procResult)
                     case _ => procResult
                 }
+            // 外部值：实现 LispExternalCallable 的可以被调用
+            // （走 `applyFunction` 保证与宿主注册函数的回调路径同一套分派）
+            case External(ext) =>
+                let args = this.evalArguments(rest)
+                for (arg in args) {
+                    match (arg) {
+                        case Error(_) => return this.injectStack(arg)
+                        case _ => ()
+                    }
+                }
+                this.injectStack(this.applyFunction(funcValue, args))
             case Nil =>
                 if (let Symbol(fn) <- first) {
                     this.injectStack(LispValue.Error(XispError(ErrorType.UndefinedFunction, "Undefined function: '${fn}'")))

@@ -163,6 +163,10 @@ public class JitCodegenIntR {
                                 pending.add((target, depth))
                             }
                         }
+                    case 63 =>
+                        // OP_CHECK_ERR：本形式同样要求全局引用均为自身，
+                        // 头位置必然已定义 → 检查恒不成立，净栈效果 0
+                        ()
                     case 43 | 99 =>
                         advancing = false
                     case _ =>
@@ -250,6 +254,7 @@ public class JitCodegenIntR {
                 case 43 => this.emitReturn(ip, valStack)
                 case 52 => this.emitBinLC(this.argAt(code, ip), this.argAt(code, ip + 1), this.argAt(code, ip + 2), ip + 3, valStack)
                 case 56 => this.emitCmpLCJF(this.argAt(code, ip), this.argAt(code, ip + 1), this.argAt(code, ip + 2), this.argAt(code, ip + 3), ip + 4, valStack)
+                case 63 => Some(ip)   // 恒不成立（见资格判据处的说明）
                 case 99 => this.emitReturn(ip, valStack)
                 case _ => return None
             }

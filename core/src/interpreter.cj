@@ -20,6 +20,14 @@ import std.fs.*
 public class LispInterpreter {
     private var env: Environment
     private var evaluator: Evaluator
+    // 是否已由能力域独占装配（`withDomains` 的 replace 模式）。
+    // 默认装配是 registerAll 全量；宿主若明确要"只要这些域"，需要清掉默认注册，
+    // 否则未选中的域符号仍然可用，"选择权"形同虚设。
+    private var domainsInstalledExclusively: Bool = false
+    // 是否为②类符号安装一等值（接缝 0e）；宿主可用 withNoFirstClassValues() 关闭
+    private var firstClassValuesEnabled: Bool = true
+    // 是否已安装（卸载时需要知道从哪个环境移除）
+    private var firstClassValuesInstalled: Bool = false
     public var bridge: BridgeManager
 
     // ==================== 配置字段 ====================
@@ -123,6 +131,12 @@ public class LispInterpreter {
 
         // 注册内置函数
         BuiltinFunctions.registerAll(this.env)
+        // ②类符号的一等值（接缝 0e）：调用仍走求值器快速路径，
+        // 值位置（procedure? / 作参数传递）则从环境取到这里注册的 NativeFunc。
+        // 注意：选项在 init 之后才应用，故这里先按默认安装；
+        // `withNoFirstClassValues()` 会把它们移除（见 setFirstClassValues）。
+        this.evaluator.installFirstClassValues(this.env)
+        this.firstClassValuesInstalled = true
 
         // 注册标准桥接函数
         this.bridge.registerStdIO()
@@ -568,10 +582,86 @@ public class LispInterpreter {
     }
 
     /**
+     * 清空环境中的绑定（保留求值器配置），供"独占式能力域装配"使用。
+     *
+     * 只清 `bindings`，不动 `Evaluator` 的配置（中断 / 权限 / 栈深等）。
+     */
+    public func clearEnvironmentBindings(): Unit {
+        this.env = Environment()
+        this.evaluator.env = this.env
+        // 桥接也持有环境引用：不重定向的话，随后 registerStdFS() 会写进被丢弃的旧环境
+        this.bridge.retarget(this.env)
+        // ②类符号的一等值（`map` / `filter` / `reduce` / …）也是**环境绑定**。
+        // 换了新环境必须按当前开关重建：否则 `withDomains(…, replace: true)` 之后
+        // `(procedure? map)` 会变成未绑定 —— 调用仍走求值器快速路径、看起来"还能用"，
+        // 但它已经不能再作为值传递，与默认装配下的行为不一致。
+        this.firstClassValuesInstalled = false
+        if (this.firstClassValuesEnabled) {
+            this.evaluator.installFirstClassValues(this.env)
+            this.firstClassValuesInstalled = true
+        }
+    }
+
+    /**
+     * 标记"能力域已独占装配本解释器"。
+     *
+     * 语义：此后不再套用默认的 `registerAll` 全量装配（那会让未选中的域重新可用）。
+     */
+    public func markDomainsExclusive(): Unit {
+        this.domainsInstalledExclusively = true
+    }
+
+    /** 是否已由能力域独占装配 */
+    public func isDomainsExclusive(): Bool {
+        this.domainsInstalledExclusively
+    }
+
+    /**
+     * 当前是否已被请求中断（宿主取消 / 沙箱超时）
+     *
+     * 供能力域在长循环里周期性查询 —— 外部域拿到的是本方法与
+     * `CapabilityContext.isInterrupted`，而不是求值器实例。
+     */
+    /**
+     * 关闭②类符号的一等值安装。
+     *
+     * 关闭后 `(procedure? map)` 等回到"未绑定"状态 —— 适合追求最小环境、
+     * 且确认不需要把高阶函数当值传递的宿主。
+     */
+    public func setFirstClassValues(enabled: Bool): Unit {
+        this.firstClassValuesEnabled = enabled
+        if (enabled) {
+            if (!this.firstClassValuesInstalled) {
+                this.evaluator.installFirstClassValues(this.env)
+                this.firstClassValuesInstalled = true
+            }
+        } else {
+            if (this.firstClassValuesInstalled) {
+                this.evaluator.uninstallFirstClassValues(this.env)
+                this.firstClassValuesInstalled = false
+            }
+        }
+    }
+
+    public func isInterruptedNow(): Bool {
+        this.evaluator.isInterrupted()
+    }
+
+    /**
      * 求值单个表达式
      * @param code Lisp 代码字符串
      * @return 求值结果，如果解析或求值失败返回 None
      */
+    /**
+     * 求值**单个已解析表达式**（不经字符串往返）。
+     *
+     * 供需要逐表达式逐步比对的场景（如 AST/字节码差分测试）使用：
+     * 调用方自己持有解析结果，可保证两种后端跑的是**同一批表达式**。
+     */
+    public func evalExpr(expr: LispValue): LispValue {
+        this.evaluator.eval(expr)
+    }
+
     public func eval(code: String): LispValue {
         // 如果启用沙箱，使用 evalInSandbox
         if (this.sandboxEnabled) {

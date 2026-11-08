@@ -136,11 +136,16 @@ class PureEnvTest {
     @TestCase
     func testApplyCannotReachFile() {
         // apply 可绕过函数白名单（实测：白名单判断对 apply 无效），
-        // 但被绕过的函数必须先在环境里存在。环境里没有时，
-        // evalApply 的 `case _ => Nil` 落空返回 nil——不执行任何东西即安全。
-        match (evalPure("(apply cangjie::read-file '(\"/etc/passwd\"))")) {
-            case Nil => @Assert(true)
-            case _ => @Fail("apply on an absent function should fall through to nil")
+        // 但被绕过的函数必须先在环境里存在。环境里没有时 `cangjie::read-file`
+        // 查不到，apply 拿到的是未绑定符号 → 报错误并中止执行，文件绝不会被读。
+        //
+        // 这条用例原先断言的是 `case Nil`（旧的静默吞错）。静默返回 nil 对安全
+        // 属性没有帮助——真正的保证是"没有可调用的东西"，而不是"返回了 nil"。
+        let result = evalPure("(apply cangjie::read-file '(\"/etc/passwd\"))")
+        match (result) {
+            case Error(_) => @Assert(true)
+            case Nil => @Fail("apply on an absent function must report an error, not fall through to nil")
+            case _ => @Fail("apply on an absent function must not succeed")
         }
     }
 

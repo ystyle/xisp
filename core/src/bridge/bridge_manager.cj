@@ -20,6 +20,17 @@ public class BridgeManager {
     }
 
     /**
+     * 把桥接的目标环境换成 `env`。
+     *
+     * 桥接持有的是**构造时那个环境**；环境被整体替换后（`clearEnvironmentBindings`
+     * 为独占装配换新环境）必须同步，否则后续 `registerStdFS()` 之类会把函数注册进
+     * 一个已经被丢弃的环境 —— 现象是"装配完标准库却 `cangjie::exists?` 不存在"。
+     */
+    public func retarget(env: Environment): Unit {
+        this.env = env
+    }
+
+    /**
      * 注册桥接函数（不带命名空间）
      */
     public func register(

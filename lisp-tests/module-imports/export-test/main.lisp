@@ -6,16 +6,13 @@
 (println "调用导出的函数 publicFunc:")
 (println "  " (publicFunc))
 
-;; 测试未导出的函数
+;; 测试未导出的函数：语言没有 try/catch，故不捕获。
+;; 期望：stderr 出现 `[UndefinedFunction] Undefined function: 'privateFunc'`。
+;; 该行为由 `lisp-tests/check-examples.sh`（三模式一致性，含 stderr）与
+;; `xisp_tests` 的模块用例共同钉住。
 (println "")
 (println "测试未导出的函数 privateFunc:")
-(try
-  (privateFunc)
-  (println "ERROR: 应该报错")
-) catch (e)
-  (println "✓ 正确：未导出函数不可访问")
-  (println "  错误: " e)
-)
+(privateFunc)
 
 (println "")
 (println "=== 测试完成 ===")

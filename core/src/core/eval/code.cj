@@ -66,6 +66,13 @@ public let OP_NORM_FALSE: Int64 = 60     // 栈顶假值（nil/0/0.0/false）规
 public let OP_ENV_SCOPE_BEGIN: Int64 = 61  // 环境作用域开始：currentEnv 压栈 + child（闭包共享捕获用）
 public let OP_ENV_SCOPE_END: Int64 = 62    // 环境作用域结束：恢复 currentEnv
 
+// 栈顶是错误值则中止（否则留在栈上继续）。
+//
+// 用在**函数值已求出、实参尚未求值**的位置：AST 侧 `evalFunctionCallWithValue`
+// 先算函数值、出错立即返回，实参根本不求值；字节码若先压实参再 CALL，
+// 实参里的副作用（`(foo (set! x 2))`）就会多发生一次。
+public let OP_CHECK_ERR: Int64 = 63
+
 public let OP_HALT: Int64 = 99
 
 public class CompiledFunction {

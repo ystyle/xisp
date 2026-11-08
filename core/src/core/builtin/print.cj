@@ -12,6 +12,20 @@ extend BuiltinFunctions {
      * 注册纯字符串函数：只做计算，不产生输出。
      */
     static func registerStringOps(env: Environment) {
+        // (string-length s) - 字符串长度（含端点检查；非字符串返回 nil）
+        //
+        // 注意与 `length` 的区别：`length` 只处理列表（非列表返回 0，见
+        // docs-site/api/list.md）。取字符串长度需要显式用本函数。
+        env.define("string-length", NativeFunc({ args =>
+            if (args.size != 1) {
+                return Nil
+            }
+            match (args[0]) {
+                case Str(s) => LispValue.Int(Int64(s.size))
+                case _ => Nil
+            }
+        }))
+
         // (string=? str1 str2) - 字符串相等比较
         env.define("string=?", NativeFunc({ args =>
             if (args.size != 2) {

@@ -25,6 +25,7 @@ extend Evaluator {
             case Macro(_, _, _) => "Macro"
             case MacroFromParams(_, _, _) => "MacroFromParams"
             case NativeFunc(_) => "NativeFunc"
+            case Closure(_, _) => "Closure"
             case HashMap(_) => "HashMap"
             case _ => "Unknown"
         }

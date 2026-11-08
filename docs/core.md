@@ -113,8 +113,14 @@ nil          ; 空值
 ## 二、**解释器核心架构**
 
 ### 2.1 **最小可工作解释器**
-```cangjie
-// 核心数据结构
+
+> 下面这段是**算法示意**，用 Rust 风格伪代码表达（`Vec` / `impl` / `Result` / `Box` 都是 Rust 语法），
+> 不是可直接编译的仓颉代码。落地的仓颉类型见 `core/src/types/types.cj`，其中数值是
+> `Int(Int64)` 与 `Float(Float64)` **两个变体**（没有 `Number`），另有 `External(LispExternal)`
+> 用于宿主注入的外部值。
+
+```rust
+// 核心数据结构（概念模型）
 enum LispValue {
     Nil,
     Bool(bool),
@@ -177,7 +183,10 @@ impl Evaluator {
 
 ### 2.2 **必需的特殊形式实现**
 
-```cangjie
+> 同样是伪代码（`&mut self` / `?` / `is Symbol` 是 Rust 风格）；仓颉里没有这些写法。
+> 真实实现见 `core/src/core/eval/special_forms.cj`。
+
+```rust
 // 实现define
 fn eval_define(&mut self, args: LispValue, env: &mut Environment) {
     match args {

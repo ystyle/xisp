@@ -783,5 +783,95 @@ class ModuleTest {
                 @Fail("import of nonexistent bare module should return Error")
         }
     }
+
+    /**
+     * **相对文件导入也必须尊重 `export`**（回归）
+     *
+     * `(import "./x.lisp")` 曾把被导入文件的所有 `define` 原样灌进调用方环境，
+     * 于是 `(export publicFunc)` 里没列出的 `privateFunc` 照样能调用 —— `export`
+     * 对文件导入形同虚设（与目录包导入、模块导入的行为不一致，也与
+     * `docs-site/guide/05-modules.md` 的承诺相反）。
+     *
+     * 修法：在独立 child env 里加载，再按 `getExportedBindings()` 白名单无前缀绑出。
+     * 这条用例用真实的 `lisp-tests/module-imports/export-test/` 夹具端到端跑。
+     */
+    @TestCase
+    func testRelativeFileImportRespectsExport() {
+        let fixtureDir = "./lisp-tests/module-imports/export-test"
+        @Assert(exists(fixtureDir + "/funcs.lisp"))
+
+        // 相对导入依赖 `currentFilePath` 定位基准目录，因此必须走 `evalFile`。
+        // 探针文件用 `.probe.tmp` 后缀：差分测试只收 `*.lisp`，不会被它扫到。
+        let probe = fixtureDir + "/.probe.tmp"
+        let code = "(import \"./funcs.lisp\") (publicFunc) (privateFunc)"
+        File.writeTo(probe, code.toArray())
+
+        let opts = ArrayList<InterpreterOption>()
+        opts.add(withQuietMode())
+        let it = LispInterpreter(opts.toArray())
+        it.setScriptMode()
+
+        let out = ArrayList<String>()
+        let env = it.getEnvironment()
+        env.define("println", NativeFunc({ args =>
+            var line = ""
+            for (i in 0..args.size) {
+                if (i > 0) {
+                    line += " "
+                }
+                line += args[i].toString()
+            }
+            out.add(line)
+            Nil
+        }))
+
+        var last: LispValue = Nil
+        try {
+            last = it.evalFile(probe)
+        } finally {
+            removeIfExists(probe, recursive: false)
+        }
+
+        // 探针最后一条是 (privateFunc)：未导出 → 必须是错误
+        match (last) {
+            case Error(err) => @Assert(err.kind == UnboundVariable || err.kind == UndefinedFunction)
+            case _ => @Fail("privateFunc is not exported and must NOT be callable, got: ${last.toString()}")
+        }
+    }
+
+    /**
+     * 对照组：文件里**没有** `export` 时，全部符号照常导入（向后兼容）
+     *
+     * 单文件导入不能让"没写 export 的老脚本"突然全部失效 —— 这是修 5 号缺口时
+     * 刻意保留的兼容行为。
+     */
+    @TestCase
+    func testRelativeFileImportWithoutExportStillWorks() {
+        // 探针放 /tmp：既不影响仓库里的语料，也不会被差分测试扫到。
+        // 被导入的文件**必须**以 .lisp 结尾（ScriptLoader 按后缀区分文件导入与目录包导入）。
+        let probe = "/tmp/xisp_probe_noexport.tmp"
+        let lib = "/tmp/xisp_probe_noexport_lib.lisp"
+        File.writeTo(lib, "(define (noExportFn x) x)".toArray())
+        File.writeTo(probe, "(import \"./xisp_probe_noexport_lib.lisp\") (noExportFn 42)".toArray())
+
+        let opts = ArrayList<InterpreterOption>()
+        opts.add(withQuietMode())
+        let it = LispInterpreter(opts.toArray())
+        it.setScriptMode()
+        let env = it.getEnvironment()
+        // 未导出的名字走"全公开"分支；若被白名单挡掉会得到 UnboundVariable
+
+        var last: LispValue = Nil
+        try {
+            last = it.evalFile(probe)
+        } finally {
+            removeIfExists(probe, recursive: false)
+            removeIfExists(lib, recursive: false)
+        }
+        match (last) {
+            case LispValue.Int(i) => @Assert(i == 42)
+            case _ => @Fail("a file with no `export` should expose all top-level names, got: ${last.toString()}")
+        }
+    }
 }
 
