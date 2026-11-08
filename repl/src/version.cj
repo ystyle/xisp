@@ -17,7 +17,7 @@ public const XISP_VERSION: String = @ModuleVer("0.5.0")
  *
  * 界面职责：核心只提供「是否显示」的配置查询（`LispInterpreter.shouldShowBanner`）。
  */
-public func printBanner() {
+public func printBanner(): Unit {
     println("╔═══════════════════════════════════════════════════════════╗")
     println("║           星枢 - 仓颉嵌入式 Lisp 脚本语言                 ║")
     println("║                  版本 ${XISP_VERSION}                           ║")
