@@ -96,3 +96,7 @@ cjpm 工作区（`[workspace]`）：每个成员是独立发布的包。模块�
 
 **多包命令**：版本一致性闸门 `cjpm ws check`（workspace 内的本地依赖不校验版本号）；
 单个成员构建 `cjpm build -m <member>`。
+
+**成员配置闸门** `bash scripts/check-members.sh`（已接进 CI）：查 `cjpm ws check` 管不到的部分——
+发布成员的 `include` 必须显式且锚定、中心仓元数据齐全、目录内有 `README.md`、
+库成员禁用 `[replace]`、平台相关配置必须登记在脚本的 `NATIVE_ALLOWED` 白名单里。

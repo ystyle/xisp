@@ -27,6 +27,12 @@ jobs:
       - name: Workspace version gate
         run: cjpm ws check
 
+      # 成员配置闸门：`cjpm ws check` 只管版本 lockstep，管不到制品范围与
+      # 发布元数据。这几类问题只在发版时才爆（0.4.0 的制品把整个 docs-site
+      # 打了进去），到那时已经不可逆 —— 前置到 CI。
+      - name: Member config gate
+        run: bash scripts/check-members.sh
+
       - name: Build
         run: cjpm build
 

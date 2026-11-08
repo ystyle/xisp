@@ -187,7 +187,10 @@
 > 上面两行的实测由 `xisp_tests/src/external_value_test.cj` 覆盖（AST 与字节码两个后端一致）。
 
 返回名称汇总：`nil`、`boolean`、`integer`、`float`、`string`、`symbol`、`list`、`hashmap`、
-`procedure`、`macro`，以及外部值实现方的自定义 `typeName`。
+`procedure`、`macro`、`error`，以及外部值实现方的自定义 `typeName`。
+
+错误值（`Error` 变体）报 `"error"`：脚本侧通常看不到它（实参里出现错误值时，
+调用会先短路传播该错误），但宿主与桥接在检查返回值类型时会直接拿到这个变体。
 
 ::: tip 编译闭包也报 `"procedure"`，没有单独的 `"closure"`
 字节码后端下的 `lambda` 在内部是 `Closure` 变体，但 `type-of` 对它与解释器过程**统一返回

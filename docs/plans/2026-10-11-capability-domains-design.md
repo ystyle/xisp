@@ -828,9 +828,9 @@ public interface LispExternalCallable <: LispExternal {
 | C3 | `External` 变体的归属 | 只加 `External`，还是同时加专用变体（见 sci 文档的比选）；**待拍板** |
 | C4 | 变体与协议命名 | 建议变体 `External` + 协议 `LispExternal`（二者不能同名，§7.2） |
 | C5 | 符号命名策略 | 命名空间（`(import sci.linalg)`）还是前缀（`linalg-`）？待定，与 `LispCapability.symbols` 配套 |
-| C6 | 是否把"`LispValue` 的 match 必须有外部值分支"写成 lint | 加变体时编译器能强制一次，但**将来再加变体还会重演**；建议留一条 CI 检查 |
+| C6 | 是否把"`LispValue` 的 match 必须有外部值分支"写成 lint | **✅ 已落（2026-11-08）**：不改 lint（静态判定"哪些 match 作用在 LispValue 上"不可靠），改用**编译期强制**——`xisp_tests/src/lispvalue_matrix_test.cj` 的 `variantTag` 对 16 个变体**穷尽匹配、无 `case _`**，新增变体时该文件编译失败，作者必须先登记并回答横切语义。同轮它还立即查出 `type-of` 对 `Error` 变体报 `"unknown"`（已修，报 `"error"`）。另附三条横切契约：显示非空、克隆保形、`type-of` 不得为 `unknown` |
 | C7 | stdx 环境变量 | `CANGJIE_STDX_PATH` 路径三段随安装方式而变，CI/容器/新机器默认不存在；对策见 §6.1 —— **不适用于本仓**（2026-11-08 核实：xisp 全工作区 `cjpm.toml` 无任何 stdx 依赖），保留给将来引入 stdx 的扩展模块 |
-| C8 | 多成员样板重复 | `bin-dependencies` / `link-option` 必须在每个要发布的成员里各写全份（cordis-cj 实测 42 处重复），cjpm-ws 目前不同步这类字段。缓解：约定"只有能力域成员才允许出现 stdx 配置" + CI 校验各成员该段一致 |
+| C8 | 多成员样板重复 | `bin-dependencies` / `link-option` 必须在每个要发布的成员里各写全份（cordis-cj 实测 42 处重复），cjpm-ws 目前不同步这类字段。缓解：约定"只有能力域成员才允许出现 stdx 配置" + CI 校验各成员该段一致 —— **✅ 已落（2026-11-08）**：新增 `scripts/check-members.sh` 并接进 CI（`Member config gate`）。检查 `cjpm ws check` **管不到**的部分：`version` 与 `workspace.toml` 一致、`cjc-version` 全体一致、库成员禁 `[replace]`、平台相关配置（`bin-dependencies`/`standard-library`/`link-option`）必须在 `NATIVE_ALLOWED` 白名单内（当前为空）、发布成员的 `include` 显式且**锚定**、中心仓必需元数据齐全、目录内有 `README.md`。已用两处**故意破坏**验证确实会拦（未锚定 `include` / 库里加 `[replace]`） |
 | C10 | 网络域走哪条路 | 应用层走 stdx 还是第三方纯仓颉库，见 §6.2，需按"是否引入 stdx"这一判据调研后再定 |
 
 ---
@@ -970,11 +970,9 @@ public interface LispExternalCallable <: LispExternal {
 **C17**（`after` 显式化，新增 `domainAliases()`）；**C7**（stdx 环境变量）经核实
 **不适用**——全工作区无 stdx 依赖。
 
-**范围内仍未做**（均为"需外部输入"或"建议项"，不阻塞本次重构）：
+**范围内仍未做**（均为"需外部输入"，不阻塞本次重构）：
 
 - **C1** 能力域粒度 —— 需真实宿主诉求；
 - **C2** 域装配与 `ExecutionBackend` 接缝是否合并 —— "成熟后宜统一"，未动；
-- **C6** `LispValue` match 穷尽性的 CI 检查 —— 建议落一条，尚未；
-- **C8** 多成员 `cjpm.toml` 配置一致性的 CI 校验 —— 建议落一条，尚未；
 - **C10** 网络域走 stdx 还是第三方纯仓颉库 —— 待调研；
 - **C3 / C5** `External` 专用变体归属、符号命名策略 —— 下游 sci 族决策，见 sci 文档 §8。

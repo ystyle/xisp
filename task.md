@@ -1067,13 +1067,35 @@ M20 的差分测试只覆盖 AST ↔ 字节码两模式、且**逐表达式**求
 | **C17** 域 `after` 完整性 | 显式化：`domainAliases()` + `macros.core` 补 `symbols` 依赖 |
 | **C7** stdx 环境变量 | **不适用**——全工作区无 stdx 依赖（核实 7 个 `cjpm.toml`） |
 
-### 范围内仍未做（均需外部输入或属建议项）
+### C6 / C8 也落了（原为"建议项"）
 
-- **C6 / C8**：`LispValue` match 穷尽性 CI 检查、多成员 `cjpm.toml` 配置一致性 CI 校验 —— 建议项，尚未落。
+**C6 —— `LispValue` 新增变体的编译期闸门**：不改 lint（静态判定"哪些 `match` 作用在
+`LispValue` 上"不可靠），改用**编译期强制**：`xisp_tests/src/lispvalue_matrix_test.cj`
+的 `variantTag` 对 16 个变体**穷尽匹配、无 `case _`**。将来加变体 → 该文件编译失败 →
+作者必须先登记新变体并回答横切语义，才有机会去核对那些 `case _` 兜底处。
+
+它**上线即查出**一个真缺陷：`type-of` 对 `Error` 变体返回 `"unknown"`（已修，报 `"error"`）。
+另附三条横切契约：显示非空、`cloneValue()` 保形、`type-of` 不得为 `"unknown"`；
+以及真值矩阵（只有 `nil`/`false`/`0`/`0.0` 为假，`External` 恒真）。
+
+**C8 —— 成员配置闸门**：新增 `scripts/check-members.sh` 并接进 CI（`Member config gate`）。
+只查 `cjpm ws check` **管不到**的部分：
+
+- `version` 与 `workspace.toml` 一致、各成员 `cjc-version` 一致；
+- 库成员（`static`）**禁用 `[replace]`**（工作区硬规则：只对本仓生效，下游照样冲突）；
+- 平台相关配置（`bin-dependencies` / `standard-library` / `link-option`）必须在
+  `NATIVE_ALLOWED` 白名单内（当前为空：xisp 零原生依赖）；
+- 发布成员：`include` 显式且**锚定**（0.4.0 就栽在未锚定/漏配，制品把整个 docs-site 打进去）、
+  `license`/`authors`/`repository`/`description` 齐全、目录内有 `README.md`。
+
+已用两处**故意破坏**验证确实会拦（把 `include` 改成未锚定 → exit 1；给 `core` 加 `[replace]` → exit 1）。
+
+### 范围内仍未做（均需外部输入）
+
 - **C1 / C2 / C10**：能力域粒度需真实宿主诉求；域装配与 `ExecutionBackend` 接缝合并"成熟后再说"；网络域待调研。
 - **C3 / C5**：`External` 专用变体归属、符号命名策略 —— 属下游 sci 族决策，不阻塞本次重构。
 
-**验证**：`cjpm build` 通过；`cjpm test` **543/543**；`check-examples.sh` 22/22；
+**验证**：`cjpm build` 通过；`cjpm test` **546/546**；`check-examples.sh` 22/22；`scripts/check-members.sh` 通过；
 三后端差分 64 文件逐文件一致 + 40 文件逐步一致；`cjpm ws check` 通过。
 
 **完成时间**: 2026-11-08（在 `feat/r5rs-symbol-layering` 分支，未合并 master）

@@ -174,6 +174,10 @@ extend BuiltinFunctions {
                 case MacroFromParams(_, _, _) => Str("macro")
                 // 外部值报告实现方声明的类型名（如 "ndarray"），而非笼统的 "external"
                 case External(ext) => Str(ext.typeName)
+                // 错误值也是 LispValue 的一员：宿主/桥接在检查返回值类型时会拿到它，
+                // 报 "unknown" 等于说"我不认识这个变体"，与实际不符。
+                // （脚本侧通常看不到：实参里出现错误值时调用会先短路传播。）
+                case Error(_) => Str("error")
                 case _ => Str("unknown")
             }
         }))
