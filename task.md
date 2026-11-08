@@ -1229,3 +1229,34 @@ public func withLevel(level: XispLevel): InterpreterOption
 
 另列出新增能力（档位、能力域装配、外部值接缝、新内建、②类一等值、可替换性）。
 `docs-site` 的依赖示例版本号同步（`modules.md` / `embedding.md` / `options.md`）。
+
+### 发布结果（2026-11-08）
+
+私有仓预演 → 中心仓按拓扑序逐个发布，**5 个成员全部 `cjpm publish success`**：
+
+| 成员 | 中心仓 `0.6.0` 索引 | 制品 | 顶层内容 |
+|---|---|---|---|
+| `ystyle::xisp` | ✅ | 200 | README.md / cjpm.toml / src（58 个 .cj，含 7 个测试） |
+| `ystyle::xisp_terminal` | ✅ | 200 | 同上（5 个 .cj） |
+| `ystyle::xisp_bc` | ✅ | 200 | 同上（8 个 .cj） |
+| `ystyle::xisp_repl` | ✅ | 200 | 同上（11 个 .cj） |
+| `ystyle::xisp_cli` | ✅ | 200 | 同上（1 个 .cj） |
+
+制品核对：5 个 `.cjp` 解包后**顶层只有 `README.md` / `cjpm.toml` / `src`**，
+无 `docs` / `docs-site` / `examples` / `tests` / `AGENTS.md`；索引声明的 `sha256sum`
+与下载到的制品内容**逐字节一致**。
+
+tag `v0.6.0` 已推送到 `gitcode.com/ystyle/xisp`（master 同步到 `fe95097`）。
+
+### 发版过程中踩到并记录的三件事
+
+1. **`cjpm bundle` 非确定性**：同一份源码连续两次 bundle 的 `.cjp` 字节不同（gzip 时间戳）。
+   于是"同版本覆盖重发"会让私有仓的索引 sha 与制品字节**错开**，下游再拉就报
+   `package was broken while downloading …`。对策：发布一律**只发一次**；预演重复发时
+   必须重新核对索引 sha 与下载字节，不一致就再发一次直到一致。
+2. **cjpm 的索引缓存不区分 registry**：切到私有仓发布后，本地缓存仍是官方仓的视图，
+   下游 bundling 报 `no available version for module … by require '0.6.0'`。
+   对策：每次发布前 `rm -rf ~/.cjpm/repository/index/ystyle`（或 `cjpm update`）。
+3. **中心仓同步延迟**：`publish success` 之后索引与制品分别延迟约 1~3 分钟。
+   按 skill 的有限次重试（1/3/5 分钟）逐个确认 `index` 出现 `"version":"0.6.0"` 且
+   `/pkg/...` 返回 200，再发下一个依赖方 —— 否则下游 bundle 会因解析不到上游而失败。
