@@ -44,7 +44,14 @@ extend BuiltinFunctions {
     public static func domainArithmetic(): LispCapability {
         SimpleCapability("arithmetic",
             ["+", "-", "*", "/", "mod", "round", "min", "max", "sum", "product"],
-            { ctx => registerArithmetic(ctx.env); registerModulo(ctx.env); registerMath(ctx.env) },
+            { ctx =>
+                registerArithmetic(ctx.env)
+                registerModulo(ctx.env)
+                registerMath(ctx.env)
+                // 聚合归约（sum / product / max / min）：语义上是算术，此前却随
+                // `registerHigherOrder` 挂在 list 域，导致"只装 arithmetic 没有 sum"。
+                registerAggregates(ctx.env)
+            },
             escapable: false, hostPolicy: false)
     }
 
@@ -58,24 +65,41 @@ extend BuiltinFunctions {
     /** 列表：`cons car cdr list length append reverse` 等 */
     public static func domainList(): LispCapability {
         SimpleCapability("list",
-            ["cons", "car", "cdr", "list", "length", "nth", "append", "reverse", "range",
-             "car", "cdr", "first", "rest"],
-            { ctx => registerListOps(ctx.env); registerHigherOrder(ctx.env) },
+            ["cons", "car", "cdr", "list", "length", "nth", "append", "reverse", "range"],
+            { ctx => registerListOps(ctx.env); registerListExtras(ctx.env) },
             escapable: false, hostPolicy: false, after: ["base"])
     }
 
-    /** 逻辑与谓词：`not eq? null? number?` 等（`and`/`or` 已降为宏，不在此域） */
+    /**
+     * 谓词：`number?` `string?` `null?` `procedure?` `type-of` `external?` 等
+     *
+     * 与 `logic`（`not` / `eq?`）分开：宿主可能只要布尔运算、不要这一堆类型判断
+     * （谓词是"自省能力"，最小嵌入选它没有意义）。此前两者同挤在一个域。
+     */
+    public static func domainPredicates(): LispCapability {
+        SimpleCapability("predicates",
+            // 注意不含 `hashmap?`：它由 `registerHashMap` 注册（属 hashmap 域）。
+            // 域声明必须与"谁来注册"一致，否则只装 predicates 时它并不存在。
+            ["number?", "string?", "symbol?", "list?", "procedure?", "integer?", "float?",
+             "zero?", "positive?", "negative?", "even?", "odd?", "null?",
+             "external?", "external-type", "type-of"],
+            { ctx => registerPredicates(ctx.env) },
+            escapable: false, hostPolicy: false, after: ["base"])
+    }
+
+    /** 逻辑：`not` `eq?`（`and`/`or` 已降为宏，不在此域；类型谓词见 domainPredicates） */
     public static func domainLogic(): LispCapability {
-        SimpleCapability("logic",
-            ["not", "eq?", "null?", "number?", "string?", "symbol?", "list?",
-             "procedure?", "integer?", "float?", "zero?", "positive?", "negative?"],
-            { ctx => registerLogic(ctx.env); registerPredicates(ctx.env) },
+        SimpleCapability("logic", ["not", "eq?"],
+            { ctx => registerLogic(ctx.env) },
             escapable: false, hostPolicy: false)
     }
 
-    /** 哈希表：`hashmap-*` 与 Redis 风格别名 */
+    /** 哈希表：`hashmap-*` `hashmap?` 与 Redis 风格别名 */
     public static func domainHashMap(): LispCapability {
-        SimpleCapability("hashmap", ["hashmap", "hashmap-get", "hashmap-set!", "hashmap-keys"],
+        SimpleCapability("hashmap",
+            ["hashmap", "hashmap-get", "hashmap-set!", "hashmap-remove!", "hashmap-contains?",
+             "hashmap-keys", "hashmap-values", "hashmap-size", "hashmap?",
+             "hget", "hset", "hdel", "hexists", "contains?", "hkeys", "hvals", "hlen", "hgetall"],
             { ctx =>
                 registerHashMap(ctx.env)
                 registerRedisAliases(ctx.env)
@@ -164,6 +188,7 @@ extend BuiltinFunctions {
             domainComparison(),
             domainList(),
             domainLogic(),
+            domainPredicates(),
             domainHashMap(),
             domainString(),
             domainPrint(),

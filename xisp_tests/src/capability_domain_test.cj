@@ -9,6 +9,8 @@ import ystyle::xisp.core.builtin.*
 import std.unittest.*
 import std.unittest.testmacro.*
 import std.collection.ArrayList
+import std.collection.HashMap
+import std.collection.HashSet
 
 /**
  * 能力域装配（能力域设计 §4，接缝 1/2）
@@ -263,6 +265,86 @@ class CapabilityDomainTest {
             @Fail("域声明了但未安装的符号: ${missing}")
         }
         println("✓ 所有域的 symbols 声明均已实际安装")
+    }
+
+    /** 按 `after` 传递闭包取出"装这个域所需的最小域集合"（含自身） */
+    func withDeps(domain: LispCapability): Array<LispCapability> {
+        let all = BuiltinFunctions.coreDomains()
+        let byName = HashMap<String, LispCapability>()
+        for (d in all) {
+            byName[d.name] = d
+        }
+        let picked = ArrayList<LispCapability>()
+        let seen = HashSet<String>()
+        var frontier = ArrayList<String>()
+        frontier.add(domain.name)
+        for (dep in domain.after) {
+            frontier.add(dep)
+        }
+        while (frontier.size > 0) {
+            let name = frontier[frontier.size - 1]
+            frontier.remove((frontier.size - 1)..frontier.size)
+            if (seen.contains(name)) {
+                continue
+            }
+            seen.add(name)
+            match (byName.get(name)) {
+                case Some(d) =>
+                    picked.add(d)
+                    for (dep in d.after) {
+                        frontier.add(dep)
+                    }
+                case None => ()   // 不在 coreDomains 里的依赖（如宿主自定义域）忽略
+            }
+        }
+        // 保证自身在内（域名可能与传入对象不同，按名字兜底）
+        var hasSelf = false
+        for (d in picked) {
+            if (d.name == domain.name) {
+                hasSelf = true
+            }
+        }
+        if (!hasSelf) {
+            picked.add(domain)
+        }
+        picked.toArray()
+    }
+
+    /**
+     * **每个域单独安装后，它声明的 `symbols` 必须真的都在**（回归，C1 的护栏）
+     *
+     * 只测 `presetFull` 是不够的：12 个域全装时，A 域声明了却由 B 域注册的符号
+     * 照样存在，缺陷被掩盖。实测曾有三组这样的错位：
+     * · `sum` / `product` / `max` / `min` 声明在 arithmetic，实际由 list 域的
+     *   `registerHigherOrder` 注册 → 只装 arithmetic 时全缺；
+     * · `external?` / `type-of` 等谓词与 `not` / `eq?` 同挤在 logic 域；
+     * · `first` / `rest` 声明在 list 域，实际由 aliases 域的 `registerModernAliases` 注册。
+     *
+     * 现在域边界与注册器边界一一对应，本用例逐域钉住这一点。
+     */
+    @TestCase
+    func testEachDomainDeclaresTruthfully() {
+        println("\n=== 逐域：声明 == 实际安装 ===")
+        // 关键字别名不是环境绑定（走 alias 表），单独豁免
+        let keywordAliases = ["setq", "progn"]
+        var problems = ArrayList<String>()
+        for (d in BuiltinFunctions.coreDomains()) {
+            let env = Environment()
+            BuiltinFunctions.installDomains(env, this.withDeps(d))
+            for (sym in d.symbols) {
+                if (keywordAliases.contains(sym)) {
+                    continue
+                }
+                match (env.lookup(sym)) {
+                    case Error(_) => problems.add("[${d.name}] 声明了 ${sym} 但单独装该域（含 after 依赖）后不可用")
+                    case _ => ()
+                }
+            }
+        }
+        if (problems.size > 0) {
+            @Fail("域声明与实际安装不一致：\n  " + problems.toArray().toString())
+        }
+        println("✓ ${BuiltinFunctions.coreDomains().size} 个域，逐个单独安装（含 after 依赖）后 symbols 全部可用")
     }
 
     /**

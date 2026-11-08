@@ -1090,12 +1090,49 @@ M20 的差分测试只覆盖 AST ↔ 字节码两模式、且**逐表达式**求
 
 已用两处**故意破坏**验证确实会拦（把 `include` 改成未锚定 → exit 1；给 `core` 加 `[replace]` → exit 1）。
 
+### C1 域边界对齐（2026-11-08）
+
+**结论：C1 之前不是"待宿主诉求"，而是根本还没开始。** 域边界与注册器边界不一致，
+导致"声明 ≠ 安装"，粒度无从谈起。
+
+实测（只装单个域，不是 `presetFull`）：
+
+```
+只装 arithmetic 域： (sum '(1 2)) => UndefinedFunction   ← 声明里有 sum
+只装 list 域：       (sum '(1 2)) => 3                   ← sum 实际挂这里
+```
+
+| # | 错位 | 修法 |
+|---|---|---|
+| 1 | `sum`/`product`/`max`/`min` 声明在 arithmetic，随 `registerHigherOrder` 挂在 list | 拆出 `registerAggregates`，归 arithmetic |
+| 2 | `reverse`/`range` 与聚合混在 `registerHigherOrder` | 拆出 `registerListExtras`，归 list |
+| 3 | `not`/`eq?` 与 14 个类型谓词同挤 logic | 拆成 `logic` + 新域 `predicates` |
+| 4 | `first`/`rest` 声明在 list 域，实际由 aliases 域注册 | 从 list 声明移除 |
+| 5 | `hashmap?` 由 `registerHashMap` 注册却不属任何域声明 | 归 hashmap 域；同时补齐该域漏声明的 9 个 Redis 别名 |
+
+域数 **12 → 13**。护栏：`testEachDomainDeclaresTruthfully` —— **每个域单独安装
+（连同 `after` 依赖的传递闭包）后，其 `symbols` 必须全部可用**。它上来就抓出第 5 条；
+此前只测"全装 `presetFull`"，A 域声明、B 域注册的错位在里面照样通过。
+
+C1 现在能回答的部分：
+
+- 粒度**只作用于③类注册函数**。①原语与②求值器拦截（`map`/`filter`/`reduce`/`apply`/
+  `eval`/`->`/`for-each`）**不属任何域**，域装配动不了 → 原始例子"不要高阶函数"**做不到**，
+  根因在②类（§5.3 已记录的边界），不是粒度。
+- 能做的现在成立了：只装 `arithmetic` 确实没有 `sum/max`，只装 `list` 确实没有聚合，
+  只装 `logic` 确实没有谓词。
+- 真实诉求现状：下游 `atelier`（`ptc/runtime.cj:88`）与 `cordis_xisp`（`runtime.cj:184`）
+  都只用 `registerPure(env, output:)` 一档，**没有宿主在挑域**。所以"要不要更细"仍无驱动；
+  但两档已等价，将来换 `withPreset(presetPure()` 不会变行为。
+
 ### 范围内仍未做（均需外部输入）
 
-- **C1 / C2 / C10**：能力域粒度需真实宿主诉求；域装配与 `ExecutionBackend` 接缝合并"成熟后再说"；网络域待调研。
+- **C1 的更细拆分 / C2 / C10**：是否把 `arithmetic` 再拆 `math`、`predicates` 按族拆
+  （需真实诉求，多一个域宿主就多记一个名字）；域装配与 `ExecutionBackend` 接缝合并
+  "成熟后再说"；网络域待调研。
 - **C3 / C5**：`External` 专用变体归属、符号命名策略 —— 属下游 sci 族决策，不阻塞本次重构。
 
-**验证**：`cjpm build` 通过；`cjpm test` **546/546**；`check-examples.sh` 22/22；`scripts/check-members.sh` 通过；
+**验证**：`cjpm build` 通过；`cjpm test` **547/547**；`check-examples.sh` 22/22；`scripts/check-members.sh` 通过；
 三后端差分 64 文件逐文件一致 + 40 文件逐步一致；`cjpm ws check` 通过。
 
 **完成时间**: 2026-11-08（在 `feat/r5rs-symbol-layering` 分支，未合并 master）

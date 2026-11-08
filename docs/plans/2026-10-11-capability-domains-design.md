@@ -369,13 +369,15 @@ public class MacroPackCapability <: LispCapability {
 `registerAll` / `registerPure` 重新表述为**预置组合**，而非两个函数：
 
 ```cangjie
-// core 内置域（实际 12 个，见 core/src/core/builtin/domains.cj）
+// core 内置域（实际 13 个，见 core/src/core/builtin/domains.cj）
+// **每个域与一个注册器一一对应**，`symbols` 声明即"该域安装后确实可用"的符号集。
 BuiltinFunctions.domainBase()          // nil
-BuiltinFunctions.domainArithmetic()    // + - * / mod round min max sum product
+BuiltinFunctions.domainArithmetic()    // + - * / mod round sum product max min
 BuiltinFunctions.domainComparison()    // = < > <= >=
-BuiltinFunctions.domainList()          // cons car cdr list length nth append reverse range + 高阶（map/filter/reduce/for-each）
-BuiltinFunctions.domainLogic()         // not eq? null? number? 等谓词
-BuiltinFunctions.domainHashMap()       // hashmap-* 与 Redis 风格别名
+BuiltinFunctions.domainList()          // cons car cdr list length nth append reverse range
+BuiltinFunctions.domainLogic()         // not eq?
+BuiltinFunctions.domainPredicates()    // number? string? null? procedure? type-of external? …
+BuiltinFunctions.domainHashMap()       // hashmap-* hashmap? 与 Redis 风格别名
 BuiltinFunctions.domainString()        // str / string-length / string=? …（纯计算）
 BuiltinFunctions.domainPrint()         // print / println / princ / newline / display（hostPolicy）
 BuiltinFunctions.domainSymbols()       // gensym
@@ -389,6 +391,11 @@ BuiltinFunctions.presetPure()   // 按 !escapable && !hostPolicy 推导（§4.4�
 withDomains([domainArithmetic(), domainList(), MyOwnDomain])   // 宿主自定义组合
 ```
 
+> **域边界 = 注册器边界**（2026-11-08 对齐）：曾经 `arithmetic` 捆绑 3 个注册器、
+> `list` 还捎带 `sum/product/max/min`、`logic` 捆绑全部谓词，导致"声明 ≠ 安装"
+> ——`sum` 声明在算术域却只在 `list` 域装得上。现在一个域装一个（或一组同语义的）
+> 注册器，`symbols` 声明即事实；逐域护栏见 `testEachDomainDeclaresTruthfully`。
+>
 > **两档装配不再各有清单**：`registerAll` = `installDomains(env, presetFull())`，
 > `registerPure` = `installDomains(env, presetPure())` + 可选输出接管。
 > 此前是两份平行清单（`registerAll` 逐个调注册器、域集合另列一份），
@@ -814,7 +821,7 @@ public interface LispExternalCallable <: LispExternal {
 
 | # | 项 | 说明 |
 |---|---|---|
-| C1 | 能力域粒度 | core 域的按域装配是否需要（如"只要算术+表，不要高阶函数"），需真实宿主诉求来定 |
+| C1 | 能力域粒度 | core 域的按域装配是否需要（如"只要算术+表，不要高阶函数"），需真实宿主诉求来定 —— **✅ 已对齐（2026-11-08）**：先修了 5 处"声明 ≠ 安装"的边界错位（域 12 → 13），逐域护栏 `testEachDomainDeclaresTruthfully` 钉住；原始例子「不要高阶函数」**做不到**，因为 `map/filter/reduce/apply/eval/->/for-each` 是②类、不属任何域（§5.3 的边界，非粒度问题）。更细的拆分（`arithmetic` 再拆 `math`、`predicates` 按族拆）**等真实诉求**，见 §12.5 |
 | C2 | 域装配与执行后端接缝是否合并 | §4.1 的 `LispCapability` 与工作区化文档 §3.2 的 `ExecutionBackend` 形态相近，成熟后宜统一 |
 | C9 | `registerPure` 的归宿 | 收敛为 preset（§4.3）还是保留函数形态？改动会影响 atelier 的手工装配路径（§5.1） —— **✅ 已收口（2026-11-08）：保留函数签名、内部改为 `installDomains(env, presetPure())` 的委托**。调用方（含 atelier 式手工装配）无需改动；两档装配从此只有一份装配逻辑，等价性由 `testPresetPureCoversRegisterPure` / `testPresetFullCoversRegisterAll` 反向钉住 |
 | C12 | `PRESET_PURE` 用减法还是显式列表 | core 内部按 `escapable`/`hostPolicy` **推导**（推荐，默认安全）；宿主做减只能自己列域。需确认"新增域默认 `escapable=true`"不会意外排除现有域 —— **✅ 已确认（2026-11-08）**：`SimpleCapability` 的 `escapable!` 默认值确为 `true`（`capability.cj:127`），新增域默认落在 pure 之外（默认安全）。同时发现推导本身把 3 个纯域误判为不纯（`print` 域混装字符串计算、`macros.core` 误标 escapable），已订正，见 §12.4 |
@@ -972,7 +979,50 @@ public interface LispExternalCallable <: LispExternal {
 
 **范围内仍未做**（均为"需外部输入"，不阻塞本次重构）：
 
-- **C1** 能力域粒度 —— 需真实宿主诉求；
+- **C1** 能力域粒度 —— 边界已对齐（§12.5），「更细要不要拆」需真实宿主诉求；
 - **C2** 域装配与 `ExecutionBackend` 接缝是否合并 —— "成熟后宜统一"，未动；
 - **C10** 网络域走 stdx 还是第三方纯仓颉库 —— 待调研；
 - **C3 / C5** `External` 专用变体归属、符号命名策略 —— 下游 sci 族决策，见 sci 文档 §8。
+
+### 12.5 C1「域边界对齐注册器」（2026-11-08）
+
+结论先说：**C1 之前不是"待宿主诉求"，而是根本还没开始** —— 域边界与注册器边界不一致，
+导致"声明 ≠ 安装"，粒度无从谈起。实测（只装单个域，不是 `presetFull`）：
+
+```
+只装 arithmetic 域：
+  (sum '(1 2))      => [UndefinedFunction]   ← 但 domainArithmetic.symbols 声明了 sum
+  (max 1 2)         => [UndefinedFunction]
+只装 list 域：
+  (sum '(1 2))      => 3                     ← sum 实际挂在这里
+```
+
+| # | 错位 | 原状 | 对齐后 |
+|---|---|---|---|
+| 1 | `sum` / `product` / `max` / `min` | 声明在 `arithmetic`，由 `registerHigherOrder` 注册、随 `list` 域安装 | 从 `registerHigherOrder` 拆出 `registerAggregates`，归 `arithmetic` 域 |
+| 2 | `reverse` / `range` | 与聚合函数混在 `registerHigherOrder` | 拆出 `registerListExtras`，归 `list` 域 |
+| 3 | `not` / `eq?` 与 14 个类型谓词 | 同挤在 `logic` 域 | 拆成 `logic` 与新的 `predicates` 域 |
+| 4 | `first` / `rest` | 声明在 `list` 域，实际由 `aliases` 域的 `registerModernAliases` 注册 | 从 `list` 声明中移除（`aliases` 域已声明） |
+| 5 | `hashmap?` | 由 `registerHashMap` 注册，却不属任何域的声明 | 归 `hashmap` 域声明；同时把该域漏声明的 9 个 Redis 别名补齐 |
+
+域数 **12 → 13**（新增 `predicates`）。护栏是逐域用例 `testEachDomainDeclaresTruthfully`：
+**每个域单独安装（连同其 `after` 依赖的传递闭包）后，其 `symbols` 声明必须全部可用**。
+它上来就抓出了第 5 条。此前只有"全装 `presetFull`"的弱检查，A 域声明、B 域注册的错位
+在那里面照样通过。
+
+#### C1 现在能被回答的部分
+
+- **粒度只作用在③类注册函数**（§5.3 的边界，不是缺陷）：①语言原语与②求值器拦截的
+  `map` / `filter` / `reduce` / `apply` / `eval` / `->` / `for-each` **不属任何域**，
+  域装配动不了它们。所以"只要算术+表、不要高阶函数"这个原始例子**做不到**，
+  原因在②类，不在粒度。
+- **能做的部分现在成立了**：宿主可以只装 `arithmetic` 而没有 `sum/max`，只装 `list`
+  而没有聚合，只装 `logic` 而没有谓词 —— 每个域的 `symbols` 就是它给环境带来的全部符号。
+- **真实诉求现状**（2026-11-08 核实）：下游 `atelier`（`ptc/runtime.cj:88`）与
+  `cordis_xisp`（`runtime.cj:184`）都只用 `registerPure(env, output:)` 一档，
+  没有宿主在挑域。所以"要不要更细"仍无需求驱动；但两档装配已等价（§12.4），
+  将来换 `withPreset(presetPure()` 不会改变行为。
+
+**仍待外部诉求**：是否需要把 `arithmetic` 再拆成 `arithmetic`（`+ - * /`）与 `math`
+（`mod` / `round` / 聚合），或把 `predicates` 按类型族细分。没有宿主诉求前不预拆
+——每多一个域，宿主就要多记一个名字。

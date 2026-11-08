@@ -322,10 +322,11 @@ class ExternalValueTest {
             escapable: false, hostPolicy: false
         )
         // 注意 replace: true 会清空默认装配，故需显式声明用到的域：
-        // logic 提供 `external?`/`type-of`，list 提供 `length`
+        // predicates 提供 `external?` / `type-of`，list 提供 `length`。
+        // （`external?` 原先挂在 logic 域，按"域边界对齐注册器"拆分后归 predicates。）
         let it = LispInterpreter([withQuietMode(), withDomains([
             BuiltinFunctions.domainBase(),
-            BuiltinFunctions.domainLogic(),
+            BuiltinFunctions.domainPredicates(),
             BuiltinFunctions.domainList(),
             domain,
         ], replace: true)])

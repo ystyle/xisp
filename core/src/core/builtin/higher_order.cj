@@ -11,7 +11,14 @@ import std.collection.ArrayList
  * 支持整数和浮点数
  */
 extend BuiltinFunctions {
-    static func registerHigherOrder(env: Environment) {
+    /**
+     * 聚合函数：`sum` `product` `max` `min`
+     *
+     * 与 `registerListExtras` 分开：聚合是**算术归约**（`(sum lst)` 返回一个数），
+     * 而 `reverse` / `range` 是**列表构造**。原先两者同在一个 `registerHigherOrder`
+     * 里，域边界无处安放 —— `sum` 只能跟着 `list` 域走，而它的语义属于算术。
+     */
+    static func registerAggregates(env: Environment) {
         // map, filter, reduce 已作为特殊形式实现，见 eval_higher_order.cj
 
         // (sum lst) - 求和
@@ -258,6 +265,10 @@ extend BuiltinFunctions {
             }
         }))
 
+    }
+
+    /** 列表构造：`reverse` `range` */
+    static func registerListExtras(env: Environment) {
         // (reverse lst) - 反转列表
         env.define("reverse", NativeFunc({ args =>
             if (args.size != 1) {
