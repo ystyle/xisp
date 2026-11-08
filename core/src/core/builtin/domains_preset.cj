@@ -48,6 +48,29 @@ extend BuiltinFunctions {
     }
 
     /**
+     * 表达式层：**纯计算，无元编程**。
+     *
+     * = `presetPure` 去掉两处"只服务元编程"的域：
+     * - `macros.core`（④层宏包）—— 宏是语法层设施，宿主只想求值表达式时不需要；
+     * - `symbols`（`gensym`）—— 它为**非卫生宏**存在，没有宏就没有意义。
+     *
+     * 仍然包含数据结构（哈希表）、字符串计算、谓词、错误辅助与别名 ——
+     * 这些是"算出一个值"就会用到的东西。不含输出域（`hostPolicy`），
+     * 输出通道由宿主用 `output` 接管。
+     */
+    public static func exprDomains(): Array<LispCapability> {
+        let result = ArrayList<LispCapability>()
+        for (d in presetPure()) {
+            match (d.name) {
+                case "macros.core" => ()
+                case "symbols" => ()
+                case _ => result.add(d)
+            }
+        }
+        result.toArray()
+    }
+
+    /**
      * 按 `after` 约束给域排序（拓扑序，稳定性由原顺序保证）。
      *
      * 顺序敏感是既有事实：`registerModernAliases` 依赖"在所有原函数注册完之后"。

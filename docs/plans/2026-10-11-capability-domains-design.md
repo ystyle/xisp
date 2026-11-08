@@ -433,6 +433,32 @@ public func withPreset(preset: Array<LispCapability>): InterpreterOption
 不动现有 31 个 `withXxx` 的心智模型，只把"装哪些符号"从两个硬编码函数扩展成
 "可选组合 + 自定义域"。
 
+### 4.5.1 装配档位（`XispLevel`）—— 宿主只选一档
+
+域是"细粒度零件"，但多数宿主不想逐个挑。于是再上一层：**命名档位**。
+
+```cangjie
+public enum XispLevel { | Expr | Pure | Script }
+public func withLevel(level: XispLevel): InterpreterOption
+```
+
+| 档位 | 域集合 | 说明 |
+|---|---|---|
+| `Expr` | `exprDomains()` = `presetPure` 去掉 `macros.core` 与 `symbols` | 纯计算：**无宏、无 `gensym`、无输出**。宿主只想"算出一个值"时用 |
+| `Pure` | `presetPure()` | `Expr` + ④层宏包 + `gensym`；仍无输出（宿主用 `output` 接管） |
+| `Script` | `presetFull()` + `std.io` / `std.fs` / `std.collection` | 脚本 / CLI 全量 |
+
+三条不变量（都有用例钉住）：
+
+1. **严格包含**：`Expr ⊂ Pure ⊂ Script`（实测符号数 92 / 109 / 114）；
+2. **独占装配**：档位先 `clearEnvironmentBindings()` + `markDomainsExclusive()`，
+   结果与"解释器默认装了什么"无关；之后再 `withDomains(...)` 只做追加；
+3. **与策略正交**：档位只管"装哪些能力"，`withSandbox` / `withTimeout` /
+   `withMaxStackDepth` 等管"允许做什么"，可任意叠加。
+
+档位不是第四套清单：`Expr` 由 `presetPure` **减去两域**得出，`Pure` = `presetPure`，
+`Script` = `presetFull` + 桥接。所以新增域只需判断属性，档位自动跟上。
+
 ### 4.6 域清单与现状
 
 **A. core 域（编译进 core；目前大多无开关，建议按 §4.1 补上按域装配）**
@@ -1026,3 +1052,22 @@ public interface LispExternalCallable <: LispExternal {
 **仍待外部诉求**：是否需要把 `arithmetic` 再拆成 `arithmetic`（`+ - * /`）与 `math`
 （`mod` / `round` / 聚合），或把 `predicates` 按类型族细分。没有宿主诉求前不预拆
 ——每多一个域，宿主就要多记一个名字。
+
+### 12.6 装配档位落地，以及"清空环境"的两个后遗症（2026-11-08）
+
+新增 `XispLevel`（`Expr` / `Pure` / `Script`）+ `withLevel()`：宿主选一档，
+不再需要知道 13 个域的名字。`Expr` 由 `presetPure` 减去 `macros.core` 与 `symbols`
+推导，`Script` = `presetFull` + 标准库桥接 —— 档位本身不维护第四套清单。
+
+落地时暴露出 `clearEnvironmentBindings()`（独占装配的唯一入口）的**两个后遗症**：
+
+| # | 后遗症 | 现象 | 修法 |
+|---|---|---|---|
+| 1 | 换环境后**不重建 ②类一等值** | `withDomains(…, replace: true)` 之后 `(procedure? map)` → `UnboundVariable: map`；而 `(map f lst)` 照样能跑（走求值器快速路径）→ 看着"还能用"，实际已不能作为值传递 | `clearEnvironmentBindings()` 里重置 `firstClassValuesInstalled`，并按 `firstClassValuesEnabled` 立即重建 |
+| 2 | 换环境后**桥接仍指向旧环境** | `withLevel(Script)` 之后 `cangjie::exists?` 不存在，而默认构造有 —— `BridgeManager` 把符号注册进它构造时持有的那个环境 | `BridgeManager.retarget(env)`，`clearEnvironmentBindings()` 里同步调用 |
+
+两条都是"换环境后没把**持有环境引用的组件**一起换掉"，属同一类缺陷；`reset()` 因为
+重建了整个 `BridgeManager` 而没踩到第 2 条，`clearEnvironmentBindings()` 没重建才暴露。
+
+用例：`xisp_tests/src/level_test.cj` 6 条（档位内容 / 严格包含 / 独占 / 与沙箱叠加 /
+`replace` 后一等值仍在 / `withNoFirstClassValues` 仍生效）。

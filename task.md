@@ -24,6 +24,7 @@
 - ✅ M21: 错误传播语义统一 + 三后端差分闸门
 - ✅ M22: 收尾审计（5 个「看起来在跑、实际没跑」的东西）
 - ✅ M23: 域装配 5 处缺陷订正 + 两档装配收敛
+- ✅ M24: 装配档位 XispLevel（Expr / Pure / Script）
 
 ---
 
@@ -1136,3 +1137,62 @@ C1 现在能回答的部分：
 三后端差分 64 文件逐文件一致 + 40 文件逐步一致；`cjpm ws check` 通过。
 
 **完成时间**: 2026-11-08（在 `feat/r5rs-symbol-layering` 分支，未合并 master）
+
+---
+
+## M24: 装配档位 `XispLevel` ✅
+
+宿主不想逐个挑 13 个域，于是再上一层：**命名档位**。
+
+```cangjie
+public enum XispLevel { | Expr | Pure | Script }
+public func withLevel(level: XispLevel): InterpreterOption
+```
+
+| 档位 | 域集合 | 说明 |
+|---|---|---|
+| `Expr` | `exprDomains()` = `presetPure` − `macros.core` − `symbols` | 纯计算：**无宏、无 `gensym`、无输出**，只要"算出一个值" |
+| `Pure` | `presetPure()` | `Expr` + ④层宏包 + `gensym`；仍无输出 |
+| `Script` | `presetFull()` + `std.io`/`std.fs`/`std.collection` | 脚本 / CLI 全量 |
+
+### 三条不变量（均有用例）
+
+1. **严格包含** `Expr ⊂ Pure ⊂ Script` —— 实测符号数 **92 / 109 / 114**；
+2. **独占装配**：先 `clearEnvironmentBindings()` + `markDomainsExclusive()`，
+   结果与"解释器默认装了什么"无关；之后再 `withDomains(...)` 只追加；
+3. **与策略正交**：档位管"装哪些能力"，`withSandbox`/`withTimeout`/`withMaxStackDepth`
+   管"允许做什么"，可任意叠加。
+
+档位不维护第四套清单：`Expr` 由 `presetPure` 推导，`Pure` = `presetPure`，
+`Script` = `presetFull` + 桥接。新增域只需判断属性，档位自动跟上。
+
+### 顺带修掉 `clearEnvironmentBindings()` 的两个后遗症
+
+都是"换环境后没把**持有环境引用的组件**一起换掉"：
+
+| # | 后遗症 | 现象 | 修法 |
+|---|---|---|---|
+| 1 | 不重建 ②类一等值 | `withDomains(…, replace: true)` 后 `(procedure? map)` → `UnboundVariable`，而 `(map f lst)` 照样能跑（快速路径）→ 看着"还能用"，实际不能作值传递 | 重置 `firstClassValuesInstalled` 并按开关立即重建 |
+| 2 | 桥接仍指向旧环境 | `withLevel(Script)` 后 `cangjie::exists?` 不存在，默认构造却有 | 新增 `BridgeManager.retarget(env)`，清空时同步调用 |
+
+`reset()` 因为重建了整个 `BridgeManager` 没踩到第 2 条；`clearEnvironmentBindings()`
+没重建才暴露。
+
+### 文档
+
+- 用户文档 `docs-site/integration/options.md`：新增「装配档位（宿主首选）」与
+  **「能力域装配」**两节（后者此前**完全没有**——13 个域、两个预置、自定义域、
+  `CapabilityContext`、中断义务、以及"域装配动不了①②类"的边界都是首次成文）；
+  速查表补 `withLevel` / `withDomains` / `withPreset` / `presetFull` / `presetPure` /
+  `withNoFirstClassValues`。
+- 设计文档：新增 §4.5.1（档位三条不变量）与 §12.6（档位落地 + 两个后遗症）。
+
+### 用例
+
+`xisp_tests/src/level_test.cj` 6 条：档位内容 / 严格包含 / 独占装配 / 与沙箱叠加 /
+`replace` 后一等值仍在 / `withNoFirstClassValues` 仍生效。
+
+**验证**：`cjpm build` 通过；`cjpm test` **554/554**；`check-examples.sh` 22/22；
+`scripts/check-members.sh` 通过。
+
+**完成时间**: 2026-11-08（分支 `feat/r5rs-symbol-layering`，未合 master）

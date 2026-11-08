@@ -19,6 +19,149 @@ let interpreter = LispInterpreter([
 
 ---
 
+## 装配档位（宿主首选）
+
+不想逐个挑能力域时，用**档位**一次性配好 —— `withLevel(level)` 会**独占装配**：
+先清空环境，只装该档需要的域，结果与"解释器默认装了什么"无关，可复现。
+
+| 档位 | 装什么 | 典型用途 |
+|------|--------|----------|
+| `XispLevel.Expr` | 纯计算：算术 / 比较 / 列表 / 逻辑 / 谓词 / 字符串 / 哈希表 / 错误 / 别名。**无宏、无 `gensym`、无输出** | 公式、规则、表达式求值 —— 只要算出一个值 |
+| `XispLevel.Pure` | `Expr` + ④层宏包（`when` / `unless` / `incf` / `defun` …）+ `gensym`。仍然无输出 | 需要语法糖的嵌入场景 |
+| `XispLevel.Script` | 全量域 + `std.io` / `std.fs` / `std.collection` | 脚本 / CLI：读写文件、模块加载、打印 |
+
+三档是**严格包含**关系：`Expr ⊂ Pure ⊂ Script`。
+
+```cangjie
+// 规则求值：没有 println，也不可能读写文件
+let calc = LispInterpreter([withLevel(XispLevel.Expr)])
+calc.eval("(+ 1 2)")      // => 3
+calc.eval("(when #t 1)")  // => [UndefinedFunction] 'when'（Expr 档无宏包）
+calc.eval("(println 1)")  // => [UndefinedFunction] 'println'（Expr 档无输出域）
+
+// 脚本：全量 + 标准库，再叠一层沙箱
+let script = LispInterpreter([withLevel(XispLevel.Script), withSandbox()])
+```
+
+::: tip 档位只管「装哪些能力」，不管「允许做什么」
+`withSandbox` / `withTimeout` / `withMaxStackDepth` / `withAllowedPaths` 等策略选项
+与档位**正交**，可任意叠加。
+:::
+
+::: warning 独占装配会清空环境
+- 档位选项应**只出现一个**（多个时以最后应用的为准）；
+- 在档位之后再 `withDomains(...)` 只做**追加**，不会把默认全量装回来；
+- `clearEnvironmentBindings()` 换环境时会一并重建 ②类符号的一等值（`map` / `filter` / …）
+  与桥接目标，`withNoFirstClassValues()` 的关闭状态仍然有效。
+:::
+
+需要更细的控制时，用 `withDomains` / `withPreset` 自己组合域集合（见[能力域](#能力域装配)）。
+
+---
+
+## 能力域装配
+
+「能力域」是**一个域 = 一组顶层符号 + 一份安装函数**的抽象。core 内置 13 个域，
+宿主也可以自己造域（这是宿主扩展解释器的唯一入口）。
+
+### 内置域
+
+| 域 | 符号 | 属性 |
+|----|------|------|
+| `base` | `nil` | — |
+| `arithmetic` | `+ - * / mod round sum product max min` | — |
+| `comparison` | `= < > <= >=` | — |
+| `list` | `cons car cdr list length nth append reverse range` | — |
+| `logic` | `not eq?` | — |
+| `predicates` | `number? string? symbol? list? procedure? integer? float? zero? positive? negative? even? odd? null? external? external-type type-of` | — |
+| — | `hashmap?` 在 `hashmap` 域（由 `registerHashMap` 注册） | — |
+| `hashmap` | `hashmap hashmap-get hashmap-set! hashmap-remove! hashmap-contains? hashmap-keys hashmap-values hashmap-size hashmap? hget hset hdel hexists contains? hkeys hvals hlen hgetall` | — |
+| `string` | `str string-length string=? string< string> string-contains?` | — |
+| `print` | `print println princ newline display` | `hostPolicy`（触及宿主输出通道） |
+| `symbols` | `gensym` | — |
+| `aliases` | `first rest second third fourth prepend more cadr caddr cadddr cddr cdar caar setq progn string-append` | `after: base, list, string` |
+| `error` | `error raise assert` | — |
+| `macros.core` | 16 个内建宏（`when` / `unless` / `condb` / `if-let` / `let*` / `when-let*` / `and` / `or` / `incf` / `decf` / `negate` / `swap` / `push` / `pop` / `do` / `defun`） | `evalSource` 形态 |
+
+**域的 `symbols` 声明就是契约**：单独装这个域（连同它 `after` 依赖的传递闭包）后，
+声明里的符号全部可用。
+
+### 两个预置组合
+
+| 组合 | 内容 | 用途 |
+|------|------|------|
+| `presetFull()` | 全部 13 个域 | 「全量」，与 `LispInterpreter()` 默认装配等价 |
+| `presetPure()` | 按属性推导：`!escapable && !hostPolicy` | 纯函数子集；**不含** `print` 域，输出由宿主用 `output` 接管 |
+
+`presetPure()` 是**推导**出来的，不是手写清单 —— 新增域默认 `escapable = true`，
+因此不会意外进入纯函数子集（默认安全）。
+
+```cangjie
+// 独占装配：清空默认全量，只留纯函数子集
+let pure = LispInterpreter([withPreset(presetPure(), replace: true)])
+
+// 追加：在默认全量之上再加自己的域
+let extended = LispInterpreter([withDomains([myDomain])])
+```
+
+### 自己造域
+
+```cangjie
+public class MyCap <: LispCapability {
+    public prop name: String { get() { "my.cap" } }
+    public prop symbols: Array<String> { get() { ["my-fn"] } }
+    public prop escapable: Bool { get() { false } }     // 能否绕过权限检查
+    public prop hostPolicy: Bool { get() { false } }    // 是否触及宿主资源
+    public prop after: Array<String> { get() { [] } }   // 安装顺序约束
+
+    public func install(ctx: CapabilityContext): Unit {
+        ctx.register("my-fn", { args => LispValue.Int(42) })
+        // 声明外部类型名（供沙箱审计）
+        // ctx.registerType("my-object")
+    }
+}
+```
+
+也可以直接用 `SimpleCapability`：
+
+```cangjie
+let domain = SimpleCapability("demo.counterbox", ["make-box"],
+    { ctx =>
+        ctx.register("make-box", { args => LispValue.External(CounterBox(0)) })
+        ctx.registerType("counter-box")
+    },
+    escapable: false, hostPolicy: false)
+```
+
+`CapabilityContext` 提供：
+
+| 成员 | 用途 |
+|------|------|
+| `env` | 目标环境（直接 `define` 也可以） |
+| `register(name, handler)` | 注册一个仓颉侧函数 |
+| `registerType(name)` | 声明一个外部类型名（沙箱审计用） |
+| `invoke(fn, args)` | 以**求值器语义**调用一个 Lisp 函数值（能调闭包与宏以外的一切可调用值） |
+| `evalSource(source)` | 用 Lisp 源码安装一域（**宿主安装期**行为，不受脚本侧 `eval` 权限约束） |
+| `isInterrupted` | 中断检查器 |
+
+::: warning 长循环必须查中断
+外部域中任何与元素数 / 迭代步数相关的循环，都要周期性调用 `ctx.isInterrupted()`，
+为真时返回错误值（`Error` + `INTERRUPTED_MESSAGE`）。不查中断的话，宿主**杀不掉**
+一个跑几十秒的循环 —— 详见 `core/README.md`「扩展模块的中断义务」。
+:::
+
+### 域装配动不了的东西
+
+- **①语言原语**（`if` / `let` / `lambda` / `quote` / `set!` / `define` / `match` / `import` …）
+  不在环境里，域装配无法移除；
+- **②求值器拦截的形式**（`map` / `filter` / `reduce` / `apply` / `eval` / `->` / `for-each`）
+  不属任何域，同样装不掉。它们**既可被调用，也可作为值传递**（`(procedure? map)` → `true`）。
+
+所以「只要算术+列表、不要高阶函数」是**做不到**的：高阶形式本就不在域里。
+这是设计边界（能力域设计 §5.3），不是遗漏。
+
+---
+
 ## 关键字别名
 
 | 选项 | 说明 |
@@ -253,6 +396,12 @@ paths.eval("(cangjie::write-file \"/etc/passwd\" \"hack\")")      // 拒绝
 
 | 选项 | 参数 | 默认行为 | 对应解释器方法 |
 |------|------|----------|----------------|
+| `withLevel` | `XispLevel`（`Expr` / `Pure` / `Script`） | — | 独占装配（清空 + 装域 [+ std 桥接]） |
+| `withDomains` | `Array<LispCapability>`，可选 `replace` | 追加（`replace = false`） | `installDomains` |
+| `withPreset` | `Array<LispCapability>`，可选 `replace` | 追加 | `installDomains` |
+| `presetFull` | 无 | 全部 13 个域 | `BuiltinFunctions.presetFull` |
+| `presetPure` | 无 | 按属性推导（无 `print`） | `BuiltinFunctions.presetPure` |
+| `withNoFirstClassValues` | 无 | ②类符号不注册为一等值 | `setFirstClassValues(false)` |
 | `withKeywordAlias` | `(alias, original): (String, String)` | — | `registerKeywordAlias` |
 | `withKeywordAliases` | `Array<(String, String)>` | — | `registerKeywordAlias` |
 | `withChineseKeywords` | 无 | 中文预设别名 | `registerKeywordAlias` |

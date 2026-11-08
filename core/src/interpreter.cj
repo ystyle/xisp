@@ -589,6 +589,17 @@ public class LispInterpreter {
     public func clearEnvironmentBindings(): Unit {
         this.env = Environment()
         this.evaluator.env = this.env
+        // 桥接也持有环境引用：不重定向的话，随后 registerStdFS() 会写进被丢弃的旧环境
+        this.bridge.retarget(this.env)
+        // ②类符号的一等值（`map` / `filter` / `reduce` / …）也是**环境绑定**。
+        // 换了新环境必须按当前开关重建：否则 `withDomains(…, replace: true)` 之后
+        // `(procedure? map)` 会变成未绑定 —— 调用仍走求值器快速路径、看起来"还能用"，
+        // 但它已经不能再作为值传递，与默认装配下的行为不一致。
+        this.firstClassValuesInstalled = false
+        if (this.firstClassValuesEnabled) {
+            this.evaluator.installFirstClassValues(this.env)
+            this.firstClassValuesInstalled = true
+        }
     }
 
     /**

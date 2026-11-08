@@ -246,6 +246,74 @@ public func presetPure(): Array<LispCapability> {
 // ==================== 其他配置选项 ====================
 
 /**
+ * 装配档位：宿主"选一档"而不是"逐个挑域"。
+ *
+ * | 档位 | 装什么 | 典型用途 |
+ * |---|---|---|
+ * | `Expr` | 表达式层：纯计算，**无宏、无 `gensym`、无输出** | 公式 / 规则求值，只要算出一个值 |
+ * | `Pure` | 纯函数子集：`Expr` + ④层宏包 + `gensym` | 需要 `when` / `unless` / `defun` 等语法糖的嵌入场景 |
+ * | `Script` | 全量域 + `std.io` / `std.fs` / `std.collection` | 脚本 / CLI：读写文件、模块加载、打印 |
+ *
+ * 三档是**严格包含**关系（`Expr ⊂ Pure ⊂ Script`），每一档都**独占装配**：
+ * 先把环境清空，只装该档的域，因此结果与"解释器默认装了什么"无关，可复现。
+ *
+ * **档位只管"装哪些能力"，不管"允许做什么"**：`withSandbox` / `withTimeout` /
+ * `withMaxStackDepth` 等策略选项与之正交，可任意叠加。
+ *
+ * 需要更细的控制时，用 `withDomains` / `withPreset` 自己组合。
+ */
+public enum XispLevel {
+    /** 表达式层：纯计算，无元编程 */
+    | Expr
+
+    /** 纯函数子集：表达式 + 宏包 */
+    | Pure
+
+    /** 脚本层：全量能力 + 标准库桥接 */
+    | Script
+}
+
+/**
+ * 按**装配档位**一次性配好解释器（`withLevel`）。
+ *
+ * ```cangjie
+ * // 只要算表达式：没有 println、没有宏，也不可能读写文件
+ * let calc = LispInterpreter([withLevel(XispLevel.Expr)])
+ * calc.eval("(+ 1 2)")            // => 3
+ * calc.eval("(println 1)")        // => UndefinedFunction
+ *
+ * // 脚本：全量 + 标准库，再叠一层沙箱
+ * let script = LispInterpreter([withLevel(XispLevel.Script), withSandbox()])
+ * ```
+ *
+ * 独占装配会清空环境，故**只应有一个档位选项**；多个时以最后应用的为准。
+ */
+public func withLevel(level: XispLevel): InterpreterOption {
+    { interpreter =>
+        interpreter.clearEnvironmentBindings()
+        interpreter.markDomainsExclusive()
+        let domains = match (level) {
+            case Expr => BuiltinFunctions.exprDomains()
+            case Pure => BuiltinFunctions.presetPure()
+            case Script => BuiltinFunctions.presetFull()
+        }
+        BuiltinFunctions.installDomains(
+            interpreter.getEnvironment(),
+            domains,
+            isInterrupted: Some({ => interpreter.isInterruptedNow() })
+        )
+        match (level) {
+            case Script =>
+                // 标准库桥接也是环境绑定，清空后要重建
+                interpreter.registerStdIO()
+                interpreter.registerStdFS()
+                interpreter.registerStdCollection()
+            case _ => ()
+        }
+    }
+}
+
+/**
  * 静默模式（不显示 Banner）
  */
 public func withQuietMode(): InterpreterOption {
