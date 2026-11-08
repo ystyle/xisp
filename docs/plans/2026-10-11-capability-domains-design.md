@@ -816,10 +816,10 @@ public interface LispExternalCallable <: LispExternal {
 |---|---|---|
 | C1 | 能力域粒度 | core 域的按域装配是否需要（如"只要算术+表，不要高阶函数"），需真实宿主诉求来定 |
 | C2 | 域装配与执行后端接缝是否合并 | §4.1 的 `LispCapability` 与工作区化文档 §3.2 的 `ExecutionBackend` 形态相近，成熟后宜统一 |
-| C9 | `registerPure` 的归宿 | 收敛为 preset（§4.3）还是保留函数形态？改动会影响 atelier 的手工装配路径（§5.1） |
-| C12 | `PRESET_PURE` 用减法还是显式列表 | core 内部按 `escapable`/`hostPolicy` **推导**（推荐，默认安全）；宿主做减只能自己列域。需确认"新增域默认 `escapable=true`"不会意外排除现有域 |
-| C15 | `evalSource` 安装形态的沙箱影响 | 宏包用 `eval` 安装源码；若宿主禁用了 `eval`，宏包能否安装？（安装是宿主行为、非脚本行为，**应允许**——需在实现时明确区分"宿主安装期"与"脚本运行期"） |
-| C17 | 域 `after` 的完整性 | 现有 `registerModernAliases` 依赖"最后注册"，域化后这个隐式约束必须显式化。需确认所有域的实际依赖序 |
+| C9 | `registerPure` 的归宿 | 收敛为 preset（§4.3）还是保留函数形态？改动会影响 atelier 的手工装配路径（§5.1） —— **✅ 已收口（2026-11-08）：保留函数签名、内部改为 `installDomains(env, presetPure())` 的委托**。调用方（含 atelier 式手工装配）无需改动；两档装配从此只有一份装配逻辑，等价性由 `testPresetPureCoversRegisterPure` / `testPresetFullCoversRegisterAll` 反向钉住 |
+| C12 | `PRESET_PURE` 用减法还是显式列表 | core 内部按 `escapable`/`hostPolicy` **推导**（推荐，默认安全）；宿主做减只能自己列域。需确认"新增域默认 `escapable=true`"不会意外排除现有域 —— **✅ 已确认（2026-11-08）**：`SimpleCapability` 的 `escapable!` 默认值确为 `true`（`capability.cj:127`），新增域默认落在 pure 之外（默认安全）。同时发现推导本身把 3 个纯域误判为不纯（`print` 域混装字符串计算、`macros.core` 误标 escapable），已订正，见 §12.4 |
+| C15 | `evalSource` 安装形态的沙箱影响 | 宏包用 `eval` 安装源码；若宿主禁用了 `eval`，宏包能否安装？（安装是宿主行为、非脚本行为，**应允许**——需在实现时明确区分"宿主安装期"与"脚本运行期"） —— **✅ 已收口（2026-11-08）**：`makeContext` 里 `evalSource` 直接用内部 `Evaluator.eval`，不经过脚本侧权限检查；用例 `testEvalSourceInstallSurvivesSandbox` 钉住"`withSandbox()` 下 `(eval …)` 被拦、而 `when`/`unless`/`incf` 正常" |
+| C17 | 域 `after` 的完整性 | 现有 `registerModernAliases` 依赖"最后注册"，域化后这个隐式约束必须显式化。需确认所有域的实际依赖序 —— **✅ 已收口（2026-11-08）**：新增 `domainAliases()`（`after: ["base","list","string"]`），`macros.core` 的 `after` 补 `symbols`（`swap`/`or` 展开调 `gensym`）。此前 `registerModernAliases` **不属任何域**，独占装配时 16 个别名集体消失，见 §12.4 |
 
 ### 9.3 外部依赖与外部值接缝
 
@@ -829,7 +829,7 @@ public interface LispExternalCallable <: LispExternal {
 | C4 | 变体与协议命名 | 建议变体 `External` + 协议 `LispExternal`（二者不能同名，§7.2） |
 | C5 | 符号命名策略 | 命名空间（`(import sci.linalg)`）还是前缀（`linalg-`）？待定，与 `LispCapability.symbols` 配套 |
 | C6 | 是否把"`LispValue` 的 match 必须有外部值分支"写成 lint | 加变体时编译器能强制一次，但**将来再加变体还会重演**；建议留一条 CI 检查 |
-| C7 | stdx 环境变量 | `CANGJIE_STDX_PATH` 路径三段随安装方式而变，CI/容器/新机器默认不存在；对策见 §6.1 |
+| C7 | stdx 环境变量 | `CANGJIE_STDX_PATH` 路径三段随安装方式而变，CI/容器/新机器默认不存在；对策见 §6.1 —— **不适用于本仓**（2026-11-08 核实：xisp 全工作区 `cjpm.toml` 无任何 stdx 依赖），保留给将来引入 stdx 的扩展模块 |
 | C8 | 多成员样板重复 | `bin-dependencies` / `link-option` 必须在每个要发布的成员里各写全份（cordis-cj 实测 42 处重复），cjpm-ws 目前不同步这类字段。缓解：约定"只有能力域成员才允许出现 stdx 配置" + CI 校验各成员该段一致 |
 | C10 | 网络域走哪条路 | 应用层走 stdx 还是第三方纯仓颉库，见 §6.2，需按"是否引入 stdx"这一判据调研后再定 |
 
@@ -963,6 +963,12 @@ public interface LispExternalCallable <: LispExternal {
 「扩展模块的中断义务」：`CapabilityContext.isInterrupted` 的调用时机、中止形式
 （错误值 + `INTERRUPTED_MESSAGE`，不是抛异常）、粒度建议，以及"不查中断宿主就杀不掉"
 这一后果。至此 §8.1 的 12 条接缝全部完成。
+
+同一轮还收口了 §9 的四条：**C9**（`registerPure` 内部改为 preset 委托）、
+**C12**（确认 `escapable!` 默认 `true`，新增域默认落在 pure 之外；同时发现推导把
+3 个纯域误判，见上）、**C15**（`evalSource` 属安装期、不受脚本 `eval` 权限约束，有用例）、
+**C17**（`after` 显式化，新增 `domainAliases()`）；**C7**（stdx 环境变量）经核实
+**不适用**——全工作区无 stdx 依赖。
 
 **范围内仍未做**（均为"需外部输入"或"建议项"，不阻塞本次重构）：
 

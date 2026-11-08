@@ -1057,13 +1057,23 @@ M20 的差分测试只覆盖 AST ↔ 字节码两模式、且**逐表达式**求
 调用时机（元素数相关循环必须周期查）、中止形式（错误值 + `INTERRUPTED_MESSAGE`，
 不是抛异常）、粒度建议，以及"不查中断宿主就杀不掉"的后果。**§8.1 的 12 条接缝至此全部完成。**
 
+### §9 同轮收口的四条 + 一条不适用
+
+| 项 | 结论 |
+|---|---|
+| **C9** `registerPure` 归宿 | 保留函数签名、内部改 `installDomains(env, presetPure())` 委托；调用方无需改动 |
+| **C12** PRESET_PURE 推导 | `SimpleCapability.escapable!` 默认确为 `true`（`capability.cj:127`），新增域默认落在 pure 之外；同时发现推导把 3 个纯域误判（见上表 #2/#4） |
+| **C15** `evalSource` 沙箱影响 | 属**宿主安装期**，不经过脚本侧权限检查；用例 `testEvalSourceInstallSurvivesSandbox` 钉住"沙箱下 `(eval …)` 被拦、`when`/`unless`/`incf` 正常" |
+| **C17** 域 `after` 完整性 | 显式化：`domainAliases()` + `macros.core` 补 `symbols` 依赖 |
+| **C7** stdx 环境变量 | **不适用**——全工作区无 stdx 依赖（核实 7 个 `cjpm.toml`） |
+
 ### 范围内仍未做（均需外部输入或属建议项）
 
 - **C6 / C8**：`LispValue` match 穷尽性 CI 检查、多成员 `cjpm.toml` 配置一致性 CI 校验 —— 建议项，尚未落。
 - **C1 / C2 / C10**：能力域粒度需真实宿主诉求；域装配与 `ExecutionBackend` 接缝合并"成熟后再说"；网络域待调研。
 - **C3 / C5**：`External` 专用变体归属、符号命名策略 —— 属下游 sci 族决策，不阻塞本次重构。
 
-**验证**：`cjpm build` 通过；`cjpm test` **542/542**；`check-examples.sh` 22/22；
+**验证**：`cjpm build` 通过；`cjpm test` **543/543**；`check-examples.sh` 22/22；
 三后端差分 64 文件逐文件一致 + 40 文件逐步一致；`cjpm ws check` 通过。
 
 **完成时间**: 2026-11-08（在 `feat/r5rs-symbol-layering` 分支，未合并 master）

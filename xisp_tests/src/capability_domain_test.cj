@@ -356,4 +356,24 @@ class CapabilityDomainTest {
         @Assert(ev.eval(Parser.parseSingleFromString("(unless #f 2)")).toString() == "2")
         println("✓ presetPure 覆盖 registerPure 的全部 ${refEnv.getKeys().size} 个符号，宏包可用")
     }
+
+    /**
+     * **`evalSource` 安装不受脚本侧 `eval` 权限约束**（C15）
+     *
+     * 宏包是用 `evalSource`（内部 `Evaluator.eval`）装进环境的，属于**宿主安装期**行为；
+     * 而 `withSandbox()` 的 `blockFunctions(["eval","apply"])` 管的是**脚本运行期**的
+     * `eval` 调用。两者必须分开：沙箱里宏照样能用，脚本里的 `(eval …)` 照样被拦。
+     */
+    @TestCase
+    func testEvalSourceInstallSurvivesSandbox() {
+        println("\n=== evalSource 安装期不受脚本 eval 权限影响 ===")
+        let it = LispInterpreter([withQuietMode(), withSandbox()])
+        // 脚本运行期：eval 被拦
+        @Assert(it.eval("(eval '(+ 1 2))").toString().contains("UndefinedFunction"))
+        // 安装期已完成的宏包照常可用
+        @Assert(it.eval("(when #t 1)").toString() == "1")
+        @Assert(it.eval("(unless #f 2)").toString() == "2")
+        @Assert(it.eval("(begin (define z 1) (incf z) z)").toString() == "2")
+        println("✓ 沙箱下 (eval …) 被拦，而 when / unless / incf 正常")
+    }
 }
