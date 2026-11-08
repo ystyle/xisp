@@ -1,0 +1,6 @@
+version = 0
+
+[requires]
+  cjpminfo = {version = "1.2.1"}
+  "ystyle::xisp_terminal" = {version = "0.6.0"}
+  "ystyle::xisp" = {version = "0.6.0"}
