@@ -49,15 +49,18 @@ class CapabilityDomainTest {
         @Assert(!hasPrint)
         println("✓ PURE 含 " + pure.size.toString() + " 个域，已排除 print（hostPolicy）")
 
-        // 宏包是 escapable（保守），也必须被排除
+        // 宏包**必须**在纯函数子集里：宏是代码变换器，展开产物照样过权限检查，
+        // 不提供任何逃逸手段（`registerPure` 一直包含 ④ 层宏包）。
+        // 原先这里断言"看起来更安全"的排除，实际是语义错误：纯环境里连
+        // `(when #t 1)` 都不认，两档装配无法互相替代。
         var hasMacros = false
         for (d in pure) {
             if (d.name == "macros.core") {
                 hasMacros = true
             }
         }
-        @Assert(!hasMacros)
-        println("✓ 已排除 macros.core（escapable，保守判定）")
+        @Assert(hasMacros)
+        println("✓ 已包含 macros.core（宏不逃逸，纯函数子集需要它）")
     }
 
     /** 域可任意组合：只装 base+arith+list，则宏与输出域不可用 */
@@ -185,5 +188,172 @@ class CapabilityDomainTest {
         ])
         @Assert(it3.eval("(when #t 1)").toString() == "1")
         println("✓ 默认追加模式：默认全量仍在（when 可用）")
+    }
+
+    /**
+     * **独占装配后，别名必须仍然可用**（回归）
+     *
+     * `first` / `rest` / `second` / `third` / `fourth` / `prepend` / `more` /
+     * `cadr`… 这些"现代别名"与 `setq` / `progn` 两个关键字别名，全部由
+     * `registerModernAliases` 注册 —— 而它**曾经不属任何域**，于是
+     * `withDomains(…, replace: true)`（"只留所选域"这一整条可裁剪路径）下
+     * 它们集体消失，`domainList.symbols` 里声明的 `first` / `rest` 成了空话。
+     */
+    @TestCase
+    func testAliasesAvailableUnderExclusiveAssembly() {
+        println("\n=== 独占装配后别名仍可用 ===")
+        let codes = [
+            ("(first (quote (1 2 3)))", "1"),
+            ("(rest (quote (1 2 3)))", "(2 3)"),
+            ("(second (quote (1 2 3)))", "2"),
+            ("(third (quote (1 2 3)))", "3"),
+            ("(fourth (quote (1 2 3 4)))", "4"),
+            ("(prepend 0 (quote (1 2)))", "(0 1 2)"),
+            ("(more (quote (1 2 3)))", "(2 3)"),
+            ("(cadr (quote (1 2 3)))", "2"),
+            ("(caddr (quote (1 2 3)))", "3"),
+            ("(cadddr (quote (1 2 3 4)))", "4"),
+            ("(begin (define x 1) (setq x 5) x)", "5"),
+            ("(progn 1 2 3)", "3"),
+        ]
+        for (domains in [BuiltinFunctions.presetFull(), BuiltinFunctions.coreDomains()]) {
+            let env = Environment()
+            BuiltinFunctions.installDomains(env, domains)
+            let ev = Evaluator(env)
+            for ((code, expect) in codes) {
+                var r: LispValue = Nil
+                for (e in Parser.parseFromString(code)) {
+                    r = ev.eval(e)
+                }
+                if (r.toString() != expect) {
+                    @Fail("独占装配下 `${code}` 期望 `${expect}`，实际 `${r.toString()}`")
+                }
+            }
+        }
+        println("✓ 12 条别名在预设全量 / 显式 coreDomains 独占装配下都可用")
+    }
+
+    /**
+     * **域声明的符号必须真的被安装上**（回归）
+     *
+     * `symbols` 是域对外的契约（沙箱审计、文档生成、重名检出都读它），
+     * 声明与安装脱节会让上层看到"有这个名字"却调不到。
+     *
+     * 关键字别名（`setq` / `progn`）不在环境绑定里，单独豁免。
+     */
+    @TestCase
+    func testDeclaredSymbolsActuallyInstalled() {
+        println("\n=== 域声明的符号与实际安装一致 ===")
+        let keywordAliases = ["setq", "progn"]
+        let env = Environment()
+        BuiltinFunctions.installDomains(env, BuiltinFunctions.presetFull())
+        var missing = ArrayList<String>()
+        for (d in BuiltinFunctions.presetFull()) {
+            for (sym in d.symbols) {
+                if (keywordAliases.contains(sym)) {
+                    continue
+                }
+                match (env.lookup(sym)) {
+                    case Error(_) => missing.add("${d.name}.${sym}")
+                    case _ => ()
+                }
+            }
+        }
+        if (missing.size > 0) {
+            @Fail("域声明了但未安装的符号: ${missing}")
+        }
+        println("✓ 所有域的 symbols 声明均已实际安装")
+    }
+
+    /**
+     * **`presetFull` 独占装配 ≡ `registerAll`**（回归）
+     *
+     * 这是能力域设计"核心接缝"最强的一条不变量：既然 `registerAll` 与
+     * `presetFull` 是同一份能力的两种表达，那么独占装配后**一个符号都不能少**。
+     *
+     * 它曾漏掉两类共 20+ 个符号：
+     * · `domainPrint` 压根不在 `coreDomains()` 里 → `println` / `str` / `string-length` 全缺；
+     * · `registerModernAliases` 不属任何域 → `first` / `rest` / `second` / `setq` / `progn` 全缺。
+     *
+     * 只比"符号是否存在"，不比实现 —— 两侧由不同注册器产出，实现天然同源。
+     */
+    @TestCase
+    func testPresetFullCoversRegisterAll() {
+        println("\n=== presetFull 独占装配 ≡ registerAll ===")
+        let refEnv = Environment()
+        BuiltinFunctions.registerAll(refEnv)
+
+        let env = Environment()
+        BuiltinFunctions.installDomains(env, BuiltinFunctions.presetFull())
+
+        var missing = ArrayList<String>()
+        for (k in refEnv.getKeys()) {
+            match (env.lookup(k)) {
+                case Error(_) => missing.add(k)
+                case _ => ()
+            }
+        }
+        if (missing.size > 0) {
+            @Fail("presetFull 独占装配缺少这些符号（registerAll 有）: ${missing}")
+        }
+        // 关键字别名不在绑定里，单独验证两条都得能用
+        let ev = Evaluator(env)
+        @Assert(ev.eval(Parser.parseSingleFromString("(begin (define q 1) (setq q 7) q)")).toString() == "7")
+        @Assert(ev.eval(Parser.parseSingleFromString("(progn 1 2 3)")).toString() == "3")
+        println("✓ presetFull 覆盖 registerAll 的全部 ${refEnv.getKeys().size} 个符号，且 setq/progn 可用")
+    }
+
+    /**
+     * **`presetPure` 必须包含纯计算类能力**（回归）
+     *
+     * 输出通道（`hostPolicy`）应当被排除 —— 由宿主接管；但**字符串计算**是纯的，
+     * 必须留着。`str` / `string-length` 曾因与 `print` 同域而被一起排除。
+     */
+    @TestCase
+    func testPresetPureKeepsPureStringOps() {
+        println("\n=== presetPure 保留字符串计算 ===")
+        let env = Environment()
+        BuiltinFunctions.installDomains(env, BuiltinFunctions.presetPure())
+        let ev = Evaluator(env)
+        @Assert(ev.eval(Parser.parseSingleFromString("(str 1 2)")).toString() == "\"12\"")
+        @Assert(ev.eval(Parser.parseSingleFromString("(string-length \"abc\")")).toString() == "3")
+        println("✓ presetPure 下 str / string-length 可用")
+        // 输出通道仍被排除（宿主接管）
+        @Assert(ev.eval(Parser.parseSingleFromString("(println 1)")).toString().contains("UndefinedFunction"))
+        println("✓ presetPure 下 println 仍不可用（hostPolicy 域被排除）")
+    }
+
+    /**
+     * **`presetPure` 独占装配 ≡ `registerPure`（不含输出）**（回归）
+     *
+     * 两档装配必须能互相替代，否则"收敛为预置组合"就只是换了个名字。
+     * `registerPure` 一直包含 ④ 层宏包（`when` / `unless` / …），
+     * 而 `macros.core` 原先标了 `escapable: true` 被属性推导排除 ——
+     * 结果是 `presetPure` 下连 `(when #t 1)` 都不认。
+     */
+    @TestCase
+    func testPresetPureCoversRegisterPure() {
+        println("\n=== presetPure 独占装配 ≡ registerPure ===")
+        let refEnv = Environment()
+        BuiltinFunctions.registerPure(refEnv)
+
+        let env = Environment()
+        BuiltinFunctions.installDomains(env, BuiltinFunctions.presetPure())
+
+        var missing = ArrayList<String>()
+        for (k in refEnv.getKeys()) {
+            match (env.lookup(k)) {
+                case Error(_) => missing.add(k)
+                case _ => ()
+            }
+        }
+        if (missing.size > 0) {
+            @Fail("presetPure 独占装配缺少这些符号（registerPure 有）: ${missing}")
+        }
+        // 宏包必须在纯函数子集里（registerPure 一直如此）
+        let ev = Evaluator(env)
+        @Assert(ev.eval(Parser.parseSingleFromString("(when #t 1)")).toString() == "1")
+        @Assert(ev.eval(Parser.parseSingleFromString("(unless #f 2)")).toString() == "2")
+        println("✓ presetPure 覆盖 registerPure 的全部 ${refEnv.getKeys().size} 个符号，宏包可用")
     }
 }

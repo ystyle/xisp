@@ -32,10 +32,18 @@ extend BuiltinFunctions {
             escapable: false, hostPolicy: false)
     }
 
-    /** 算术：`+ - * / mod abs min max` 等 */
+    /**
+     * 算术：`+ - * / mod round min max sum product`
+     *
+     * 原先声明里还有个 `abs`，但**它从未被实现**（全仓无 `env.define("abs")`，
+     * docs-site 的算术 API 清单里也没有）。域声明的 `symbols` 是对外契约
+     * （沙箱审计 / 文档生成 / 重名检出都读它），多声明一个不存在的符号会让
+     * 上层以为可用 —— 已从声明移除；`min` / `max` / `sum` / `product` 由
+     * `registerHigherOrder` 提供，不在 `registerMath` 里。
+     */
     public static func domainArithmetic(): LispCapability {
         SimpleCapability("arithmetic",
-            ["+", "-", "*", "/", "mod", "abs", "min", "max", "sum", "product"],
+            ["+", "-", "*", "/", "mod", "round", "min", "max", "sum", "product"],
             { ctx => registerArithmetic(ctx.env); registerModulo(ctx.env); registerMath(ctx.env) },
             escapable: false, hostPolicy: false)
     }
@@ -75,12 +83,46 @@ extend BuiltinFunctions {
             escapable: false, hostPolicy: false)
     }
 
-    /** 输出：`str print println princ newline display`（触及宿主通道，故 hostPolicy） */
+    /**
+     * 字符串计算：`str` `string-length` `string=?` `string<` `string>` `string-contains?`
+     *
+     * **纯计算、不碰输出通道**，因此与 `print` 分成两个域 —— 代码里本来就是
+     * 两个注册器（`registerStringOps` / `registerOutput`）。并进 `hostPolicy` 域的话，
+     * `presetPure` 按属性推导时会把它们一起排除，而纯函数子集一直需要 `str`。
+     */
+    public static func domainString(): LispCapability {
+        SimpleCapability("string",
+            ["str", "string-length", "string=?", "string<", "string>", "string-contains?"],
+            { ctx => registerStringOps(ctx.env) },
+            escapable: false, hostPolicy: false)
+    }
+
+    /** 输出：`print println princ newline display`（触及宿主通道，故 hostPolicy） */
     public static func domainPrint(): LispCapability {
         SimpleCapability("print",
-            ["str", "print", "println", "princ", "newline", "display"],
-            { ctx => registerPrint(ctx.env) },
+            ["print", "println", "princ", "newline", "display"],
+            { ctx => registerOutput(ctx.env, { s => print(s) }) },
             escapable: false, hostPolicy: true)
+    }
+
+    /**
+     * 现代别名与传统组合函数：`first` `rest` `second` … `setq` `progn` `string-append`
+     *
+     * **顺序敏感**：`registerModernAliases` 用 `lookup` 取 `car` / `cdr` / `cons` / `str`
+     * 并复用其值，所以必须排在 `list` 与 `string` 之后 —— 这正是 `after` 要显式化的
+     * 隐式约束（此前只靠 `registerAll` 里的"最后注册"注释）。
+     *
+     * 此前它**不属任何域**：独占装配（`replace: true`）时这些别名集体消失，
+     * 而 `domainList` 的 symbols 却声明了 `first` / `rest` —— 声明与安装脱节。
+     */
+    public static func domainAliases(): LispCapability {
+        SimpleCapability("aliases",
+            ["first", "rest", "second", "third", "fourth", "prepend", "more",
+             "cadr", "caddr", "cadddr", "cddr", "cdar", "caar",
+             "setq", "progn", "string-append"],
+            { ctx => registerModernAliases(ctx.env) },
+            escapable: false, hostPolicy: false,
+            after: ["base", "list", "string"])
     }
 
     /** 符号工具：`gensym` */
@@ -95,10 +137,16 @@ extend BuiltinFunctions {
         SimpleCapability("macros.core",
             BuiltinMacros.allSymbols(),
             { ctx => BuiltinMacros.registerAll(ctx.env) },
-            // 宏展开本身不逃逸：它产出的是**代码**，最终仍受环境的权限检查约束。
-            // 但 `and`/`or` 等展开后可能引用高阶形式，故保守标 true。
-            escapable: true, hostPolicy: false,
-            after: ["base", "list", "logic"])
+            // **不逃逸**：宏是代码变换器，展开产物仍是普通表达式，照样要过
+            // `funcChecker` / 沙箱检查 —— 它不提供绕过权限检查的手段
+            // （对照 `escapable` 的定义：能绕过权限检查的东西才算）。
+            //
+            // 曾经保守标 `true`，后果是 `presetPure` 按属性推导把宏包整个排除，
+            // 于是"纯函数子集"里连 `(when #t 1)` 都不认 —— 与 `registerPure`
+            // （一直包含 ④ 层宏包）不一致，两档装配无法互相替代。
+            escapable: false, hostPolicy: false,
+            // `swap` / `or` 展开时会调 `gensym`，故依赖 symbols 域
+            after: ["base", "list", "logic", "symbols"])
     }
 
     /** 错误辅助：`error` `raise` `assert` */
@@ -117,7 +165,10 @@ extend BuiltinFunctions {
             domainList(),
             domainLogic(),
             domainHashMap(),
+            domainString(),
+            domainPrint(),
             domainSymbols(),
+            domainAliases(),
             domainErrorHelpers(),
             domainMacrosCore(),
         ]

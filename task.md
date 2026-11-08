@@ -20,8 +20,10 @@
 - ✅ M17: 分层目标澄清 —— 可替换
 - ✅ M18: 能力域文档按「可替换」重构
 - ✅ M19: R5RS 级符号分层重构（gensym / 编译前宏展开 / ①收敛 / 域装配 / 宏包）
+- ✅ M20: 兼容性修复 + 接缝 0e / 3 / 4
 - ✅ M21: 错误传播语义统一 + 三后端差分闸门
 - ✅ M22: 收尾审计（5 个「看起来在跑、实际没跑」的东西）
+- ✅ M23: 域装配 5 处缺陷订正 + 两档装配收敛
 
 ---
 
@@ -1012,3 +1014,56 @@ M20 的差分测试只覆盖 AST ↔ 字节码两模式、且**逐表达式**求
 **64 个文件逐文件一致 / 40 个文件逐步一致**、`cjpm ws check` 通过。
 
 **完成时间**: 2026-11-06（在 `feat/r5rs-symbol-layering` 分支，未合并 master）
+
+---
+
+## M23: 域装配 5 处缺陷 + 两档装配收敛 ✅
+
+对着 `coreDomains()` 与 `registerAll` **逐符号比对**发现的。这些缺陷全都只在
+`replace: true`（"只留所选域"，即"可裁剪"的唯一路径）下暴露 —— 默认追加装配会把它们掩盖。
+
+| # | 缺陷 | 后果 |
+|---|---|---|
+| 1 | `domainPrint` 不在 `coreDomains()` | `presetFull` 独占装配下 `println` / `print` / `display` / `newline` / `princ` 全缺 |
+| 2 | `registerStringOps` 与 `registerOutput` 同挤在 `hostPolicy` 的 `print` 域 | `presetPure` 连 `str` / `string-length` 都没有（`registerPure` 一直有） |
+| 3 | `registerModernAliases` **不属任何域** | 16 个别名全缺（`first` / `rest` / `second` / `setq` / `progn` / `string-append`…），而 `domainList.symbols` 却声明了 `first` / `rest` |
+| 4 | `macros.core` 标 `escapable: true` | 纯环境里 `(when #t 1)` 都不可用；宏是代码变换器、不提供逃逸手段，应为 `false` |
+| 5 | `domainArithmetic.symbols` 声明了 `abs` | `abs` 从未实现（全仓无 `env.define("abs")`）——域声明是对外契约，多声明等于谎报 |
+
+### 修法
+
+- 拆 `domainString()`（纯）/ `domainPrint()`（hostPolicy）；新增 `domainAliases()`
+  （`after: ["base","list","string"]`，把"别名最后注册"的隐式约束显式化 = C17）；
+- `macros.core` 改 `escapable: false`，`after` 补 `symbols`（`swap`/`or` 展开用 `gensym`）；
+- `domainArithmetic.symbols` 移除 `abs`、补 `round`；
+- **`registerAll` / `registerPure` 改为 `installDomains(env, presetFull()/presetPure())` 的委托**，
+  消除两份平行清单（C9 收口）。
+
+### 新增 4 条"反向钉住"用例（`capability_domain_test.cj`）
+
+| 用例 | 钉住什么 |
+|---|---|
+| `testPresetFullCoversRegisterAll` | 独占 `presetFull` 后，`registerAll` 的每个符号都必须存在 |
+| `testPresetPureCoversRegisterPure` | 同上针对 pure；且宏包可用 |
+| `testDeclaredSymbolsActuallyInstalled` | 每个域 `symbols` 声明都必须真的装上（防声明撒谎） |
+| `testAliasesAvailableUnderExclusiveAssembly` | 12 条别名在两种独占装配下逐个可用 |
+
+另纠正一处错误断言：原先断言 `presetPure` **排除** `macros.core`（注释称"保守判定"），
+实际是语义错误。
+
+### 接缝 5 同轮收口
+
+外部模块的**中断义务**契约写进 `core/README.md`：`CapabilityContext.isInterrupted` 的
+调用时机（元素数相关循环必须周期查）、中止形式（错误值 + `INTERRUPTED_MESSAGE`，
+不是抛异常）、粒度建议，以及"不查中断宿主就杀不掉"的后果。**§8.1 的 12 条接缝至此全部完成。**
+
+### 范围内仍未做（均需外部输入或属建议项）
+
+- **C6 / C8**：`LispValue` match 穷尽性 CI 检查、多成员 `cjpm.toml` 配置一致性 CI 校验 —— 建议项，尚未落。
+- **C1 / C2 / C10**：能力域粒度需真实宿主诉求；域装配与 `ExecutionBackend` 接缝合并"成熟后再说"；网络域待调研。
+- **C3 / C5**：`External` 专用变体归属、符号命名策略 —— 属下游 sci 族决策，不阻塞本次重构。
+
+**验证**：`cjpm build` 通过；`cjpm test` **542/542**；`check-examples.sh` 22/22；
+三后端差分 64 文件逐文件一致 + 40 文件逐步一致；`cjpm ws check` 通过。
+
+**完成时间**: 2026-11-08（在 `feat/r5rs-symbol-layering` 分支，未合并 master）

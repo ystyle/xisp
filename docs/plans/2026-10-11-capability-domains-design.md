@@ -369,19 +369,32 @@ public class MacroPackCapability <: LispCapability {
 `registerAll` / `registerPure` 重新表述为**预置组合**，而非两个函数：
 
 ```cangjie
-// core 内置域
-public let DOMAIN_BASE:    LispCapability   // nil / 关键字别名
-public let DOMAIN_ARITH:   LispCapability
-public let DOMAIN_LIST:    LispCapability
-public let DOMAIN_HIGHER:  LispCapability   // map / filter / reduce
-public let DOMAIN_HASHMAP: LispCapability
-public let DOMAIN_OUTPUT:  LispCapability   // 需注入 output 通道
+// core 内置域（实际 12 个，见 core/src/core/builtin/domains.cj）
+BuiltinFunctions.domainBase()          // nil
+BuiltinFunctions.domainArithmetic()    // + - * / mod round min max sum product
+BuiltinFunctions.domainComparison()    // = < > <= >=
+BuiltinFunctions.domainList()          // cons car cdr list length nth append reverse range + 高阶（map/filter/reduce/for-each）
+BuiltinFunctions.domainLogic()         // not eq? null? number? 等谓词
+BuiltinFunctions.domainHashMap()       // hashmap-* 与 Redis 风格别名
+BuiltinFunctions.domainString()        // str / string-length / string=? …（纯计算）
+BuiltinFunctions.domainPrint()         // print / println / princ / newline / display（hostPolicy）
+BuiltinFunctions.domainSymbols()       // gensym
+BuiltinFunctions.domainAliases()       // first / rest / second … setq / progn / string-append
+BuiltinFunctions.domainErrorHelpers()  // error / raise / assert
+BuiltinFunctions.domainMacrosCore()    // ④层宏包（16 个，evalSource 形态）
 
 // 预置组合（命名 + 域列表；宿主可自造）
-public let PRESET_FULL: Array<LispCapability>   // 全量
-public let PRESET_PURE: Array<LispCapability>   // 由属性推导（§4.4）
-withDomains([DOMAIN_ARITH, DOMAIN_LIST, MyOwnDomain])   // 宿主自定义组合
+BuiltinFunctions.presetFull()   // = coreDomains()
+BuiltinFunctions.presetPure()   // 按 !escapable && !hostPolicy 推导（§4.4）
+withDomains([domainArithmetic(), domainList(), MyOwnDomain])   // 宿主自定义组合
 ```
+
+> **两档装配不再各有清单**：`registerAll` = `installDomains(env, presetFull())`，
+> `registerPure` = `installDomains(env, presetPure())` + 可选输出接管。
+> 此前是两份平行清单（`registerAll` 逐个调注册器、域集合另列一份），
+> 漂移不会被任何测试发现 —— 实测漏掉 `print` 域与 `aliases` 域共 20+ 个符号，
+> 详见 §12.4。现由 `testPresetFullCoversRegisterAll` / `testPresetPureCoversRegisterPure`
+> 反向钉住等价性。
 
 - 组合语义是**并集**：逐域 `install`（顺序 = 声明顺序，受 `after` 约束）；
 - **顺序敏感**：别名域必须在被别名域之后（现有 `registerModernAliases` 已依赖这个事实）；
@@ -744,13 +757,13 @@ public interface LispExternalCallable <: LispExternal {
 | **0b** | ②类"让位"机制（7 个符号：`map` `filter` `reduce` `apply` `eval` `->` `for-each`） | §3.2 | **✅ 已完成**（2026-10-11），双后端一致 | 可替换 |
 | **0c** | 宏改为**编译前**展开 | §3.4 | **✅ 已完成**（2026-10-11）；含宏递归 10767us → 971us | 0/0b 的前提 |
 | **0d** | `gensym`（非卫生宏的唯一符号来源） | §3.5 | **✅ 已完成**（2026-10-11） | 宏包的前提 |
-| 1 | 域抽象 `LispCapability` + preset + `withDomains` | §4 | **✅ 已完成**（2026-10-11）：9 个 core 内置域、`presetFull`/`presetPure`（后者按属性推导）、`orderDomains`（after 拓扑序）、`replace` 独占装配 | 可不要 + 可替换 + 可定制 |
+| 1 | 域抽象 `LispCapability` + preset + `withDomains` | §4 | **✅ 已完成**（2026-10-11）：core 内置域（现 12 个，见 §12.4 的订正）、`presetFull`/`presetPure`（后者按属性推导）、`orderDomains`（after 拓扑序）、`replace` 独占装配 | 可不要 + 可替换 + 可定制 |
 | 2 | `CapabilityContext`（中断注入、类型声明、`invoke`、`evalSource`） | §3.3 | **✅ 已完成**（2026-10-11） | 域装配 |
 | 1b | **宏包即域**（④层用 `evalSource` 形态安装） | §4.2 | **✅ 已完成**（2026-10-11）：16 个内建宏合并为单一 Lisp 源码 | 可替换（④层） |
 | 3 | `External` 变体 + `LispExternal` 协议族 | §7 | **✅ 已完成**：变体 + 5 个能力接口（2026-10-11）；5 个接口**全部接通分派**于 2026-11-06 补齐（`=`/`!=` → Equatable、`<`/`>`/`<=`/`>=` → Comparable、`length`/`nth` → Indexable、调用形式 → Callable），见 §12.3 | 下游 sci 族 |
 | 4 | `funcChecker` 覆盖可逃逸特殊形式（②类） | §5.4 | **✅ 已完成**（2026-10-11）：`withSandbox()` 的 `blockFunctions(["eval","apply"])` 终于生效 | 沙箱正确性 |
 | 6 | **AST ↔ 字节码差分测试**（91 个语料逐表达式比对） | §5.5 | **✅ 已完成**（2026-10-11）：从 726 处差异降到 **0**，修复 7 处真不兼容 | 兼容性 |
-| 5 | 外部模块的**中断义务** | §3.3 | 机制已有，契约待写进模块 README | 宿主可控性 |
+| 5 | 外部模块的**中断义务** | §3.3 | **✅ 已完成**（2026-11-08）：契约写进 `core/README.md`「扩展模块的中断义务」——`CapabilityContext.isInterrupted` 的调用时机、中止形式（错误值 + `INTERRUPTED_MESSAGE`）、粒度建议 | 宿主可控性 |
 
 ### 8.2 实施顺序
 
@@ -767,7 +780,7 @@ public interface LispExternalCallable <: LispExternal {
    同时保留求值器快速路径，守卫判据为"绑定是否仍为 core 注册的那份"，用户替换后自动让位。
    实测 `(procedure? map)` → `true`、`(define f map) (f (lambda (x) (* x 2)) (list 1 2 3))` → `(2 4 6)`。
 2. ~~**接缝 1 / 2（域装配）**~~ —— **✅ 已完成**（2026-10-11）：
-   `LispCapability` + `CapabilityContext` + 9 个 core 内置域；
+   `LispCapability` + `CapabilityContext` + core 内置域（现 12 个）；
    `presetFull` / `presetPure`（后者按 `!escapable && !hostPolicy` **推导**）；
    `orderDomains`（`after` 拓扑序）；`withDomains` / `withPreset`（含 `replace` 独占装配）；
    宏包以 `evalSource` 形态安装（16 个内建宏合并为单一 Lisp 源码）。
@@ -910,3 +923,52 @@ public interface LispExternalCallable <: LispExternal {
 
 验证：`xisp_tests/src/external_value_test.cj` 的 `CounterBox`（Indexable + Equatable + Comparable）
 与 `Doubler`（Callable）走通全链路。
+
+### 12.4 域装配的 5 处缺陷（2026-11-08 订正）
+
+审"这次重构范围内还有什么没做"时，对着 `coreDomains()` 与 `registerAll` 逐符号比对，
+发现**域集合本身不完整**——而且这些缺陷全都只在 `replace: true`（"只留所选域"，
+也就是"可裁剪"这条唯一路径）下才暴露，默认追加装配会把它们掩盖掉。
+
+| # | 缺陷 | 后果 |
+|---|---|---|
+| 1 | `domainPrint` 不在 `coreDomains()` 里 | `presetFull` 独占装配下 `println` / `print` / `display` / `newline` / `princ` 全缺——"预设**全量**"不含输出域 |
+| 2 | `registerStringOps` 与 `registerOutput` 同挤在 `print` 域（`hostPolicy`） | `presetPure` 按属性推导把它们一起排除 → 纯函数子集没有 `str` / `string-length`，而 `registerPure` 一直有 |
+| 3 | `registerModernAliases` **不属任何域** | `first` / `rest` / `second` / `third` / `fourth` / `prepend` / `more` / `cadr`… `setq` / `progn` / `string-append` 共 16 个全缺；而 `domainList.symbols` 却声明了 `first` / `rest`（**声明与安装脱节**） |
+| 4 | `macros.core` 标了 `escapable: true` | `presetPure` 排除整个宏包 → 纯环境里连 `(when #t 1)` 都不认，与 `registerPure`（一直含 ④ 层宏包）不一致。**宏是代码变换器，展开产物仍过权限检查，不提供逃逸手段**，应为 `false` |
+| 5 | `domainArithmetic.symbols` 声明了 `abs` | `abs` **从未实现**（全仓无 `env.define("abs")`，docs-site 算术清单也没有）——域声明是对外契约（沙箱审计/文档生成/重名检出），多声明等于谎报 |
+
+修法：
+
+- 拆出 `domainString()`（纯计算）与 `domainPrint()`（`hostPolicy`）；
+- 新增 `domainAliases()`，`after: ["base", "list", "string"]` —— 把原先只写在
+  `registerAll` 注释里的"别名最后注册"这一隐式约束，显式化为 `after`（即 C17 的要求）；
+- `macros.core` 改 `escapable: false`，`after` 补 `symbols`（`swap` / `or` 展开时用 `gensym`）；
+- 从 `domainArithmetic.symbols` 移除 `abs`，并把 `round` 补上（它确实由 `registerModulo` 注册）；
+- **`registerAll` / `registerPure` 改为预置组合的委托**，消除两份平行清单（C9 收口）。
+
+新增 4 条用例（`capability_domain_test.cj`），都是"反向钉住"式的：
+
+| 用例 | 钉住什么 |
+|---|---|
+| `testPresetFullCoversRegisterAll` | 独占装配 `presetFull` 后，`registerAll` 的**每一个符号**都必须存在 |
+| `testPresetPureCoversRegisterPure` | 同上，针对 pure；且宏包可用 |
+| `testDeclaredSymbolsActuallyInstalled` | 每个域 `symbols` 声明里的符号都必须真的装上（防"声明撒谎"） |
+| `testAliasesAvailableUnderExclusiveAssembly` | 12 条别名在两种独占装配下逐个可用（含 `setq` / `progn` 关键字别名） |
+
+顺带把一处测试里"看起来更安全"的错误断言纠正了：原先断言 `presetPure` **排除** `macros.core`
+（注释写"保守判定"），实际是语义错误——纯环境里 `when`/`unless` 全都不可用。
+
+**同轮收口**：接缝 **5**（外部模块的中断义务）——契约已写进 `core/README.md`
+「扩展模块的中断义务」：`CapabilityContext.isInterrupted` 的调用时机、中止形式
+（错误值 + `INTERRUPTED_MESSAGE`，不是抛异常）、粒度建议，以及"不查中断宿主就杀不掉"
+这一后果。至此 §8.1 的 12 条接缝全部完成。
+
+**范围内仍未做**（均为"需外部输入"或"建议项"，不阻塞本次重构）：
+
+- **C1** 能力域粒度 —— 需真实宿主诉求；
+- **C2** 域装配与 `ExecutionBackend` 接缝是否合并 —— "成熟后宜统一"，未动；
+- **C6** `LispValue` match 穷尽性的 CI 检查 —— 建议落一条，尚未；
+- **C8** 多成员 `cjpm.toml` 配置一致性的 CI 校验 —— 建议落一条，尚未；
+- **C10** 网络域走 stdx 还是第三方纯仓颉库 —— 待调研；
+- **C3 / C5** `External` 专用变体归属、符号命名策略 —— 下游 sci 族决策，见 sci 文档 §8。
