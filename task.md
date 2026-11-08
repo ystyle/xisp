@@ -1196,3 +1196,36 @@ public func withLevel(level: XispLevel): InterpreterOption
 `scripts/check-members.sh` 通过。
 
 **完成时间**: 2026-11-08（分支 `feat/r5rs-symbol-layering`，未合 master）
+
+---
+
+## M25: 合入 master 并发布 0.6.0 ✅
+
+### 合并
+
+`feat/r5rs-symbol-layering`（28 个提交）以 **`--no-ff` 合入 master**，保留分层历史
+（合并提交 `feat!: R5RS 级符号分层 —— 可替换性与能力域装配`）。
+
+### 版本推进
+
+按 workspace 产品语义（判据 4）整产品 **0.5.0 → 0.6.0**：
+
+- `cjpm ws bump 0.6.0 -w` 更新 5 个已发布成员的 `version` 与 6 处成员间依赖版本；
+- `xisp_tests` / `xisp_examples` 两个不发布成员一并同步（`cjpm ws` 不碰它们，
+  但它们的依赖指向 0.5.0，不统一会让 `scripts/check-members.sh` 报不一致）；
+- `repl/src/version.cj` 的 `@ModuleVer("…")` 字面量是**清单读不到时的 fallback**，
+  同步改为 0.6.0；
+- 清理并重建 `cjpm.lock`（`cjpm ws bump` 不触碰 lock；成员锁在 workspace 构建下不重新生成）。
+
+### 用户可见的迁移说明
+
+`README.md` 新增「0.6.0：破坏性变更与迁移」一节（此前徽章还停在 0.4.1）：
+
+| 变更 | 影响 | 怎么改 |
+|---|---|---|
+| `LispValue` 新增 `External` 变体 | 宿主侧 match 变为非穷尽 | 补 `case External(_) => …`，编译器逐处指出 |
+| 错误一律中止求值链 | 此前多处静默吞掉 | 依赖"出错后继续"的脚本要显式处理；绑定初值出错不建立绑定 |
+| 内置域重新划分 | `print` 拆 `string`/`print`、`logic` 拆 `logic`/`predicates`、新增 `aliases` | 用默认装配或 `presetFull`/`presetPure` 的宿主无需改动 |
+
+另列出新增能力（档位、能力域装配、外部值接缝、新内建、②类一等值、可替换性）。
+`docs-site` 的依赖示例版本号同步（`modules.md` / `embedding.md` / `options.md`）。

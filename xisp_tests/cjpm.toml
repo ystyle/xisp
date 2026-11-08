@@ -3,7 +3,7 @@
   name = "xisp_tests"
   organization = "ystyle"
   description = "星枢契约 / 集成测试：只用 public API 验证语言行为（不发布）"
-  version = "0.5.0"
+  version = "0.6.0"
   output-type = "static"
   compile-option = "-O2 -Woff unused"
   override-compile-option = ""
@@ -14,6 +14,6 @@
   repository = "https://gitcode.com/ystyle/xisp"
 
 [dependencies]
-  "ystyle::xisp" = "0.5.0"
+  "ystyle::xisp" = "0.6.0"
   # 字节码 / JIT 的契约与集成测试需要后端模块
-  "ystyle::xisp_bc" = "0.5.0"
+  "ystyle::xisp_bc" = "0.6.0"

@@ -42,9 +42,9 @@ xisp_bc ─────────────────┘   （可选后端
 
 ```toml
 [dependencies]
-  "ystyle::xisp" = "0.5.0"
-  "ystyle::xisp_repl" = "0.5.0"   # 需要 REPL 时
-  "ystyle::xisp_bc" = "0.5.0"     # 需要字节码 / JIT 时
+  "ystyle::xisp" = "0.6.0"
+  "ystyle::xisp_repl" = "0.6.0"   # 需要 REPL 时
+  "ystyle::xisp_bc" = "0.6.0"     # 需要字节码 / JIT 时
 ```
 
 ::: tip 核心是零依赖的

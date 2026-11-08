@@ -10,7 +10,7 @@ import cjpminfo.*
  *
  * 编译时从本模块 `cjpm.toml` 读取，无需手动维护；工作区已发布成员共用产品版本（lockstep）。
  */
-public const XISP_VERSION: String = @ModuleVer("0.5.0")
+public const XISP_VERSION: String = @ModuleVer("0.6.0")
 
 /**
  * 打印版本 Banner

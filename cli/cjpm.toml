@@ -3,7 +3,7 @@
   name = "xisp_cli"
   organization = "ystyle"
   description = "星枢命令行入口"
-  version = "0.5.0"
+  version = "0.6.0"
   output-type = "executable"
   compile-option = "-O2 --static -Woff unused"
   override-compile-option = ""
@@ -14,7 +14,7 @@
   repository = "https://gitcode.com/ystyle/xisp"
 
 [dependencies]
-  "ystyle::xisp" = "0.5.0"
-  "ystyle::xisp_repl" = "0.5.0"
+  "ystyle::xisp" = "0.6.0"
+  "ystyle::xisp_repl" = "0.6.0"
   # 字节码 / JIT 选项（--with-bytecode-compiler / --with-jit）由后端模块提供
-  "ystyle::xisp_bc" = "0.5.0"
+  "ystyle::xisp_bc" = "0.6.0"

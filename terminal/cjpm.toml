@@ -3,7 +3,7 @@
   name = "xisp_terminal"
   organization = "ystyle"
   description = "星枢终端能力：raw mode、字符显示宽度（零 Lisp 依赖）"
-  version = "0.5.0"
+  version = "0.6.0"
   output-type = "static"
   compile-option = "-O2 -Woff unused"
   override-compile-option = ""

@@ -3,7 +3,7 @@
   name = "xisp"
   organization = "ystyle"
   description = "星枢 - 仓颉嵌入式 Lisp 脚本语言（核心：解释器 / 内建 / 模块系统 / 桥接）"
-  version = "0.5.0"
+  version = "0.6.0"
   output-type = "static"
   compile-option = "-O2 -Woff unused"
   override-compile-option = ""

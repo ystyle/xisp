@@ -1,9 +1,8 @@
 # Xisp 能力分层与扩展接缝设计
 
 > **状态**：**已实施**（接缝 0 / 0a~0e、1、1b、2、3、4、6 均已完成，见 §8.1、§11、§12）；
-> 当前位于分支 `feat/r5rs-symbol-layering`，**未合并 master、未发版**
-> **目标版本**：待定（0.5.0 已发布，本设计的破坏性变更须并入下一个破坏性版本；
-> 当前在分支上，合入时按 lockstep 推进 0.6.0）
+> **已并入 0.6.0 并发布**（2026-11-08，分支 `feat/r5rs-symbol-layering` 以 `--no-ff` 合入 master，
+> 保留 28 个分层提交；整产品 5 个已发布成员随 lockstep 推进到 0.6.0）
 > **前置**：工作区化（模块划分）已完成并发布，见
 > [`2026-09-27-workspace-modularization.md`](2026-09-27-workspace-modularization.md)
 > **下游规划**：科学计算族（`xisp_array` / `linalg` / `stats` / `signal` / `io` / `sci`）见
@@ -773,8 +772,7 @@ public interface LispExternalCallable <: LispExternal {
 
 而且 `non-exhaustive patterns` 是**编译错误**（实测），编译器会逐处指出，**不会漏改**。
 
-**结论：加变体的成本远低于最初估计**。注意 0.5.0 **已经发布**，本变更须并入下一个破坏性版本
-（原"并入 0.5.0"的建议已过期）。
+**结论：加变体的成本远低于最初估计**。`External` 变体已并入 **0.6.0**（2026-11-08 发布）。
 
 ---
 

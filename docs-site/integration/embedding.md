@@ -7,9 +7,9 @@ Xisp 以 cjpm 工作区组织（7 个成员模块），**按需依赖**：只要
 
 ```toml
 [dependencies]
-  "ystyle::xisp" = "0.5.0"           # 核心：解释器 / 内建 / 桥接（零外部依赖）
-  # "ystyle::xisp_repl" = "0.5.0"    # 需要交互式 REPL 时
-  # "ystyle::xisp_bc" = "0.5.0"      # 需要字节码 / JIT 时
+  "ystyle::xisp" = "0.6.0"           # 核心：解释器 / 内建 / 桥接（零外部依赖）
+  # "ystyle::xisp_repl" = "0.6.0"    # 需要交互式 REPL 时
+  # "ystyle::xisp_bc" = "0.6.0"      # 需要字节码 / JIT 时
 ```
 
 ---

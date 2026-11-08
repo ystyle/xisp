@@ -3,7 +3,7 @@
   name = "xisp_bc"
   organization = "ystyle"
   description = "星枢字节码执行后端：编译器 / 寄存器栈 VM / JIT（可选依赖）"
-  version = "0.5.0"
+  version = "0.6.0"
   output-type = "static"
   compile-option = "-O2 -Woff unused"
   override-compile-option = ""
@@ -14,4 +14,4 @@
   repository = "https://gitcode.com/ystyle/xisp"
 
 [dependencies]
-  "ystyle::xisp" = "0.5.0"
+  "ystyle::xisp" = "0.6.0"
