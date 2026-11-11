@@ -31,6 +31,20 @@ class ParseCheckedTest {
         }
     }
 
+    @TestCase
+    func testUnsupportedRuneIsSyntaxError() {
+        for (input in ["|", "~", "😀", "foo|中文"]) {
+            match (Parser.parseChecked(input).error) {
+                case Some(e) =>
+                    match (e.kind) {
+                        case ErrorType.SyntaxError => @Expect(!e.message.isEmpty())
+                        case _ => @Fail("unsupported rune should report SyntaxError: ${input}")
+                    }
+                case None => @Fail("unsupported rune should report an error: ${input}")
+            }
+        }
+    }
+
     // ==================== 不完整输入必须报错 ====================
 
     @TestCase

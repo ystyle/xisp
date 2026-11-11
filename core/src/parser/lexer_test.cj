@@ -158,6 +158,18 @@ var lexerTests = ArrayList<LexerTestItem>([
         "#!/usr/bin/env xisp-cli\n;; this is a comment\n(println \"test\")",
         [Token.LeftParen, Token.Symbol("println"), Token.String("test"), Token.RightParen]
     ),
+    LexerTestItem(
+        "# #other #t #false - -42 -3.14 :key :中文",
+        [Token.Symbol("#"), Token.Symbol("#other"), Token.Boolean(true), Token.Boolean(false),
+         Token.Symbol("-"), Token.Int(-42), Token.Float(-3.14), Token.Keyword("key"), Token.Keyword("中文")]
+    ),
+    LexerTestItem(
+        "'`,,@()[]{}#{ \"|~😀\" #\"|~😀\"",
+        [Token.Quote, Token.Backquote, Token.Comma, Token.CommaAt, Token.LeftParen, Token.RightParen,
+         Token.VectorStart, Token.VectorEnd, Token.HashMapStart, Token.HashMapEnd, Token.HashSetStart,
+         Token.String("|~😀"), Token.String("::INTERPOLATE::|~😀")]
+    ),
+    LexerTestItem("#", [Token.Symbol("#")]),
     // 不是 shebang（只有 #，后面不是 !）
     LexerTestItem(
         "#not a shebang\n(define x 42)",
@@ -170,6 +182,46 @@ var lexerTests = ArrayList<LexerTestItem>([
  */
 @Test
 class LexerTest {
+    @TestCase
+    func testUnsupportedRuneMakesProgress() {
+        let lexer = Lexer("|")
+        let first = lexer.nextToken()
+        let second = lexer.nextToken()
+        @Expect(second == Token.EOF)
+        match (first) {
+            case Token.Error(message) => @Expect(!message.isEmpty())
+            case _ => @Fail("Expected an error for '|', got ${first.toString()}")
+        }
+    }
+
+    @TestCase
+    func testUnsupportedRunesRecoverToSymbol() {
+        for (input in ["~", "😀", "\u{0000}", "\u{0301}"]) {
+            let lexer = Lexer("foo" + input + "中文")
+            @Expect(lexer.nextToken() == Token.Symbol("foo"))
+            match (lexer.nextToken()) {
+                case Token.Error(message) => @Expect(message.contains(input))
+                case _ => @Fail("Expected an error for unsupported rune: ${input}")
+            }
+            @Expect(lexer.nextToken() == Token.Symbol("中文"))
+            @Expect(lexer.nextToken() == Token.EOF)
+        }
+    }
+
+    @TestCase
+    func testConsecutiveUnsupportedRunes() {
+        let lexer = Lexer("#|~😀-42")
+        @Expect(lexer.nextToken() == Token.Symbol("#"))
+        for (_ in 0..3) {
+            match (lexer.nextToken()) {
+                case Token.Error(_) => ()
+                case _ => @Fail("Expected one error per unsupported rune")
+            }
+        }
+        @Expect(lexer.nextToken() == Token.Int(-42))
+        @Expect(lexer.nextToken() == Token.EOF)
+    }
+
     @TestCase
     func testTokenize() {
         for (testIdx in 0..lexerTests.size) {
