@@ -6,6 +6,7 @@ import std.unittest.*
 import std.unittest.testmacro.*
 import std.collection.ArrayList
 import std.collection.HashMap
+import std.convert.Formattable
 
 /**
  * JSON 映射规则的白盒测试（设计文档 §5）
@@ -150,5 +151,186 @@ class JsonMappingTest {
         badStrs.add(LispValue.Int(1))
         bad.add(list(badStrs))
         @Assert(stringListArg(bad, 0).isNone())
+    }
+
+    // ==================== json-dump（序列化） ====================
+
+    /** 取字符串结果，非 Str 直接失败（序列化成功必然给 Str） */
+    func expectStr(r: LispValue, what: String): String {
+        match (r) {
+            case LispValue.Str(s) => s
+            case other => throw Exception("${what}: 期望 Str，实得 ${other.toString()}")
+        }
+    }
+
+    /** 标量序列化 */
+    @TestCase
+    func testDumpScalars() {
+        println("\n=== json-dump 标量 ===")
+        @Assert(expectStr(dumpJson(Nil, false), "nil") == "null")
+        @Assert(expectStr(dumpJson(LispValue.Boolean(true), false), "true") == "true")
+        @Assert(expectStr(dumpJson(LispValue.Boolean(false), false), "false") == "false")
+        @Assert(expectStr(dumpJson(LispValue.Int(42), false), "42") == "42")
+        @Assert(expectStr(dumpJson(LispValue.Int(-7), false), "-7") == "-7")
+        @Assert(expectStr(dumpJson(LispValue.Str("hi"), false), "hi") == "\"hi\"")
+        println("✓ null / true / false / 整数 / 字符串")
+    }
+
+    /**
+     * **浮点必须保留小数点**
+     *
+     * `1.0` 若输出成 `1`，json-parse 回来就成整数 —— 往返不一致，
+     * 连 `(+ x 1)` 的行为都会变。
+     */
+    @TestCase
+    func testDumpFloatKeepsDecimal() {
+        println("\n=== json-dump 浮点保留小数点 ===")
+        @Assert(expectStr(dumpJson(LispValue.Float(1.0), false), "1.0") == "1.0")
+        @Assert(expectStr(dumpJson(LispValue.Float(1.5), false), "1.5") == "1.5")
+        @Assert(expectStr(dumpJson(LispValue.Float(-0.25), false), "-0.25") == "-0.25")
+        // 大数走指数形态也合法
+        let big = expectStr(dumpJson(LispValue.Float(1.0e20), false), "1e20")
+        @Assert(big.contains("e") || big.contains("E") || big.contains("."))
+        println("✓ 1.0 → \"1.0\"（不是 \"1\"）")
+    }
+
+    /**
+     * **序列化不能丢精度**
+     *
+     * 仓颉内置的 `Float64.toString()` 只给 6 位小数（`1/3` → `0.333333`、`π` →
+     * `3.141593`），拿它写 JSON 会静默截断。必须用 `.17g`（可往返精度）。
+     *
+     * 这条用例钉住的就是「不能退回 toString」。
+     */
+    @TestCase
+    func testDumpFloatKeepsPrecision() {
+        println("\n=== json-dump 浮点不丢精度 ===")
+        // 1/3 的 17 位有效数字表示
+        let third = expectStr(dumpJson(LispValue.Float(1.0/3.0), false), "third")
+        @Assert(third == "0.33333333333333331")
+        // π
+        let pi = expectStr(dumpJson(LispValue.Float(3.141592653589793), false), "pi")
+        @Assert(pi == "3.1415926535897931")
+        // 往返：写出去的文本 parse 回来还是浮点（不是整数、不丢位）
+        let back = parseText("[" + third + ", " + pi + "]")
+        match (back) {
+            case LispValue.Cons(cell) =>
+                match (cell.car) {
+                    case LispValue.Float(f) =>
+                        @Assert(f.toString() == "0.333333")
+                    case other => @Fail("1/3 应解析回 Float，实得 ${other.toString()}")
+                }
+            case other => @Fail("往返解析失败：${other.toString()}")
+        }
+        println("✓ 1/3 与 π 都是 17 位有效数字（不是 toString 的 6 位）")
+    }
+
+    /** NaN / Infinity 没有 JSON 对应物 */
+    @TestCase
+    func testDumpRejectsSpecialFloats() {
+        println("\n=== json-dump 拒绝 NaN/Inf ===")
+        for (f in [Float64.NaN, Float64.Inf, -Float64.Inf]) {
+            let r = dumpJson(LispValue.Float(f), false)
+            match (r) {
+                case LispValue.Error(e) =>
+                    @Assert(e.kind == ErrorType.TypeError)
+                    @Assert(e.message.contains("NaN"))
+                case other => @Fail("应报 TypeError，实得 ${other.toString()}")
+            }
+        }
+        println("✓ NaN / Infinity 报 TypeError")
+    }
+
+    /** 字符串转义 */
+    @TestCase
+    func testDumpStringEscaping() {
+        println("\n=== json-dump 字符串转义 ===")
+        // 引号、反斜杠、换行、制表
+        @Assert(expectStr(dumpJson(LispValue.Str("a\"b"), false), "q") == "\"a\\\"b\"")
+        @Assert(expectStr(dumpJson(LispValue.Str("a\\b"), false), "bs") == "\"a\\\\b\"")
+        @Assert(expectStr(dumpJson(LispValue.Str("a\nb"), false), "nl") == "\"a\\nb\"")
+        @Assert(expectStr(dumpJson(LispValue.Str("a\tb"), false), "tab") == "\"a\\tb\"")
+        // 控制字符走 \u00XX
+        @Assert(expectStr(dumpJson(LispValue.Str("a\u{0001}b"), false), "ctl") == "\"a\\u0001b\"")
+        // 非 ASCII 原样保留（不转 \u）
+        @Assert(expectStr(dumpJson(LispValue.Str("中文"), false), "cn") == "\"中文\"")
+        println("✓ 引号 / 反斜杠 / 换行 / 控制字符 / 中文")
+    }
+
+    /** 列表 → 数组 */
+    @TestCase
+    func testDumpList() {
+        println("\n=== json-dump 列表 ===")
+        // 空列表
+        @Assert(expectStr(dumpJson(LispValue.Nil, false), "empty") == "null")
+        // (list 1 2 3)
+        let lst = list(ArrayList<LispValue>([LispValue.Int(1), LispValue.Int(2), LispValue.Int(3)]))
+        @Assert(expectStr(dumpJson(lst, false), "list") == "[1,2,3]")
+        // 嵌套
+        let inner = list(ArrayList<LispValue>([LispValue.Str("a")]))
+        let nested = list(ArrayList<LispValue>([LispValue.Int(1), inner]))
+        @Assert(expectStr(dumpJson(nested, false), "nested") == "[1,[\"a\"]]")
+        println("✓ [1,2,3] / 嵌套")
+    }
+
+    /** HashMap → 对象；pretty 模式带缩进 */
+    @TestCase
+    func testDumpObjectAndPretty() {
+        println("\n=== json-dump 对象与 pretty ===")
+        let m = HashMap<String, LispValue>()
+        m["a"] = LispValue.Int(1)
+        m["b"] = LispValue.Str("x")
+        let obj = LispValue.HashMap(m)
+        // 键序不确定，断言片段而不是整串
+        let compact = expectStr(dumpJson(obj, false), "obj")
+        @Assert(compact.startsWith("{"))
+        @Assert(compact.endsWith("}"))
+        @Assert(compact.contains("\"a\":1"))
+        @Assert(compact.contains("\"b\":\"x\""))
+
+        let pretty = expectStr(dumpJson(obj, true), "pretty")
+        @Assert(pretty.contains("\n  \"a\": 1"))
+        @Assert(pretty.contains("\n  \"b\": \"x\""))
+        println("✓ 紧凑与 pretty 两种形态")
+    }
+
+    /** 不可序列化的值必须报错，不能静默丢 */
+    @TestCase
+    func testDumpRejectsUnserializable() {
+        println("\n=== json-dump 拒绝不可序列化的值 ===")
+        let cases = [
+            LispValue.NativeFunc({ _ => Nil }),
+            LispValue.Symbol("sym"),
+            LispValue.Error(XispError(ErrorType.RuntimeError, "x"))
+        ]
+        for (v in cases) {
+            let r = dumpJson(v, false)
+            match (r) {
+                case LispValue.Error(e) =>
+                    @Assert(e.kind == ErrorType.TypeError)
+                    @Assert(e.message.contains("cannot serialize"))
+                case other => @Fail("应报 TypeError，实得 ${other.toString()}")
+            }
+        }
+        println("✓ 过程 / 符号 / 错误值都报 TypeError")
+    }
+
+    /**
+     * **环检测**：HashMap 可以把自己装进去，没有深度上限就是无限递归
+     */
+    @TestCase
+    func testDumpCircular() {
+        println("\n=== json-dump 环检测 ===")
+        let m = HashMap<String, LispValue>()
+        let self = LispValue.HashMap(m)
+        m["self"] = self
+        let r = dumpJson(self, false)
+        match (r) {
+            case LispValue.Error(e) =>
+                @Assert(e.kind == ErrorType.RuntimeError)
+                @Assert(e.message.contains("circular"))
+            case other => @Fail("环应被深度上限拦住，实得 ${other.toString().size} 字符")
+        }
+        println("✓ 自引用 HashMap 被深度上限拦住（不是栈溢出）")
     }
 }

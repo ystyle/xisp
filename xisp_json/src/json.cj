@@ -264,9 +264,41 @@ public func registerJson(env: Environment): Unit {
  * 纯计算：不碰文件、不碰网络、不碰进程，因此 `escapable = false`、`hostPolicy = false`
  * —— 会被 `presetPure` 推导纳入。
  */
+/**
+ * 注册 `cangjie::json-dump`（序列化；其余符号在 `registerJson` 里）
+ */
+public func registerJsonDump(env: Environment): Unit {
+    // (cangjie::json-dump value) / (cangjie::json-dump value {:pretty true})
+    env.define("cangjie::json-dump", NativeFunc({ args =>
+        if (args.size < 1 || args.size > 2) {
+            return LispValue.Error(XispError(ErrorType.ArityMismatch,
+                "json-dump expects 1 or 2 arguments: value [opts]"))
+        }
+        var pretty = false
+        if (args.size == 2) {
+            match (args[1]) {
+                case LispValue.HashMap(m) =>
+                    match (m.get("pretty")) {
+                        case Some(LispValue.Boolean(b)) => pretty = b
+                        case Some(other) => return LispValue.Error(XispError(ErrorType.TypeError,
+                            "json-dump: :pretty must be a boolean"))
+                        case None => ()
+                    }
+                case _ => return LispValue.Error(XispError(ErrorType.TypeError,
+                    "json-dump: opts must be a hashmap"))
+            }
+        }
+        dumpJson(args[0], pretty)
+    }))
+}
+
 public func jsonDomain(): LispCapability {
     SimpleCapability("json",
-        ["cangjie::json-get", "cangjie::json-get-many", "cangjie::json-parse", "cangjie::json-valid?"],
-        { ctx => registerJson(ctx.env) },
+        ["cangjie::json-get", "cangjie::json-get-many", "cangjie::json-parse",
+         "cangjie::json-valid?", "cangjie::json-dump"],
+        { ctx =>
+            registerJson(ctx.env)
+            registerJsonDump(ctx.env)
+        },
         escapable: false, hostPolicy: false)
 }

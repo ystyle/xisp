@@ -185,10 +185,34 @@ true                            ; => [UnboundVariable] —— 不是变量
 
 ---
 
+## 写 JSON：`json-dump`
+```lisp
+(cangjie::json-dump {:a 1 :b (list 1 2)})              ; => "{\"a\":1,\"b\":[1,2]}"
+(cangjie::json-dump {:a 1} {:pretty #t})               ; 带缩进的版本
+```
+| Lisp | JSON |
+|---|---|
+| `nil` | `null` |
+| `#t` / `#f` | `true` / `false` |
+| 整数 / 浮点 | 数字 |
+| 字符串 | 字符串（自动转义） |
+| 列表 | 数组 |
+| `HashMap` | 对象 |
+**不能序列化的**：过程、原生函数、宏、编译闭包、外部值 → `[TypeError] cannot serialize …`。
+这些没有 JSON 对应物，静默丢掉会让调用方拿到"看起来成功"的截断数据。
+```lisp
+;; 往返
+(cangjie::json-dump (cangjie::json-parse "{\"x\":[1,2]}"))   ; => "{\"x\":[1,2]}"
+```
+::: details 浮点为什么不会丢精度
+仓颉内置的 `Float64.toString()` 只给 **6 位小数**（`1/3` → `0.333333`、`π` → `3.141593`），
+拿它写 JSON 会静默截断。这里用 `.17g`（双精度的可往返精度），输出 `0.33333333333333331`。
+`1.0` 会写成 `1.0` 而不是 `1` —— 否则 `json-parse` 回来就成整数了。
+:::
+
 ## 尚未实现
 
-- **序列化为 JSON 文本**（`LispValue` → JSON）：gjson 是只读库，没有编码能力。计划自己实现
-  `(cangjie::json-dump value)`。
+- ~~序列化为 JSON 文本~~ —— **已实现**，见下面「写 JSON」一节。
 - 流式解析、JSON Schema 校验、JSON5 容错。
 
 ---
@@ -197,3 +221,5 @@ true                            ; => [UnboundVariable] —— 不是变量
 
 本模块采用 MIT。JSON 解析基于 [gjson-cj](https://gitcode.com/ystyle/gjson-cj)（MulanPSL-2.0），
 其许可声明见模块 README。
+
+---

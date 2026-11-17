@@ -276,7 +276,7 @@ class JsonTest {
         @Assert(!jsonDom.escapable)
         @Assert(!jsonDom.hostPolicy)
         @Assert(jsonDom.name == "json")
-        @Assert(jsonDom.symbols.size == 4)
+        @Assert(jsonDom.symbols.size == 5)
 
         // replace: true 独占装配：只有 JSON + 显式给的域
         let it = LispInterpreter([
@@ -391,5 +391,83 @@ class JsonTest {
                     (reduce + 0 (map (lambda (m) (hashmap-get m "score")) items))))"#
         assertJsonSameAllBackends(code, "(200 (\"a\" \"b\") 30)")
         println("✓ 解构 + 遍历 + 聚合，三段结果都对")
+    }
+
+    // ==================== json-dump（序列化） ====================
+
+    /** 标量与字符串序列化（三后端一致） */
+    @TestCase
+    func testDumpScalarsAllBackends() {
+        println("\n=== json-dump 标量（三后端）===")
+        // json-dump 返回的是字符串，repr 出来带引号 —— 期望值因此要再包一层
+        assertJsonSameAllBackends(#"(cangjie::json-dump 42)"#, "\"42\"")
+        assertJsonSameAllBackends(#"(cangjie::json-dump "hi")"#, "\"\"hi\"\"")
+        assertJsonSameAllBackends("(cangjie::json-dump nil)", "\"null\"")
+        assertJsonSameAllBackends("(cangjie::json-dump #t)", "\"true\"")
+        // 浮点必须带小数点，否则 parse 回来变整数
+        assertJsonSameAllBackends("(cangjie::json-dump 1.0)", "\"1.0\"")
+        println("✓ 42 / \"hi\" / null / true / 1.0")
+    }
+
+    /**
+     * **往返一致**：`json-parse` → `json-dump` → 再 `json-parse` 结果相同
+     *
+     * 这是设计文档 §11 的第 3 条不变量。
+     */
+    @TestCase
+    func testDumpRoundTripAllBackends() {
+        println("\n=== json-dump 往返（三后端）===")
+        // 数组
+        assertJsonSameAllBackends(
+            #"(cangjie::json-dump (cangjie::json-parse "[1,2,3]"))"#, "\"[1,2,3]\"")
+        // 嵌套对象（键序可能变，用 contains 不方便 —— 这里字段少且稳定）
+        let nested = #"(cangjie::json-dump (cangjie::json-parse "{\"a\":1,\"b\":\"x\"}"))"#
+        let r = evalJsonWithBackend(nested, "AST").toString()
+        @Assert(r.contains("\"a\":1") || r.contains("\"a\": 1"))
+        @Assert(r.contains("\"x\""))
+        // 整数保持整数（不被写成 42.0）
+        assertJsonSameAllBackends(
+            #"(cangjie::json-dump (cangjie::json-get "{\"n\":42}" "n"))"#, "\"42\"")
+        // 浮点保持浮点
+        assertJsonSameAllBackends(
+            #"(cangjie::json-dump (cangjie::json-get "{\"n\":42.5}" "n"))"#, "\"42.5\"")
+        println("✓ 数组 / 嵌套对象 / 整数不丢整数性 / 浮点不丢小数")
+    }
+
+    /** pretty 模式 */
+    @TestCase
+    func testDumpPrettyAllBackends() {
+        println("\n=== json-dump pretty ===")
+        let code = #"(cangjie::json-dump {:a 1} {:pretty #t})"#
+        for (b in backendNames()) {
+            let r = evalJsonWithBackend(code, b).toString()
+            // 结果本身是个 JSON 字符串，里面含换行与缩进
+            if (!r.contains("\\n") && !r.contains("\n")) {
+                @Fail("[${b}] pretty 应含换行，实得 ${r}")
+            }
+        }
+        println("✓ pretty 带换行与缩进")
+    }
+
+    /** 不可序列化的值报错（且不静默给半个结果） */
+    @TestCase
+    func testDumpRejectsUnserializableAllBackends() {
+        println("\n=== json-dump 拒绝不可序列化的值（三后端）===")
+        assertJsonErrorAllBackends("(cangjie::json-dump (lambda (x) x))", "TypeError")
+        assertJsonErrorAllBackends("(cangjie::json-dump car)", "TypeError")
+        // 注意：`(cangjie::json-dump (error "x"))` 测不了 —— Error 参与求值链就中止
+        // （0.7.0 语义），根本传不到 json-dump 里。错误值这条路径由白盒用例
+        // testDumpRejectsUnserializable 直接喂 LispValue.Error 覆盖。
+        println("✓ 过程 / 原生函数 / 错误值都报 TypeError")
+    }
+
+    /** 参数错误 */
+    @TestCase
+    func testDumpArgumentErrors() {
+        println("\n=== json-dump 参数错误 ===")
+        assertJsonErrorAllBackends("(cangjie::json-dump)", "ArityMismatch")
+        assertJsonErrorAllBackends(#"(cangjie::json-dump 1 {:pretty "yes"})"#, "TypeError")
+        assertJsonErrorAllBackends("(cangjie::json-dump 1 2)", "TypeError")
+        println("✓ 个数错 ArityMismatch、:pretty 类型错 TypeError")
     }
 }

@@ -4,7 +4,7 @@
 
 - **包**：`ystyle::xisp_json`
 - **依赖**：`ystyle::xisp`（核心）+ [`gjson`](https://gitcode.com/ystyle/gjson-cj)（JSON 解析，零依赖）
-- **不含**：JSON 序列化（`LispValue` → JSON 文本）—— 列为第二批，见下文
+- **含**：JSON 序列化 `cangjie::json-dump`（`LispValue` → JSON 文本）
 - **设计**：`docs/plans/2026-11-17-json-design.md`
 
 ## 为什么是独立模块
@@ -102,8 +102,8 @@ JSON 是**纯计算** —— 不碰文件、网络、进程。域属性 `escapab
 
 ## 尚未实现
 
-- **JSON 序列化**（`LispValue` → JSON 文本）：gjson 是只读库，没有 `encode` / `set`。
-  计划自己实现 `(cangjie::json-dump value)`，可序列化 `nil` / 布尔 / 数字 / 字符串 /
+- **JSON 序列化**（`LispValue` → JSON 文本）：gjson 是只读库，没有 `encode` / `set`，
+  所以自己实现（`(cangjie::json-dump value [opts])`）。可序列化 `nil` / 布尔 / 数字 / 字符串 /
   列表 / `HashMap`，其余变体（过程、宏、外部值、错误）报 `TypeError`。
 - 流式解析、JSON Schema 校验、JSON5 容错。
 
