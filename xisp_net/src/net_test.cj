@@ -1,6 +1,7 @@
 package ystyle::xisp_net
 
 import ystyle::xisp.*
+import ystyle::xisp_bc.*
 import ystyle::xisp.types.*
 import ystyle::xisp.parser.*
 import ystyle::xisp.core.eval.*
@@ -175,6 +176,48 @@ class NetUnitTest {
         @Assert(dom.hostPolicy)
         @Assert(dom.symbols.size == 8)
         println("✓ escapable / hostPolicy 均为 true，presetPure 会排除它")
+    }
+
+    // ==================== 三后端一致 ====================
+
+    /**
+     * 三个后端下网络能力行为一致
+     *
+     * 只测**本地可判定**的部分（url-encode 与沙箱拒绝）—— 真实请求依赖外网，
+     * 放进去会让这个用例变成"有时能跑"的。
+     *
+     * 网络函数都是 `NativeFunc`，理论上天然一致；这条用例防的是将来有人把
+     * 某个分支写进编译器特化里（`spawn` 就因为编译器回退而在三后端下表现一致，
+     * 但那是有意为之，不是自动的）。
+     */
+    @TestCase
+    func testAllBackends() {
+        println("\n=== 三后端一致 ===")
+        for (backend in ["AST", "BC", "JIT"]) {
+            let opts = ArrayList<InterpreterOption>()
+            opts.add(withQuietMode())
+            opts.add(withNetwork(["api.example.com"]))
+            if (backend != "AST") {
+                opts.add(withBytecodeCompiler())
+            }
+            if (backend == "JIT") {
+                opts.add(withJit())
+            }
+            let o = opts.toArray()
+            let enc = this.evalIn(o, #"(cangjie::url-encode "a b&c")"#)
+            if (enc != "\"a%20b%26c\"") {
+                @Fail("[${backend}] url-encode 期望 \"a%20b%26c\"，实得 ${enc}")
+            }
+            let denied = this.evalIn(o, #"(cangjie::http-get "https://evil.example.net/x")"#)
+            if (!denied.contains("url not allowed")) {
+                @Fail("[${backend}] 白名单外应被拒，实得 ${denied}")
+            }
+            let typ = this.evalIn(o, "(cangjie::http-get 42)")
+            if (!typ.contains("TypeError")) {
+                @Fail("[${backend}] 非字符串 url 应报 TypeError，实得 ${typ}")
+            }
+        }
+        println("✓ url-encode / 沙箱拒绝 / 参数错误在 AST、BC、JIT 下一致")
     }
 
     // ==================== 真实网络（默认跳过） ====================

@@ -19,6 +19,11 @@
 [dependencies]
   "ystyle::xisp" = "0.6.0"
 
+# 仅测试用：三后端一致性用例需要字节码/JIT 后端。
+# 放 test-dependencies 而不是 dependencies —— 正常使用 xisp_net 不必拖进后端模块。
+[test-dependencies]
+  "ystyle::xisp_bc" = "0.6.0"
+
 # 构建前必须先 `eval "$(cjvs stdx-env zsh)"`（或等价配置）。
 # 缺 CANGJIE_STDX_PATH 时 cjpm 的报错会指向 cjpm.toml 说"没加依赖"，
 # 掩盖真正原因 —— 别被它带偏。
