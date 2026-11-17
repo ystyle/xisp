@@ -2,4 +2,4 @@ version = 0
 
 [requires]
   gjson = {version = "1.2.2"}
-  "ystyle::xisp" = {version = "0.6.0"}
+  "ystyle::xisp" = {version = "0.7.0"}

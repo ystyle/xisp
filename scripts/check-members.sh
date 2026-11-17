@@ -71,6 +71,16 @@ for path in members:
     # 2. cjc-version 全体一致
     cjc_versions.setdefault(str(pkg.get("cjc-version")), []).append(path)
 
+    # 2b. test-dependencies 的成员版本必须与产品版本一致
+    #     cjpm ws bump 只改 [dependencies]，不管 [test-dependencies] —— 漏改会在
+    #     bundle 时报"依赖冲突"，而且错误指向 [dependencies]（让人以为主依赖写错了）。
+    for dep, depver in (cfg.get("test-dependencies") or {}).items():
+        if not dep.startswith("ystyle::"):
+            continue
+        if isinstance(depver, str) and depver != ws_ver:
+            fail.append(f"{path}: test-dependencies 的 {dep}={depver} 与产品版本 {ws_ver} 不一致"
+                        f"（cjpm ws bump 不会改这里，要手工同步）")
+
     # 3. 库成员禁用 [replace]
     if pkg.get("output-type") == "static" and "replace" in cfg:
         fail.append(f"{path}: 库成员（static）不得使用 [replace]（只对本仓生效，下游照样冲突）")
