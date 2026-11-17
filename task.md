@@ -120,15 +120,26 @@
 > - 不支持版本范围语法（^, ~, >=, <=），保持简单
 
 ### 4.5 异步支持
-- [ ] spawn 宏实现（创建线程）
-- [ ] Future<T> 操作（get, get(timeout), tryGet, cancel）
+> 设计已定 → [`docs/plans/2026-11-17-async-design.md`](docs/plans/2026-11-17-async-design.md)
+
+**前置改造（阻塞项，不做则语义是错的）**
+- [ ] `Environment.defineVersion` 从 `static var` 改为线程局部（并发递增会丢，导致缓存该失效却未失效 → 查到旧绑定）
+- [ ] JIT 在子线程禁用（`jitCurEnv` 等是包级 `static var`，两个线程跑 JIT 会互相踩）
+- [ ] `Environment.bindings` 懒分配读写锁（仅被 spawn 共享过的环境才付开销）
+
+**功能**
+- [ ] `spawn` 特殊形式（②类求值器拦截 —— 实参必须在新线程求值，不能是普通函数）
+- [ ] Future 操作：`future-get` / `future-get`(带超时) / `future-try-get` / `future-done?` / `future-pending?` / `future-cancel`
 - [ ] 线程工具（Thread.currentThread, id, hasPendingCancellation）
+- [ ] `spawn` 在字节码后端**特化**（不能靠 `compileSuspended` 整树回退 —— 宏曾因此慢 12 倍）
 
 > 设计说明：
 > - 使用仓颉的 spawn + Future<T> 模型（非 async/await 语法）
-> - spawn 创建线程并返回 Future<T>
-> - Future<T> 提供结果获取和取消机制
-> - 参考 std.sync 和 std.core.Future<T> API
+> - `Future` 用 `LispValue.External` 承载（0.6.0 的接缝）
+> - 环境语义：**共享环境树 + 写入加锁**（`set!` 对父环境可见）
+> - 错误：spawn 体内出错 → Future 持有 Error，`future-get` **返回该 Error 值**（不中止调用方）
+> - 取消：仓颉 `Future.cancel()` 只发请求 → 接进既有的 `isInterrupted` 协作式中断（4 处检查点自动生效）
+> - **`docs/design.md` §5 的 `(future.get)` 方法调用语法不成立**（xisp 无成员访问），已订正为一等函数
 
 ### 4.6 宏系统增强
 - [x] 宏展开调试工具 ✅ 已有（`macroexpand` / `macroexpand-all` 特殊形式）
@@ -1260,3 +1271,31 @@ tag `v0.6.0` 已推送到 `gitcode.com/ystyle/xisp`（master 同步到 `fe95097`
 3. **中心仓同步延迟**：`publish success` 之后索引与制品分别延迟约 1~3 分钟。
    按 skill 的有限次重试（1/3/5 分钟）逐个确认 `index` 出现 `"version":"0.6.0"` 且
    `/pkg/...` 返回 200，再发下一个依赖方 —— 否则下游 bundle 会因解析不到上游而失败。
+
+---
+
+## M26: 三份设计文档（JSON / 异步 / 网络）✅
+
+把散在讨论里的结论固化成文档，避免下次重新捞。三份都只做设计、不开工。
+
+| 文档 | 核心决策 |
+|---|---|
+| [`docs/plans/2026-11-17-json-design.md`](docs/plans/2026-11-17-json-design.md) | 独立模块 `xisp_json`（不进 core，保零依赖红线）；依赖 `gjson 1.2.2`（中心仓 default org、零依赖、**MulanPSL-2.0** 需带声明）；两层 API（路径取值 + 解析成树）；整数形态给 `Int` 其余 `Float`；路径不存在 → `nil` 不是错误；**首版只读**，写 JSON 另立（自己手写序列化） |
+| [`docs/plans/2026-11-17-async-design.md`](docs/plans/2026-11-17-async-design.md) | core 内 + 能力域 `async`；**三项前置改造**（`defineVersion` 线程局部、JIT 子线程禁用、环境懒加锁）；共享环境树 + 写锁；每线程一个 Evaluator；错误是值；cancel 接中断；`spawn` 必须特化不能整树回退 |
+| [`docs/plans/2026-11-17-net-design.md`](docs/plans/2026-11-17-net-design.md) | 独立模块 `xisp_net`；原语层 **fetch 形态**、axios 留 Lisp 宏；响应用 `HashMap` + `:max-body-bytes` 防 OOM；错误分两层（传输层 → `NetworkError` / 4xx·5xx → 数据流）；`urlChecker` 域名白名单 + 默认不注册；**TLS vs `--static` 是开工第一件事** |
+
+### 写文档时查出并纠正的两处过时结论
+
+1. **「`HashMap` 没有字面量语法，要手工扫 `:key value`」—— 已不成立。** 实测 `{:a 1 :b 2}` 字面量、嵌套、`let` 解构（含嵌套）全部可用。所以网络请求的 options 就是个普通 `HashMap` 参数，不需要任何特殊扫描逻辑。
+2. **「`LispValue` 没有宿主对象/实例」—— 已部分不成立。** 0.6.0 加了 `External`，但**仍无成员访问语法**（全仓无 `member-access`），所以「闭包 + 状态当对象」的路子依然成立，`(client.get url)` 仍写不出来。
+
+### 两个硬约束（查代码得到，不是推测）
+
+- `Environment.defineVersion` 是 `static var`、`ArithVersionCell` 是无锁可变类 → 多线程 `value += 1` 会丢递增 → **缓存该失效却未失效 → 查到旧绑定（语义错，不只是慢）**；
+- `jitCurEnv`（`xisp_bc/src/jit_runtime.cj:25`）是包级可变全局，且 `jit_runtime.cj:251` 直接改写它 → **JIT 完全不能多线程**。对照：`BytecodeVM.registers` 是实例字段，BC 每线程一个实例即可。
+
+### 顺序
+
+**JSON → 异步 → 网络**。JSON 零依赖零未知可立刻做；异步改核心且是网络的前置；网络等 TLS 实测。
+
+**验证**：三份文档均为设计稿，不改代码，故本次无 `cjpm test` 相关变更；文档里的事实断言（HashMap 字面量、static var、jitCurEnv、ErrorType 8 臂、gjson 只读）逐条核实过。
