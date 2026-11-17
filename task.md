@@ -29,6 +29,7 @@
 - ✅ M27: JSON 能力落地（新成员 xisp_json）
 - ✅ M28: 异步能力落地（spawn + Future）
 - ✅ M29: 网络能力落地（新成员 xisp_net）
+- ✅ M30: 发版 0.7.0（并发 / JSON / HTTP）
 
 ---
 
@@ -1547,3 +1548,67 @@ workspace 成员 **8 → 9**。
 `cjpm ws publish` 按拓扑序处理正好覆盖。
 
 下个版本 **0.7.0**（0.6.0 已随 5 个成员发布过，现在是 9 个成员 + core 有破坏性改动）。
+
+---
+
+## M30: 发版 0.7.0 ✅
+
+整产品 **0.6.0 → 0.7.0**，9 个成员 lockstep。
+
+### 内容
+
+| 能力 | 交付形式 |
+|---|---|
+| 并发 | 核心内置（`spawn` + `Future`，零外部依赖） |
+| JSON | 新成员 `ystyle::xisp_json`（依赖 gjson） |
+| HTTP | 新成员 `ystyle::xisp_net`（依赖 stdx） |
+
+破坏性变更两处：`ErrorType` 加 `NetworkError`、新增能力域 `async`（13 → 14）。
+
+### 发布结果（2026-11-17）
+
+7 个发布成员全部 `cjpm publish success`，逐个确认索引与制品就绪后再发下一个：
+
+| 成员 | 索引 | 制品 | 大小 |
+|---|---|---|---|
+| `ystyle::xisp` | ✅ | 200 | 128KB（59 个 .cj） |
+| `ystyle::xisp_terminal` | ✅ | 200 | 6KB |
+| `ystyle::xisp_bc` | ✅ | 200 | 53KB |
+| `ystyle::xisp_json` | ✅ | 200 | 7KB |
+| `ystyle::xisp_net` | ✅ | 200 | 12KB |
+| `ystyle::xisp_repl` | ✅ | 200 | 14KB |
+| `ystyle::xisp_cli` | ✅ | 200 | 2KB |
+
+**索引 sha256 与下载制品逐字节一致**（7/7）；制品顶层只有 `README.md` / `cjpm.toml` / `src`，
+无 `docs` / `docs-site` / `examples` / `tests` / `scripts` / `AGENTS.md`。
+
+tag `v0.7.0` 已推 gitcode 与 GitHub。
+
+### 发版中踩到的一个坑（已堵）
+
+私有仓预演时 `xisp_net` 的 bundle 失败：
+
+```
+Error: conflictions occurred between dependencies from central repository:
+  - 'ystyle::xisp = "0.7.0"' depended by 'ystyle::xisp_net'
+  - 'ystyle::xisp_bc = "0.6.0"' depended by 'ystyle::xisp_net'
+```
+
+根因：**`cjpm ws bump` 只改 `[dependencies]`，不管 `[test-dependencies]`**。
+`xisp_net` 的 test-dependencies 里钉着 `xisp_bc 0.6.0`，而它又依赖 `xisp 0.6.0`，
+与 xisp_net 要的 `xisp 0.7.0` 冲突。报错还指向主依赖，看起来像 `[dependencies]` 写错了。
+
+**已堵**：`scripts/check-members.sh` 新增一条 —— test-dependencies 里 `ystyle::*` 的版本
+必须等于产品版本，并写明原因。反向验证过（改回 0.6.0 时闸门会拦）。
+
+### 顺带修的 CI（本轮之前 CI 从 11-08 起一直是红的）
+
+不是新代码问题 —— 第一步 `Install cjpm-ws` 就挂了。真正原因是**环境变量名不匹配**：
+setup-cangjie 导出 `CANGJIE_STDX_PATH_STATIC` / `_DYNAMIC`，而 cjpm 的 `bin-dependencies`
+按 cjvs 约定写 `${CANGJIE_STDX_PATH}`，变量展开成空 → cjpm 报"cjpm.toml 里没加依赖"
+（指向完全错误的方向）。见 M29 之后的 `ci:` 提交。
+
+### 验证
+
+`cjpm test` 601/601；`check-examples.sh` 22/22；`cjpm ws check` 与成员闸门通过；
+docs-site 构建成功；CI 全绿（run 44052479092 及之后）。
