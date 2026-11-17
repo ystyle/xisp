@@ -14,8 +14,35 @@ jobs:
       - uses: Zxilly/setup-cangjie@v3
         with:
           channel: sts
-          version: 1.1.0
+          # 与本地开发环境一致（工作区规范：从 2026-10-10 起统一 1.2.0）。
+          # CI 长期停在 1.1.0 意味着验证的不是实际构建环境。
+          version: 1.2.0
           components: stdx
+
+      # setup-cangjie 导出的是 CANGJIE_STDX_PATH_STATIC / _DYNAMIC，而 cjpm 的
+      # `bin-dependencies` 里按 cjvs 的约定写 `${CANGJIE_STDX_PATH}`（本仓 xisp_net
+      # 与发布工具 cjpm_ws 都这么写）。两者不一致时变量展开成空，报错是：
+      #   imports package 'stdx.xxx' ... but it is not added as a dependency in cjpm.toml
+      # —— 指向完全错误的方向（看起来像 cjpm.toml 漏了依赖，实际是环境变量没映射）。
+      # 所以这里统一映射一次，且必须排在所有依赖 stdx 的步骤之前。
+      - name: Setup stdx env
+        run: |
+          base="${CANGJIE_STDX_PATH_STATIC:-${CANGJIE_STDX_PATH:-}}"
+          if [ -z "$base" ]; then
+            echo "::error::找不到 stdx 路径（CANGJIE_STDX_PATH_STATIC 与 CANGJIE_STDX_PATH 都为空）。确认 setup-cangjie 带了 components: stdx。"
+            exit 1
+          fi
+          # 布局因安装方式而异：cjvs 是 <...>/static/stdx，setup-cangjie 是 <...>/static
+          if [ -d "$base/stdx" ]; then
+            stdx_path="$base/stdx"
+          else
+            stdx_path="$base"
+          fi
+          if [ ! -f "$stdx_path/libstdx.a" ] && [ ! -f "$stdx_path/libstdx.so" ]; then
+            echo "::warning::$stdx_path 下没找到 libstdx.*，仍按此路径继续；若构建失败请先看这里。"
+          fi
+          echo "CANGJIE_STDX_PATH=$stdx_path" >> "$GITHUB_ENV"
+          echo "stdx 路径: $stdx_path"
 
       # 工作区版本一致性闸门。
       # 工作区内的本地依赖解析不校验版本号（写错版本也能构建通过），
@@ -23,19 +50,6 @@ jobs:
       # docs/plans/2026-09-27-workspace-modularization.md §5.2。
       - name: Install cjpm-ws
         run: cjpm install ystyle::cjpm_ws-0.1.5 --name cjpm-ws
-
-      # xisp_net 走 stdx 的**二进制依赖**，构建时读 `CANGJIE_STDX_PATH`。
-      # setup-cangjie 装了 stdx 组件，但不保证导出这个变量；而缺它时 cjpm 会报
-      # "cjpm.toml 里没加依赖"（指向错误方向），排查成本高 —— 故在这里前置检查，
-      # 让失败原因一眼可见。
-      - name: Ensure stdx env (xisp_net)
-        run: |
-          if [ -n "${CANGJIE_STDX_PATH:-}" ] && [ -d "${CANGJIE_STDX_PATH}" ]; then
-            echo "stdx 就绪: ${CANGJIE_STDX_PATH}"
-          else
-            echo "::error::CANGJIE_STDX_PATH 未设置或目录不存在。xisp_net 需要 stdx（setup-cangjie 的 components: stdx 之外还需导出该变量）。"
-            exit 1
-          fi
 
       - name: Workspace version gate
         run: cjpm ws check
