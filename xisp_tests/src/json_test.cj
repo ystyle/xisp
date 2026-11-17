@@ -290,6 +290,44 @@ class JsonTest {
     }
 
     /**
+     * **解析结果与手工构造的等价结构一致**
+     *
+     * 没有 `json-dump`（序列化是第二批），所以"往返"只做单向比对：
+     * `json-parse` 出来的树，必须和用 `HashMap` / 列表 / 标量手工搭出来的
+     * 等价结构在**显示口径**上一致。
+     *
+     * 用 `str` 比较而不是 `=` / `eq?` —— 这两个内建只做数值与标量的浅比较
+     * （实测 `(= "a" "a")` → `false`、`(eq? (list 1 2) (list 1 2))` → `false`），
+     * 对 `HashMap` / 列表一律不等，不能用来验证结构相等。
+     */
+    @TestCase
+    func testParseMatchesHandmadeStructure() {
+        println("\n=== 解析结果 ≡ 手工构造的等价结构 ===")
+        // 每条都是「完整 Lisp 表达式」，避免在仓颉层做二次转义
+        let jsonExprs = [
+            #"(str (cangjie::json-parse "{\"a\":1,\"b\":[2,3]}"))"#,
+            #"(str (cangjie::json-parse "{\"s\":\"x\",\"n\":null}"))"#,
+            #"(str (cangjie::json-parse "[1,[2,3],{\"k\":\"v\"}]"))"#,
+            #"(str (cangjie::json-parse "{\"f\":1.5,\"t\":true}"))"#,
+        ]
+        let handmadeExprs = [
+            "(str {:a 1 :b (list 2 3)})",
+            #"(str {:s "x" :n nil})"#,
+            #"(str (list 1 (list 2 3) {:k "v"}))"#,
+            // 布尔字面量是 #t / #f —— xisp 里 `true` / `false` 是未绑定变量
+            "(str {:f 1.5 :t #t})",
+        ]
+        for (i in 0..jsonExprs.size) {
+            let fromJson = evalJsonWithBackend(jsonExprs[i], "AST").toString()
+            let manual = evalJsonWithBackend(handmadeExprs[i], "AST").toString()
+            if (fromJson != manual) {
+                @Fail("第 ${i} 组结构与手工构造不一致：json → ${fromJson}，手工 → ${manual}")
+            }
+        }
+        println("✓ 4 组结构（嵌套数组 / object / null / 浮点 / 布尔）与手工构造一致")
+    }
+
+    /**
      * **用户文档里的每个示例都必须是真的**
      *
      * `docs-site/api/json.md` 里的 `=> 输出` 全部在这里断言一遍。文档腐化

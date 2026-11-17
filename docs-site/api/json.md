@@ -124,6 +124,16 @@ JSON 能力分**两层**，不是冗余：
 | 数组 | 列表 |
 | 对象 | `HashMap` |
 
+::: tip 布尔值的字面量是 `#t` / `#f`
+`json-parse` 解析出的布尔值**显示**为 `true` / `false`，但**输入**时要写 `#t` / `#f`：
+
+```lisp
+(cangjie::json-parse "true")   ; => true
+#t                              ; => true      输入用这个
+true                            ; => [UnboundVariable] —— 不是变量
+```
+:::
+
 **整数不丢整数性**：判据是原始文本形态（不含 `.` / `e` / `E`）：
 
 ```lisp
