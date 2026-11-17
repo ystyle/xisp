@@ -1,5 +1,7 @@
 # Loader 接口设计
 
+**状态**: **已实施**
+
 > **现状（2026-11-17 标注）**：**已实施**（`core/src/core/module/` 的模块装载与 `moduleLoadChecker` 权限钩子）。
 
 ## 1. 问题分析
