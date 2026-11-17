@@ -3,8 +3,8 @@
 > 仓颉嵌入式 Lisp 脚本语言
 
 [![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
-[![Version](https://img.shields.io/badge/version-0.6.0-green.svg)](https://github.com/ystyle/xisp)
-[![Cangjie](https://img.shields.io/badge/Cangjie-1.1.0-orange.svg)](https://cangjie-lang.cn/)
+[![Version](https://img.shields.io/badge/version-0.7.0-green.svg)](https://github.com/ystyle/xisp)
+[![Cangjie](https://img.shields.io/badge/Cangjie-1.2.0-orange.svg)](https://cangjie-lang.cn/)
 ![star](https://atomgit.com/ystyle/xisp/star/badge.svg)
 
 ## 简介
@@ -28,26 +28,35 @@ Xisp（星枢）是一个用仓颉（Cangjie）语言编写的嵌入式 Lisp 解
 - 🔧 **REPL 交互** - 支持交互式开发
 - 🌏 **完整 Unicode 支持** - 支持中文、日文、韩文等多语言编程
 
-## 破坏性变更与迁移（0.6.0 已发布 · 本节另含未发布的下一版内容）
+## 破坏性变更与迁移
 
-0.6.0 把语言核心收敛到「**R5RS 级符号分层**」：每个符号现在都明确属于四层之一，
+### 0.7.0（当前版本）
+
+新增并发、JSON、HTTP 三个能力。**升级到 0.7.0 要改两处**：
+
+| 变更 | 影响 | 怎么改 |
+|---|---|---|
+| `ErrorType` 新增 `NetworkError` | 宿主侧对 `ErrorType` 的 `match` 变为非穷尽 | 补 `case NetworkError =>`。编译器逐处报 `non-exhaustive patterns`；`repl` 里那份手写映射已改用 `ErrorType.name()` |
+| 新增能力域 `async` | 域数 13 → 14 | 用 `presetFull()` / `presetPure()` 的宿主**无需改动**（`async` 属 `hostPolicy`，被 `presetPure` 排除） |
+
+新增能力：
+
+- **并发**（核心内置，零外部依赖）：`spawn` + `Future`，共享环境、协作式取消
+- **JSON**（可选模块 `ystyle::xisp_json`）：`cangjie::json-get` 等四个符号
+- **HTTP**（可选模块 `ystyle::xisp_net`）：`cangjie::http-get` 等八个符号，域名白名单沙箱
+
+### 0.6.0
+
+把语言核心收敛到「**R5RS 级符号分层**」：每个符号现在都明确属于四层之一，
 并且除语言原语与求值器必须拦截的那几个形式外，**都可以被宿主或用户顶掉**。
-
-> **版本状态**：0.6.0 已发布到中心仓。此后 master 上又累积了并发、JSON、HTTP 三个能力
-> （其中并发改动了 `ErrorType`），它们将在 **0.7.0** 发布 —— 下表里标「下一版」的行，
-> 0.6.0 的制品里**没有**。
-
-### 必须改的（破坏性）
 
 | 变更 | 影响 | 怎么改 |
 |---|---|---|
 | `LispValue` 新增 `External(LispExternal)` 变体 | 宿主侧对 `LispValue` 的 `match` 变为非穷尽 | 补 `case External(_) => …`。**编译器会逐处报 `non-exhaustive patterns`**，不会漏；不实现能力接口时它会退化为"不支持"，不会静默成功 |
 | **错误一律中止求值链** | 此前多处会**静默吞掉**错误值（`begin` / `define` / `set!` / `let` / `match` / 算术 / 函数头位置…），现在一律中止 | 依赖"出错后继续"的脚本要显式处理。绑定初值出错**不再建立绑定** |
 | 内置域重新划分 | `print` 域拆成 `string`（纯计算）与 `print`（`hostPolicy`）；`logic` 拆成 `logic` 与 `predicates`；新增 `aliases` 域 | 只用 `LispInterpreter([...])` 默认装配或 `presetFull()` / `presetPure()` 的宿主**无需改动**；手写域列表的要看 `docs-site/integration/options.md` 的域表 |
-| **（下一版）** `ErrorType` 新增 `NetworkError` | 宿主侧对 `ErrorType` 的 `match` 变为非穷尽 | 补 `case NetworkError =>`。编译器逐处报 `non-exhaustive patterns`；`repl` 里那份手写映射已改用 `ErrorType.name()` |
-| **（下一版）** 新增能力域 `async` | 域数 13 → 14 | 用 `presetFull()` / `presetPure()` 的宿主无需改动（`async` 属 `hostPolicy`，被 `presetPure` 排除） |
 
-### 新增能力
+### 0.6.0 新增能力
 
 - **装配档位**：`withLevel(XispLevel.Expr | Pure | Script)` —— 选一档而不是逐个挑域
   （`Expr` 纯计算无宏无输出、`Pure` 加宏包、`Script` 全量 + 标准库）
@@ -68,7 +77,7 @@ Xisp（星枢）是一个用仓颉（Cangjie）语言编写的嵌入式 Lisp 解
 
 ### 前置要求
 
-- [仓颉 SDK](https://cangjie-lang.cn/) 1.1.0+
+- [仓颉 SDK](https://cangjie-lang.cn/) 1.2.0+
 
 ### 编译
 
@@ -108,10 +117,10 @@ Xisp 以 cjpm 工作区组织，9 个成员模块**按需依赖**：
 
 ```toml
 [dependencies]
-  "ystyle::xisp" = "0.6.0"           # 核心：解释器 / 内建 / 桥接
-  # "ystyle::xisp_repl" = "0.6.0"    # 需要交互式 REPL 时
-  # "ystyle::xisp_bc" = "0.6.0"      # 需要字节码 / JIT 时
-  # JSON / HTTP 两个能力模块将在 0.7.0 提供，中心仓暂无：
+  "ystyle::xisp" = "0.7.0"           # 核心：解释器 / 内建 / 桥接
+  # "ystyle::xisp_repl" = "0.7.0"    # 需要交互式 REPL 时
+  # "ystyle::xisp_bc" = "0.7.0"      # 需要字节码 / JIT 时
+  # JSON / HTTP 两个能力模块（0.7.0 起）：
   # "ystyle::xisp_json" = "0.7.0"    # JSON 能力
   # "ystyle::xisp_net" = "0.7.0"     # HTTP 能力（另需 stdx 环境）
 ```
@@ -134,7 +143,7 @@ cjpm ws check         # 版本一致性闸门（多包产品共用版本号）
 ❯ ./target/release/bin/ystyle::xisp_cli
 ╔═══════════════════════════════════════════════════════════╗
 ║           星枢 - 仓颉嵌入式 Lisp 脚本语言                   ║
-║                   版本 0.6.0                              ║
+║                   版本 0.7.0                              ║
 ╚═══════════════════════════════════════════════════════════╝
 xisp> (print "你好，仓颉")
 "你好，仓颉"

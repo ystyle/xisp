@@ -6,8 +6,8 @@
 
 ```toml
 [dependencies]
-  "ystyle::xisp" = "0.6.0"
-  "ystyle::xisp_json" = "0.7.0"   # 0.7.0 起提供，中心仓待发布
+  "ystyle::xisp" = "0.7.0"
+  "ystyle::xisp_json" = "0.7.0"   # 0.7.0 起提供
 ```
 
 ```cangjie

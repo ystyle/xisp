@@ -31,8 +31,8 @@ Xisp 的核心只做「求值」——解释器、内建函数、模块系统、
 
 ```toml
 [dependencies]
-  "ystyle::xisp" = "0.6.0"
-  "ystyle::xisp_json" = "0.7.0"   # 0.7.0 起提供，中心仓待发布
+  "ystyle::xisp" = "0.7.0"
+  "ystyle::xisp_json" = "0.7.0"   # 0.7.0 起提供
   "ystyle::xisp_net" = "0.7.0"    # 同上；另需 stdx 环境
 ```
 
