@@ -28,6 +28,7 @@
 - ✅ M26: 三份设计文档（JSON / 异步 / 网络）
 - ✅ M27: JSON 能力落地（新成员 xisp_json）
 - ✅ M28: 异步能力落地（spawn + Future）
+- ✅ M29: 网络能力落地（新成员 xisp_net）
 
 ---
 
@@ -1450,3 +1451,99 @@ VM 内部函数 id，跨 VM 传递后 id 对不上。改成实例字段会打破
   三个提醒，以及子线程走 AST、环境锁懒分配两个实现说明）；
 - `docs-site/api/index.md` 内置函数表加并发行（合计 115 → 123）；
 - `docs/design.md` §5 的 `(future.get)` 方法调用写法订正为一等函数。
+
+---
+
+## M29: 网络能力落地（新成员 `xisp_net`）✅
+
+按 [`docs/plans/2026-11-17-net-design.md`](docs/plans/2026-11-17-net-design.md) 实现。
+workspace 成员 **8 → 9**。
+
+### 最关键的一件事：TLS vs `--static` 实测通过
+
+设计稿把这条列为"唯一可能推翻方案的点"。实测结论：**不冲突**。
+
+| 项 | 结果 |
+|---|---|
+| 库 `import stdx.net.http` / `stdx.net.tls`，无 `--static` | ✅ |
+| 可执行 `--static`，依赖该库 | ✅ |
+| `ldd` 产物 | 只有 libstdc++/libm/libc/libgcc_s —— **没有 libssl.so** |
+| 真实 `https://httpbin.org/status/200` | ✅ 200 |
+| 真实 `http://httpbin.org/status/200` | ✅ 200 |
+
+原因：stdx 的 OpenSSL 是**运行时动态加载**（随 `libcangjie-dynamicLoader-opensslFFI.a`
+静态进产物），链接期没有 `libssl.so` 依赖。原先列的三个备选方案都不需要。
+
+另一个必须知道的细节：`ClientBuilder()` 默认不带 TLS，HTTPS 会报
+`TLS must be configured when HTTPS requests are sent`，必须显式 `.tlsConfig(TlsClientConfig())`。
+
+### 符号（八个）
+
+`cangjie::http-request` / `http-get` / `http-post` / `http-put` / `http-delete` /
+`http-patch` / `http-head` / `url-encode`。
+
+**原语层是 fetch 形态**（薄、正交、返回完整响应），axios 那层（baseURL 继承、拦截器、
+自动重试）留给 Lisp 宏 —— 那正是宏系统该干的。
+
+请求 `opts` 就是普通 `HashMap`（map 字面量已支持）：`:timeout` / `:headers` / `:body` /
+`:max-body-bytes`。响应：`{:status :ok :headers :body :url}`。
+
+### 错误分两层
+
+| 情况 | 结果 |
+|---|---|
+| DNS / 连接拒绝 / 超时 / TLS 失败 | `Error(NetworkError)` |
+| **HTTP 4xx / 5xx** | **正常数据流**，看 `status` |
+
+`ErrorType` 加了第 9 个变体 `NetworkError`。加的时候编译器强制补了两处穷尽 match
+（`name()` 与 `operator ==`）—— 0.6.0 加的 `name()` 正是为此。
+
+顺带把 `repl/src/highlighter.cj` 里手写的一份 ErrorType→String 映射删掉，改用 `name()`：
+手写的那份在加变体时编译器不强制，容易漏。
+
+### 安全默认
+
+- **默认不注册**，必须 `withNetwork([...])` 显式给白名单；
+- **空白名单 = 全部拒绝**（不是"允许所有"）；
+- 匹配目标是 URL 的 **host**，避免 `https://evil.com/?x=https://good.com` 前缀绕过；
+- `*.example.org` **不匹配** `example.org` 本身（要连主域就写明）；
+- **不跟随重定向**（3xx 原样返回）—— 跟随要每跳校验 host，首版宁可不跟；
+- 响应体上限默认 8 MiB（stdx 客户端整包缓冲，不设限会 OOM）。
+
+### 实现中定下的几件事
+
+- **每次请求新建 `Client`，用完 close**：`Client` 线程安全性未确认，而 `spawn` 之后
+  多线程会并发调网络；共享实例等于埋竞态。代价是每次多一次握手；
+- **响应头按 `Iterable<(String, Collection<String>)>` 遍历**：同名多值（`Set-Cookie`）
+  单值给字符串、多值给列表；
+- **`url-encode` 手写十六进制查表**，不依赖 `toString(radix:)` 的形态。
+
+### 测试 11 条，默认不依赖外网
+
+白盒（`hostOf` / `hostAllowed` / `urlEncode`）、装配、沙箱拒绝、参数错误全部默认跑；
+真实 HTTP/HTTPS 只在 `XISP_NET_TESTS=1` 时跑。两个测试相关教训：
+
+- 第一版"子域放行"真的去连 `http://a.example.org/x`，DNS 失败等几十秒 → 整个用例 **248 秒**。
+  改成只验证"主域被拒"（通配放行侧由白盒覆盖）；
+- "传输层失败"用例在有 `http_proxy` 时跳过 —— 请求被代理接管后回 502（正常响应），
+  测不到直连失败。这是环境差异，按环境跳过而不是放宽断言。
+
+### 工程配套
+
+- `scripts/check-members.sh` 的 `NATIVE_ALLOWED` 加 `xisp_net`（唯一允许平台配置的成员）；
+- `.github/workflows/ci.yml` 加 `Ensure stdx env` 步骤 —— 缺 `CANGJIE_STDX_PATH` 时
+  cjpm 会报"cjpm.toml 没加依赖"（指向错误方向），前置检查让失败原因一眼可见；
+- `xisp_net/README.md` 明确警告这一点，并写明 `--static` 实测结论。
+
+### 验证
+
+`cjpm test` **600/600**；`XISP_NET_TESTS=1` + 无代理时 11/11（真实 HTTP/HTTPS 都通）；
+`check-examples.sh` 22/22；`cjpm ws check` 与成员闸门通过（9 个成员）；`docs-site` 构建成功。
+
+### 发版注意（重要）
+
+`xisp_net` 依赖 core 里**未发布**的 `NetworkError`，所以在成员目录单独 `cjpm bundle` 会失败
+（依赖从 registry 解析）。发版顺序必须：**先发 core，再发 xisp_net**。
+`cjpm ws publish` 按拓扑序处理正好覆盖。
+
+下个版本 **0.7.0**（0.6.0 已随 5 个成员发布过，现在是 9 个成员 + core 有破坏性改动）。

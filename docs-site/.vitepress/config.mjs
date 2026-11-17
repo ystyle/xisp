@@ -52,6 +52,7 @@ export default defineConfig({
           text: '可选模块',
           items: [
             { text: 'JSON', link: '/api/json' },
+            { text: '网络（HTTP）', link: '/api/net' },
           ],
         },
       ],

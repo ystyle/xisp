@@ -1,6 +1,7 @@
 # Xisp 网络（xisp_net）设计
 
-> **状态**：设计已定，**未实施**
+> **状态**：**已实施**（2026-11-17）—— 模块 `xisp_net` 与八个符号已落地，
+> 测试 11 条全绿（真实网络部分默认跳过）。§7 的 TLS 实测结论见 §7.1 —— **不冲突**。
 > **前置**：①异步（子线程/共享 Client 的线程安全，见 [`2026-11-17-async-design.md`](2026-11-17-async-design.md)）；
 > ②**§7 的 TLS 实测**（唯一可能推翻方案的点，必须最先做）
 > **相关**：[`2026-10-11-capability-domains-design.md`](2026-10-11-capability-domains-design.md) §6.2 ·
@@ -165,7 +166,32 @@ $ ./target/release/bin/ystyle::xisp_cli -c '(let [{:a x :b y} {:a 1 :b 2}] (+ x 
 
 **真风险点**：`stdx.net.http` 的包概述明确写「使用本包需要外部依赖 `OpenSSL 3` 的 `ssl` 和 `crypto` 动态库文件」。而 core（以及现在的全部成员）都用 `--static`。
 
-**必须在写任何代码前实测这三条**：
+### 7.1 实测结论（2026-11-17）：**不冲突**
+
+**`--static` 可执行 + stdx.net.http + 真实 HTTPS，三者可以共存。**
+
+验证方式：建一个独立探针工程（库 `import stdx.net.http` / `stdx.net.tls`，可执行 `--static`），
+实测结果：
+
+| 项 | 结果 |
+|---|---|
+| 库构建（无 `--static`） | ✅ |
+| 可执行构建（`--static`，依赖该库） | ✅ |
+| `ldd` 产物 | 只有 `libstdc++` / `libm` / `libc` / `libgcc_s` / `ld-linux` —— **没有 `libssl.so`** |
+| 真实 `https://httpbin.org/status/200` | ✅ 200 |
+| 真实 `http://httpbin.org/status/200` | ✅ 200 |
+
+原因：stdx 的 OpenSSL 是**运行时动态加载**的（随 `libcangjie-dynamicLoader-opensslFFI.a`
+一起静态进产物），链接期没有 `libssl.so` 依赖，所以与 `--static` 不冲突。
+
+原先列的"三条待实测方案"（静态+动态混用 / 单独不用 `--static` / 只做纯 HTTP）**都不需要**。
+
+**另有一个必须知道的实现细节**：`ClientBuilder()` 默认不带 TLS 配置，发 HTTPS 会报
+`Tls must be configured when HTTPS requests are sent`，必须显式 `.tlsConfig(TlsClientConfig())`。
+
+---
+
+原设计里列的待实测项（已由上表回答，保留备查）：
 
 1. `xisp_net` 用 `--static` + 动态链接 OpenSSL，能否构建成功、运行期能否加载；
 2. 若不行：`xisp_net` 单独不用 `--static`（其它成员保持 `--static`）是否可行；
@@ -254,3 +280,69 @@ public func withNetwork(allowedHosts: Array<String>)
   - 「响应用 HashMap、错误分两层」→ **采纳**；
   - 「命名参数要手工扫 `:key value`」→ **已过时**（map 字面量已支持，§5.2）；
   - 「`LispValue` 没有宿主对象」→ 0.6.0 已加 `External`；但仍**无成员访问语法**，所以「闭包 + 状态当对象」的路子依然成立。
+
+---
+
+## 13. 实施记录（2026-11-17）
+
+### 13.1 落地内容
+
+| 文件 | 内容 |
+|---|---|
+| `xisp_net/cjpm.toml` | 依赖 `ystyle::xisp` + stdx；`link-option` 与 7 个平台的 `bin-dependencies` 在成员内完整声明 |
+| `xisp_net/src/net.cj` | `NetConfig`、`hostOf`、`hostAllowed`、`doRequest`、`registerNet`、`urlEncode`、`netDomain` |
+| `xisp_net/src/options.cj` | `withNetwork(allowedHosts)`、`withNetworkUnrestricted()`（仅供测试） |
+| `xisp_net/src/net_test.cj` | 11 条用例 |
+| `xisp_net/README.md` | stdx 构建警告、白名单规则、错误分层、实测结论 |
+| `core/src/types/types.cj` | `ErrorType` 加第 9 个变体 `NetworkError`（`name()` 与 `==` 两处穷尽 match 由编译器强制补） |
+| `repl/src/highlighter.cj` | 顺带去掉手写的 ErrorType→String 映射，改用 `ErrorType.name()` |
+| `docs-site/api/net.md` | 用户文档（含 `--static` 实测与 HTTPS 必须配 TLS 两条实现说明） |
+| `scripts/check-members.sh` | `NATIVE_ALLOWED` 加 `xisp_net`（唯一允许平台配置的成员） |
+| `.github/workflows/ci.yml` | 加 `Ensure stdx env` 步骤 —— 缺 `CANGJIE_STDX_PATH` 时 cjpm 会报"没加依赖"指向错误方向，前置检查让原因一眼可见 |
+
+### 13.2 实现中定下的几件事
+
+**每次请求新建 `Client`，用完关闭。** 不共享实例：`Client` 的线程安全性未确认，而
+`spawn` 之后多线程会并发调网络函数，共享等于埋竞态。代价是每次多一次握手 ——
+对"脚本发几个请求"可接受。要做连接池需先确认线程安全并按线程分配。
+
+**响应头按 `HttpHeaders <: Iterable<(String, Collection<String>)>` 遍历。** 起初
+按 `(String, String)` 写，编译报类型不匹配才发现：同名可以有多个值（典型是 `Set-Cookie`）。
+单值给字符串、多值给列表。
+
+**`url-encode` 手写查表而不是 `toString(radix: 16)`。** 后者的 API 形态不确定，
+手写十六进制表更稳，也不依赖标准库细节。
+
+**测试里"子域放行"不写真连断言。** 第一版真的去连 `http://a.example.org/x`，
+DNS 解析失败要等几十秒，整个用例 248 秒。改成只验证"主域被拒"（快），
+通配规则的放行侧由白盒 `hostAllowed` 覆盖。
+
+**"传输层失败"用例在有代理时跳过。** 设了 `http_proxy` 时 stdx 把请求交给代理，
+代理对连不上的目标回 `502` —— 那就成了"正常响应"，测不到直连失败。这是环境差异，
+按环境跳过而不是放宽断言。
+
+### 13.3 测试
+
+11 条，**默认不依赖外网**：
+
+| 分组 | 用例 |
+|---|---|
+| 白盒 | `hostOf`（剥协议/端口/userinfo，IPv6 保方括号）、`hostAllowed`（精确/后缀通配/主域不自动放行/空白名单全拒）、`urlEncode`（unreserved/结构字符/UTF-8 中文） |
+| 装配 | 八个符号装上、域属性（escapable + hostPolicy）、`url-encode` 可用 |
+| 沙箱 | 空白名单全部拒绝、白名单外域名被拒、后缀通配不放行主域 |
+| 参数 | 类型错 TypeError、个数错 ArityMismatch、URL 缺协议 TypeError |
+| 真实网络（`XISP_NET_TESTS=1`） | HTTP 200/404 形状、HTTPS 通、传输层失败 → NetworkError |
+
+验证：`cjpm test` **600/600**；带 `XISP_NET_TESTS=1` 且无代理时 11/11 全绿
+（真实 HTTP/HTTPS 都通过）；`check-examples.sh` 22/22；`cjpm ws check` 与成员闸门通过
+（9 个成员）；`docs-site` 构建成功。
+
+### 13.4 发版注意
+
+`xisp_net` 依赖 core 里**未发布**的 `NetworkError`，所以在成员目录单独
+`cjpm bundle` 会失败（依赖从 registry 解析）。发版顺序必须是：
+
+1. 先发 `ystyle::xisp`（含 `NetworkError`）；
+2. 再发 `xisp_net`（以及其它依赖它的成员）。
+
+`cjpm ws publish` 按拓扑序处理，正好覆盖这个顺序。

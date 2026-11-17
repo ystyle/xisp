@@ -19,16 +19,10 @@ public class Highlighter {
     }
 
     public func highlightError(err: XispError): String {
-        let kindStr = match (err.kind) {
-            case UnboundVariable => "UnboundVariable"
-            case UndefinedFunction => "UndefinedFunction"
-            case TypeError => "TypeError"
-            case ArityMismatch => "ArityMismatch"
-            case SyntaxError => "SyntaxError"
-            case RuntimeError => "RuntimeError"
-            case IOError => "IOError"
-            case ModuleError => "ModuleError"
-        }
+        // 直接复用 `ErrorType.name()` —— 那里是唯一的字符串口径。
+        // 手写一份会在加变体时漏掉（编译器只强制 `name()` 内部的穷尽 match，
+        // 这里的重复映射会静默落到"没有 else 就不匹配"的编译错误，但修的时候容易只修一处）。
+        let kindStr = err.kind.name()
         var result = "\u{001b}[1;31m[${kindStr}]\u{001b}[0m ${err.message}"
         if (!err.stack.isEmpty()) {
             for (i in 0..err.stack.size) {

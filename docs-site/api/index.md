@@ -55,6 +55,7 @@
 | 文档 | 模块 | 覆盖函数 | 数量 |
 |------|------|----------|------|
 | [JSON](json) | `ystyle::xisp_json` | `cangjie::json-get` `cangjie::json-get-many` `cangjie::json-parse` `cangjie::json-valid?` | 4 |
+| [网络（HTTP）](net) | `ystyle::xisp_net` | `cangjie::http-request` `cangjie::http-get` `cangjie::http-post` `cangjie::http-put` `cangjie::http-delete` `cangjie::http-patch` `cangjie::http-head` `cangjie::url-encode` | 8 |
 
 可选模块需要额外依赖，不使用就完全不接触（也就不会引入依赖）：
 

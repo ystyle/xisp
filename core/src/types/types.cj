@@ -684,6 +684,7 @@ public enum ErrorType {
     | RuntimeError        // 运行时错误
     | IOError             // IO 错误
     | ModuleError         // 模块错误
+    | NetworkError        // 网络错误（传输层失败：DNS / 连接 / 超时 / TLS）
 
     /**
      * 类型名（与 `XispError.toString` 里的 `[Kind]` 一致）
@@ -701,6 +702,7 @@ public enum ErrorType {
             case RuntimeError => "RuntimeError"
             case IOError => "IOError"
             case ModuleError => "ModuleError"
+            case NetworkError => "NetworkError"
         }
     }
 
@@ -737,6 +739,10 @@ public enum ErrorType {
             }
             case ModuleError => match (right) {
                 case ModuleError => true
+                case _ => false
+            }
+            case NetworkError => match (right) {
+                case NetworkError => true
                 case _ => false
             }
         }

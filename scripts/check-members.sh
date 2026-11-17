@@ -48,7 +48,10 @@ def is_publishable(dirname, pkg):
 # 允许出现平台相关配置（stdx / bin-dependencies 等）的成员白名单。
 # 当前为空：xisp 全工作区零外部原生依赖。将来引入时必须先在这里登记，
 # 并同步给 CI 与文档 —— 否则配置会悄悄渗进不需要它的成员。
-NATIVE_ALLOWED = set()
+# xisp_net 是唯一允许出现平台相关配置的成员：它走 stdx（二进制依赖），
+# `bin-dependencies` / `link-option` 必须在成员内各自完整声明。
+# 其余成员一律保持空（core 的零外部依赖是红线）。
+NATIVE_ALLOWED = {"xisp_net"}
 
 cjc_versions = {}
 for path in members:

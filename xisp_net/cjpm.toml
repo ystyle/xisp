@@ -1,0 +1,38 @@
+[package]
+  cjc-version = "1.0.0"
+  name = "xisp_net"
+  organization = "ystyle"
+  description = "星枢网络能力：HTTP 客户端（基于 stdx.net.http，需 stdx 环境）"
+  version = "0.6.0"
+  output-type = "static"
+  compile-option = "-O2 -Woff unused"
+  override-compile-option = ""
+  # stdx 只能按二进制依赖使用（源码依赖要自带 cmake/clang/openssl 全量工具链）。
+  # 这两项必须在**本成员内**各自声明 —— 只写在 workspace 根时，在成员目录里
+  # bundle / publish 不读根那份（实测，见 workspace 化文档 §5.2 实测二）。
+  link-option = "-L${CANGJIE_STDX_PATH}"
+  include = ["/src"]
+  license = ["MIT"]
+  authors = ["ystyle"]
+  repository = "https://gitcode.com/ystyle/xisp"
+
+[dependencies]
+  "ystyle::xisp" = "0.6.0"
+
+# 构建前必须先 `eval "$(cjvs stdx-env zsh)"`（或等价配置）。
+# 缺 CANGJIE_STDX_PATH 时 cjpm 的报错会指向 cjpm.toml 说"没加依赖"，
+# 掩盖真正原因 —— 别被它带偏。
+[target.x86_64-unknown-linux-gnu.bin-dependencies]
+  path-option = ["${CANGJIE_STDX_PATH}"]
+[target.aarch64-unknown-linux-gnu.bin-dependencies]
+  path-option = ["${CANGJIE_STDX_PATH}"]
+[target.x86_64-apple-darwin.bin-dependencies]
+  path-option = ["${CANGJIE_STDX_PATH}"]
+[target.aarch64-apple-darwin.bin-dependencies]
+  path-option = ["${CANGJIE_STDX_PATH}"]
+[target.x86_64-w64-mingw32.bin-dependencies]
+  path-option = ["${CANGJIE_STDX_PATH}"]
+[target.aarch64-linux-ohos.bin-dependencies]
+  path-option = ["${CANGJIE_STDX_PATH}", "${OHOS_CANGJIE_STDX_PATH}"]
+[target.x86_64-linux-ohos.bin-dependencies]
+  path-option = ["${CANGJIE_STDX_PATH}", "${OHOS_CANGJIE_STDX_PATH}"]
