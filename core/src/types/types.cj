@@ -4,6 +4,7 @@ import std.collection.ArrayList
 import std.collection.HashMap
 import std.io.*
 import std.collection.HashSet
+import std.sync.*
 
 
 /**
@@ -14,7 +15,37 @@ import std.collection.HashSet
  * 用于让求值器判断守卫缓存是否失效。
  */
 public class ArithVersionCell {
-    public var value: Int64 = 0
+    /**
+     * 版本号本体。用原子类型承载：多线程会同时 `define`（`spawn` 的子线程与父线程
+     * 都往共享环境里写），`value = value + 1` 这种读-改-写会丢递增。
+     *
+     * 丢了递增的后果不是"慢一点"而是**语义错**：某个线程的缓存该失效却没失效，
+     * 于是继续用旧绑定。故必须原子。
+     */
+    private var atomic: AtomicInt64 = AtomicInt64(0)
+
+    /**
+     * 版本号（只读、原子读）
+     *
+     * **刻意不提供 setter**：唯一合法的修改方式是 `bump()`。若暴露可写属性，
+     * 调用方很容易写成 `cell.value = cell.value + 1` —— 那正是本类要消灭的
+     * 非原子读-改-写。
+     */
+    public prop value: Int64 {
+        get() {
+            this.atomic.load()
+        }
+    }
+
+    /**
+     * 原子递增，返回递增后的值
+     *
+     * 并发场景下唯一正确的修改入口。
+     */
+    public func bump(): Int64 {
+        this.atomic.fetchAdd(1) + 1
+    }
+
     public init() {}
 }
 
@@ -42,6 +73,20 @@ public open class Environment {
      * 变量绑定表
      */
     private var bindings: HashMap<String, LispValue>
+
+    /**
+     * 并发共享时用的读写锁 —— **懒分配**。
+     *
+     * 只有被 `spawn` 共享过的环境（及其祖先链）才会分配它。没有并发时是 `None`，
+     * 每一次绑定访问只多一次 `Option` 判空，**无锁、无分配**。
+     *
+     * 分配后：
+     * - `lookup` / `has` / `contains` / `getKeys` 走**读锁**（多读并发）；
+     * - `define` / `set` / `removeBinding` 走**写锁**；
+     * - 读锁可重入 —— 沿父环境链递归查找时每层各自加解锁，不会死锁；
+     * - **绝不在持有读锁时请求写锁**（`set` 的递归在锁外发生，见其实现）。
+     */
+    private var bindingsLock: ?ReadWriteLock = None
 
     /**
      * 由 **core 自己安装**的一等值名（②类符号，见 core/eval/first_class_values.cj）。
@@ -110,15 +155,25 @@ public open class Environment {
      * 在当前环境中定义变量
      */
     public func define(name: String, value: LispValue): Unit {
+        if (let Some(lock) <- this.bindingsLock) {
+            lock.writeLock.lock()
+            this.defineUnlocked(name, value)
+            lock.writeLock.unlock()
+        } else {
+            this.defineUnlocked(name, value)
+        }
+    }
+
+    private func defineUnlocked(name: String, value: LispValue): Unit {
         this.bindings[name] = value
         // 任何一次普通 define 都视为"用户写入"：清掉 core 安装标记，
         // 使让位判据把该名字当成用户实现（core 安装自己的一等值时会随后重新打标记）。
         if (this.coreInstalledNames.contains(name)) {
             this.coreInstalledNames.remove(name)
         }
-        Environment.defineVersion.value = Environment.defineVersion.value + 1
+        Environment.defineVersion.bump()
         if (Environment.isArithOp(name)) {
-            this.arithVersion.value = this.arithVersion.value + 1
+            this.arithVersion.bump()
         }
     }
 
@@ -127,6 +182,17 @@ public open class Environment {
      * 如果变量未定义，返回错误
      */
     public func lookup(name: String): LispValue {
+        if (let Some(lock) <- this.bindingsLock) {
+            lock.readLock.lock()
+            let r = this.lookupUnlocked(name)
+            lock.readLock.unlock()
+            r
+        } else {
+            this.lookupUnlocked(name)
+        }
+    }
+
+    private func lookupUnlocked(name: String): LispValue {
         if (this.bindings.contains(name)) {
             let opt = this.bindings.get(name)
             match (opt) {
@@ -135,6 +201,7 @@ public open class Environment {
             }
         } else {
             match (this.parent) {
+                // 递归走 public lookup：父环境各自加自己的读锁（读锁可重入，安全）
                 case Some(env) => env.lookup(name)
                 case None => LispValue.Error(XispError(ErrorType.UnboundVariable, "Undefined variable: '${name}'"))
             }
@@ -146,6 +213,17 @@ public open class Environment {
      * 与 contains() 不同，这个方法不会误判 Error 类型的值
      */
     public func has(name: String): Bool {
+        if (let Some(lock) <- this.bindingsLock) {
+            lock.readLock.lock()
+            let r = this.hasUnlocked(name)
+            lock.readLock.unlock()
+            r
+        } else {
+            this.hasUnlocked(name)
+        }
+    }
+
+    private func hasUnlocked(name: String): Bool {
         if (this.bindings.contains(name)) {
             true
         } else {
@@ -160,25 +238,51 @@ public open class Environment {
      * 静默定义（闭包捕获等私有新绑定）：不递增全局版本——不使已解析的全局引用缓存失效
      */
     public func defineSilent(name: String, value: LispValue): Unit {
-        this.bindings[name] = value
+        if (let Some(lock) <- this.bindingsLock) {
+            lock.writeLock.lock()
+            this.bindings[name] = value
+            lock.writeLock.unlock()
+        } else {
+            this.bindings[name] = value
+        }
     }
 
     /**
      * 修改已有变量
      */
     public func set(name: String, value: LispValue): Bool {
+        // 先在本层尝试写入（内部加写锁并处理完再返回），失败才向父环境递归。
+        // 递归发生在**锁外** —— 否则会持本层锁去请求父层锁，两个线程交叉递归即死锁。
+        if (this.setLocalIfPresent(name, value)) {
+            return true
+        }
+        match (this.parent) {
+            case Some(env) => env.set(name, value)
+            case None => false
+        }
+    }
+
+    private func setLocalIfPresent(name: String, value: LispValue): Bool {
+        if (let Some(lock) <- this.bindingsLock) {
+            lock.writeLock.lock()
+            let r = this.setLocalUnlocked(name, value)
+            lock.writeLock.unlock()
+            r
+        } else {
+            this.setLocalUnlocked(name, value)
+        }
+    }
+
+    private func setLocalUnlocked(name: String, value: LispValue): Bool {
         if (this.bindings.contains(name)) {
             this.bindings[name] = value
-            Environment.defineVersion.value = Environment.defineVersion.value + 1
+            Environment.defineVersion.bump()
             if (Environment.isArithOp(name)) {
-                this.arithVersion.value = this.arithVersion.value + 1
+                this.arithVersion.bump()
             }
             true
         } else {
-            match (this.parent) {
-                case Some(env) => env.set(name, value)
-                case None => false
-            }
+            false
         }
     }
 
@@ -186,6 +290,17 @@ public open class Environment {
      * 判断变量是否存在
      */
     public func contains(name: String): Bool {
+        if (let Some(lock) <- this.bindingsLock) {
+            lock.readLock.lock()
+            let r = this.containsUnlocked(name)
+            lock.readLock.unlock()
+            r
+        } else {
+            this.containsUnlocked(name)
+        }
+    }
+
+    private func containsUnlocked(name: String): Bool {
         if (this.bindings.contains(name)) {
             true
         } else {
@@ -197,17 +312,52 @@ public open class Environment {
     }
 
     /**
+     * 标记本环境与**所有祖先环境**会被多线程共享，按需分配读写锁。
+     *
+     * `spawn` 在创建子线程前必须对本环境调用一次。已经标记过的环境会短路
+     * （祖先链也随第一次标记一并处理完）。
+     *
+     * 为什么包括祖先链：子线程读取外层变量（闭包捕获、全局函数）都要走父环境。
+     */
+    public func shareAcrossThreads(): Unit {
+        match (this.bindingsLock) {
+            case Some(_) => ()
+            case None =>
+                this.bindingsLock = Some(ReadWriteLock())
+                match (this.parent) {
+                    case Some(p) => p.shareAcrossThreads()
+                    case None => ()
+                }
+        }
+    }
+
+    /** 是否已标记为跨线程共享（诊断与测试用） */
+    public func isSharedAcrossThreads(): Bool {
+        this.bindingsLock.isSome()
+    }
+
+    /**
      * 创建子环境
      */
     /**
      * 移除一个绑定（供卸载 core 安装的一等值使用）
      */
     public func removeBinding(name: String): Unit {
+        if (let Some(lock) <- this.bindingsLock) {
+            lock.writeLock.lock()
+            this.removeBindingUnlocked(name)
+            lock.writeLock.unlock()
+        } else {
+            this.removeBindingUnlocked(name)
+        }
+    }
+
+    private func removeBindingUnlocked(name: String): Unit {
         this.bindings.remove(name)
         if (this.coreInstalledNames.contains(name)) {
             this.coreInstalledNames.remove(name)
         }
-        Environment.defineVersion.value = Environment.defineVersion.value + 1
+        Environment.defineVersion.bump()
     }
 
     /**
@@ -243,8 +393,16 @@ public open class Environment {
      */
     public func getKeys(): ArrayList<String> {
         let keys = ArrayList<String>()
-        for ((key, _) in this.bindings) {
-            keys.add(key)
+        if (let Some(lock) <- this.bindingsLock) {
+            lock.readLock.lock()
+            for ((key, _) in this.bindings) {
+                keys.add(key)
+            }
+            lock.readLock.unlock()
+        } else {
+            for ((key, _) in this.bindings) {
+                keys.add(key)
+            }
         }
         keys
     }

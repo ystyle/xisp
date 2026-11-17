@@ -43,6 +43,9 @@ public class Evaluator {
     // 字节码执行后端（可选注入：核心不依赖字节码实现，见 backend.cj）
     var backend: Option<ExecutionBackend> = None
 
+    // 是否允许 spawn（宿主可用 withNoConcurrency() 关掉；见 async.cj）
+    var concurrencyEnabled: Bool = true
+
     // 求值深度（0 = 顶层表达式根部，用于编译纪律）
     var evalDepth: Int64 = 0
     // 编译挂起：当前顶层表达式树已回退 AST（或含宏调用、AST 局部变量），
@@ -205,6 +208,20 @@ public class Evaluator {
     /**
      * 当前是否应中断求值。未设置检查回调时恒为 false。
      */
+    /**
+     * 开关并发：关掉后 `spawn` 直接返回错误。
+     *
+     * 注意它只控制 `spawn`，不影响 `future-*` 函数（那些只是读已存在的 Future）。
+     */
+    public func setConcurrencyEnabled(enabled: Bool): Unit {
+        this.concurrencyEnabled = enabled
+    }
+
+    /** 迁移用：把配置里的 concurrencyEnabled 传给子求值器 */
+    public func isConcurrencyEnabled(): Bool {
+        this.concurrencyEnabled
+    }
+
     public func isInterrupted(): Bool {
         match (this.interruptChecker) {
             case Some(checker) => checker()

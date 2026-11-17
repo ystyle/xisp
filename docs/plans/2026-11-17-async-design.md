@@ -1,6 +1,7 @@
 # Xisp 异步（spawn + Future）设计
 
-> **状态**：设计已定，**未实施**
+> **状态**：**已实施**（2026-11-17）—— `spawn` / `future-*` 已落地，13 条用例全绿；
+> 实施中订正了三处设计稿的错误，见 §14
 > **前置**：§4 的两项前置改造（阻塞项，必须先做）
 > **后续**：`xisp_net` 落地时要处理共享 Client 的线程安全（见 [`2026-11-17-net-design.md`](2026-11-17-net-design.md) §6）
 > **相关**：[`2026-10-11-capability-domains-design.md`](2026-10-11-capability-domains-design.md) · [`2026-11-17-json-design.md`](2026-11-17-json-design.md)
@@ -191,24 +192,43 @@ currentFilePath / moduleRegistry / moduleLoader / moduleParser / currentModule
 
 ## 7. 错误语义（与 0.6.0 对齐）
 
-| 情况 | 结果 |
-|---|---|
-| `expr` 体内产生 `Error` | 中止**该线程**的求值链，`Future` 持有该 `Error`；`(future-get f)` **返回这个 Error 值**（不抛、不再包一层） |
-| `future-get` 超时 | `Error(XispError(RuntimeError, "future timeout"))` |
-| 取消后再 `future-get` | 返回该线程结束时留下的值（可能是 `Error`，也可能是部分结果） |
-| 对非 Future 调 `future-get` | `Error(TypeError, "expected a future")` |
-| `spawn` 时线程创建失败 | `Error(RuntimeError, "…")` —— 在**当前**线程直接返回，不产生 Future |
+### 7.1 原设计的错误（**已订正**）
 
-**`future-get` 拿到 Error 后不"中止调用方"** —— 这是一个刻意的例外：Error 是 Future 的**结果**，不是"当前链"的错误。调用方要自己判断：
+初版这里写的是"`future-get` 拿到 Error 后**不中止调用方**，调用方自己用
+`(if (error? r) …)` 判断"。**这条做不到**，两个原因：
+
+1. `LispValue.Error` 一旦参与求值链就中止，这是全仓统一语义 —— `(let [r (future-get f)] …)`
+   在绑定初值那一步就中止了，根本走不到 `if`；
+2. `error?` 这个谓词**不存在**；即使加上也没用 —— `(error? (future-get f))` 的实参
+   求值先出错，错误传不进谓词。
+
+根因是 0.6.0 的统一语义：**错误不是数据，是"求值链断路"的唯一表示**。
+
+### 7.2 现行方案：两条路
+
+| 想要 | 用什么 | 说明 |
+|---|---|---|
+| 失败就中止（默认） | `(future-get f)` | 子线程的错误原样抛给调用方 |
+| 失败要自己处置 | `(future-ok? f)` 判断 + `(future-error f)` 取文本 | 两者**阻塞到完成**，但只返回 `Bool` / 字符串，故不触发中止 |
 
 ```lisp
-(let [r (future-get f)]
-  (if (error? r) (handle r) (use r)))
+(let [f (spawn (may-fail))]
+  (if (future-ok? f)
+    (use (future-get f))
+    (handle (future-error f))))
 ```
 
-这一条要写进 `docs-site/api/`，否则会与"错误一律中止"的原则打架。理由：并发任务失败是**预期内的信息**，不是求值链断了。
+其余错误语义：
 
----
+| 情况 | 结果 |
+|---|---|
+| `future-get` 超时 | `Error(RuntimeError, "future timeout")`，并顺手向任务发取消请求 |
+| 对非 Future 调 `future-get` / `future-try-get` / `future-cancel` | `Error(TypeError, "… expected a future value")` |
+| `spawn` 参数不是恰好一个表达式 | `Error(ArityMismatch, "spawn expects exactly 1 expression")` |
+| `spawn` 被 `withNoConcurrency()` 关掉 | `Error(RuntimeError, "spawn is disabled …")` |
+
+`future-done?` / `future-pending?` / `future-ok?` 是**谓词**：参数不对返回 `false`，
+不报 `TypeError`（与 `exists?` 等既有谓词一致）。
 
 ## 8. 取消与中断
 
@@ -299,3 +319,78 @@ A5 值得强调：宏曾因为"回退整树"在 BC 下慢 12 倍，最后靠编�
 - `docs/design.md` §5「异步支持 (spawn + Future<T>)」：模型正确，但**方法调用语法要订正**（§6.1）；
 - `task.md` §4.5：三条待办（spawn 宏 / Future 操作 / 线程工具）**照旧成立**，加一条"§4 的前置改造"；
 - 能力域文档 §6.3「异步域的定位」：结论一致（属 core + 运行期装配），本设计把它落成具体的域声明。
+
+---
+
+## 14. 实施记录（2026-11-17）
+
+### 14.1 落地内容
+
+| 文件 | 内容 |
+|---|---|
+| `core/src/core/eval/async.cj` | `LispFuture`（`LispExternal`）、`evalSpawn`、`futureArg`、`registerAsync`、`asyncDomain`、`copyConfigTo` |
+| `core/src/types/types.cj` | `ArithVersionCell` 原子化（`AtomicInt64` + `bump()`，**刻意不提供 setter**）；`Environment` 加 `bindingsLock: ?ReadWriteLock` 与 `shareAcrossThreads()`，8 个绑定访问方法拆成「加锁外壳 + `*Unlocked` 实体」 |
+| `core/src/core/eval/evaluator.cj` | `concurrencyEnabled` 字段 + setter/getter |
+| `core/src/core/eval/core.cj` | `trySpecialForm` 加 `case "spawn"` |
+| `core/src/core/builtin/domains.cj` | `domainAsync()` 并加入 `coreDomains()`（域数 13 → 14） |
+| `core/src/options.cj` / `interpreter.cj` | `withNoConcurrency()` 与转发方法 |
+| `xisp_bc/src/compiler.cj` | `case "spawn" => false`（回退 AST） |
+| `xisp_tests/src/async_test.cj` | 13 条用例 |
+| `docs-site/api/async.md` | 用户文档（示例全部实测） |
+
+### 14.2 三处设计稿错误的订正
+
+**一、§7 错误语义（最严重）**
+
+原设计写"`future-get` 返回错误值但不中止调用方，调用方用 `(if (error? r) …)` 判断"。
+**做不到**：0.6.0 的统一语义是"Error 参与求值链就中止"，`define`/`let` 绑定初值时
+就直接中止了；而且 `error?` 谓词根本不存在，即使加上也没用（实参求值先出错）。
+
+改为两条路：`future-get` fail-fast（默认），容错用 `future-ok?` + `future-error`
+（内部 `get()` 拿到 Error 只返回 Bool/字符串，故不触发中止）。
+
+**二、§10 「BC 原则上可以」是错的**
+
+原文只看 `BytecodeVM.registers` 是实例字段就判定 BC 可多线程。实测盘点的全局可变状态：
+
+```
+xisp_bc/src/vm.cj:37   static var functionTable    // 函数表
+xisp_bc/src/vm.cj:48   static var globalRefCache   // 全局引用缓存
+xisp_bc/src/vm.cj:50   static var funcIds          // identity → 全局 id
+xisp_bc/src/jit_*.cj   8 处 static / 包级 var       // JIT
+core/src/types/types.cj:39  static var defineVersion
+```
+
+其中 `functionTable` / `funcIds` 承载**跨线程语义** —— 字节码的 `Closure` 里存的是
+VM 内部函数 id，跨 VM 传递后 id 对不上。所以不是"改成实例字段"就能解决，
+而是会打破"闭包可传递"。
+
+**结论：子线程一律走 AST**（与 JIT 同样处理）。AST 的闭包是
+`Procedure(参数, 体, 环境)`，纯数据，天然跨线程可用。这个决定是**正确性要求**，
+不是性能妥协。
+
+**三、§11 A5「spawn 必须特化」过度设计**
+
+原文担心"整树回退会让 spawn 像宏一样慢 12 倍"。实际不会：
+宏慢是因为每次调用都**重新展开**；`spawn` 回退时父线程只做"取表达式 + 起线程 +
+返回 Future"，而真正的工作体本来就在子线程用 AST 跑。故与 `eval` / `apply` 同样
+处理（编译器返回 `false`）即可。
+
+### 14.3 实测结论
+
+| 项 | 结果 |
+|---|---|
+| `(future-get (spawn (+ 1 2)))` | `3` |
+| `set!` 对父环境可见 | `(begin (define c 0) (future-get (spawn (set! c 42))) c)` → `42` |
+| `define` 对父环境可见 | `(begin (future-get (spawn (define g 7))) g)` → `7` |
+| 版本号并发递增 | 4 线程 × 20000 次 = 80000，**零丢失**（原 `value = value + 1` 会丢） |
+| 环境标记 | 未 spawn 不标记（零开销）；spawn 后标记且幂等，沿 parent 链传播 |
+| 三后端 | AST / BC / JIT 结果一致 |
+| 取消 | 已完成任务取消无害；长任务取消后能返回（不 hang） |
+
+### 14.4 测试纪律
+
+**不用 `sleep` 做时序等待**（会让 CI 抖动、慢机器上假失败）。需要确定状态时先
+`future-get`（阻塞）再断言；因此**不**断言"刚 spawn 完必然 pending"这类竞态，
+`future-get` 的真超时分支也无法在不引入时序依赖的前提下稳定复现，只验证
+"超时参数被接受且不破坏正常路径"。

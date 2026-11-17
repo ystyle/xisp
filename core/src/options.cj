@@ -314,6 +314,17 @@ public func withLevel(level: XispLevel): InterpreterOption {
 }
 
 /**
+ * 关闭并发：`spawn` 直接返回错误，其它能力不受影响
+ *
+ * 用于宿主确定"单线程语义"的场景（例如脚本不允许自己起线程）。
+ * 注意 `spawn` 是②类求值器拦截、不注册到环境，所以**不能靠域装配关掉** ——
+ * 必须用这个选项。
+ */
+public func withNoConcurrency(): InterpreterOption {
+    { interpreter => interpreter.setConcurrencyEnabled(false) }
+}
+
+/**
  * 静默模式（不显示 Banner）
  */
 public func withQuietMode(): InterpreterOption {

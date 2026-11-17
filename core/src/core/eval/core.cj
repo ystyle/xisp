@@ -202,6 +202,8 @@ extend Evaluator {
             case "reduce" => Some(this.evalReduce(rest))
             case "for-each" => Some(this.evalForEach(rest))
             case "match" => Some(this.evalMatch(rest))
+            // ②求值器拦截：实参必须在**新线程里**求值，故不能是普通函数
+            case "spawn" => Some(this.evalSpawn(rest))
             case "macroexpand" => Some(this.evalMacroexpand(rest))
             case "macroexpand-all" => Some(this.evalMacroexpandAll(rest))
             case "import" => Some(this.evalImport(rest))

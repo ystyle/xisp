@@ -115,7 +115,11 @@
 **实现**: Reader层将插值展开为`cangjie::interpolate`调用。
 
 #### **5. 异步支持 (spawn + Future<T>)**
-> 尚未实现（设计预留）
+> **已实现**（`core/src/core/eval/async.cj`，能力域 `async`）。下方示例里的
+> `(future.get)` / `(future.get(timeout: 5000))` / `(future.cancel)` 是**方法调用写法**，
+> Xisp 没有成员访问语法，实际是**一等函数**：`(future-get f)` / `(future-get f 5000)` /
+> `(future-cancel f)`。另外失败处置不是"错误当值"，而是 `(future-ok? f)` 先判断 ——
+> 见 `task.md` M28 与 `docs-site/api/async.md`。
 ```lisp
 ;; 创建异步任务
 (let [future (spawn (http-get url))]

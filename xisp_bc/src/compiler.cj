@@ -179,6 +179,10 @@ public class BytecodeCompiler <: Compiler {
                     case "->" => this.compileThreadFirst(cell.cdr)
                     case "eval" | "macroexpand" | "macroexpand-all" => false  // 运行时求值/语法树操作，回退 AST
                     case "map" | "filter" | "reduce" | "for-each" => false  // AST 高阶循环（回调经 VM 执行）
+                    // spawn：子线程一律走 AST（见 core/eval/async.cj 头注释），
+                    // 父线程这边只是"取表达式 + 起线程 + 返回 Future"，回退 AST 的代价是一次
+                    // 参数拆解，微乎其微。故与 eval/apply 同处理，不特化。
+                    case "spawn" => false
                     case _ => this.compileCall(s, cell.cdr)
                 }
             case _ => false

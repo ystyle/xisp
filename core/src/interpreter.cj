@@ -643,6 +643,16 @@ public class LispInterpreter {
         }
     }
 
+    /**
+     * 开关并发（`spawn`）。
+     *
+     * 关掉后 `(spawn ...)` 返回 `Error(RuntimeError)`。`spawn` 是②类求值器拦截、
+     * 不注册到环境，所以这是关闭它的**唯一**入口（域装配动不了）。
+     */
+    public func setConcurrencyEnabled(enabled: Bool): Unit {
+        this.evaluator.setConcurrencyEnabled(enabled)
+    }
+
     public func isInterruptedNow(): Bool {
         this.evaluator.isInterrupted()
     }

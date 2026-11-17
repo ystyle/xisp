@@ -45,6 +45,7 @@ export default defineConfig({
             { text: '逻辑', link: '/api/logic' },
             { text: '字符串', link: '/api/string' },
             { text: '流程控制', link: '/api/control' },
+            { text: '并发', link: '/api/async' },
           ],
         },
         {

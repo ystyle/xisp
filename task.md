@@ -27,6 +27,7 @@
 - ✅ M24: 装配档位 XispLevel（Expr / Pure / Script）
 - ✅ M26: 三份设计文档（JSON / 异步 / 网络）
 - ✅ M27: JSON 能力落地（新成员 xisp_json）
+- ✅ M28: 异步能力落地（spawn + Future）
 
 ---
 
@@ -121,19 +122,19 @@
 > - 使用 latest 标记获取默认版本
 > - 不支持版本范围语法（^, ~, >=, <=），保持简单
 
-### 4.5 异步支持
-> 设计已定 → [`docs/plans/2026-11-17-async-design.md`](docs/plans/2026-11-17-async-design.md)
+### 4.5 异步支持 ✅
+> 设计 → [`docs/plans/2026-11-17-async-design.md`](docs/plans/2026-11-17-async-design.md)（已实施，见 M28）
 
-**前置改造（阻塞项，不做则语义是错的）**
-- [ ] `Environment.defineVersion` 从 `static var` 改为线程局部（并发递增会丢，导致缓存该失效却未失效 → 查到旧绑定）
-- [ ] JIT 在子线程禁用（`jitCurEnv` 等是包级 `static var`，两个线程跑 JIT 会互相踩）
-- [ ] `Environment.bindings` 懒分配读写锁（仅被 spawn 共享过的环境才付开销）
+**前置改造（已完成）**
+- [x] `ArithVersionCell` 原子化（`AtomicInt64` + `bump()`，不提供 setter —— 唯一修改入口就是原子的）
+- [x] `Environment.bindings` 懒分配读写锁（`shareAcrossThreads()`；未 spawn 时零开销）
+- [x] 子线程禁用 JIT **与 BC**（`BytecodeVM` 有 3 个类级 static，且 `Closure` 里存 VM 内部 id，跨线程不成立）
 
-**功能**
-- [ ] `spawn` 特殊形式（②类求值器拦截 —— 实参必须在新线程求值，不能是普通函数）
-- [ ] Future 操作：`future-get` / `future-get`(带超时) / `future-try-get` / `future-done?` / `future-pending?` / `future-cancel`
-- [ ] 线程工具（Thread.currentThread, id, hasPendingCancellation）
-- [ ] `spawn` 在字节码后端**特化**（不能靠 `compileSuspended` 整树回退 —— 宏曾因此慢 12 倍）
+**功能（已完成）**
+- [x] `spawn` 特殊形式（②类求值器拦截，实参在新线程求值）
+- [x] Future 操作：`future-get` / 带超时 / `future-try-get` / `future-done?` / `future-pending?` / `future-cancel` / `future-ok?` / `future-error` / `future-cancel`
+- [x] 线程工具（经 `Thread.currentThread.hasPendingCancellation` 接入既有协作式中断）
+- [x] `spawn` 在字节码后端回退 AST（**不需要特化** —— 见 M28 的订正）
 
 > 设计说明：
 > - 使用仓颉的 spawn + Future<T> 模型（非 async/await 语法）
@@ -1380,3 +1381,72 @@ workspace 成员 **7 → 8**。制品核对：`xisp_json-0.6.0.cjp` 顶层只有
 **产品版本需要推进**：`xisp_json` 是第 6 个发布成员，而 0.6.0 已随 5 个成员发布过。
 同一产品版本对应两个不同的成员集合会造成混乱，所以发版时应 `cjpm ws bump 0.7.0`，
 不能沿用 0.6.0。本次按"不 bump、不 publish"执行，版本推进留待决定。
+
+---
+
+## M28: 异步能力落地（spawn + Future）✅
+
+按 [`docs/plans/2026-11-17-async-design.md`](docs/plans/2026-11-17-async-design.md) 实现。
+
+### 三项前置改造（都是"不做则语义错"，不是性能问题）
+
+| # | 问题 | 修法 |
+|---|---|---|
+| 1 | `ArithVersionCell.value = value + 1` 是**非原子读-改-写**，多线程同时 `define` 会丢递增 → 某线程缓存该失效却没失效 → **查到旧绑定（语义错）** | 改用 `AtomicInt64` + `bump()`；**刻意不提供 setter**，唯一修改入口就是原子的 |
+| 2 | `Environment.bindings` 是 `std.collection.HashMap`，并发读写会坏 | `bindingsLock: ?ReadWriteLock` **懒分配**：未 spawn 时 `None`（零锁零分配），`spawn` 时 `shareAcrossThreads()` 沿 parent 链标记并分配。8 个访问方法拆成「加锁外壳 + `*Unlocked` 实体」；`set!` 的父链递归在**锁外**，避免交叉死锁 |
+| 3 | `BytecodeVM` 有 3 个类级 `static`（函数表 / 全局引用缓存 / 函数 id 映射），JIT 有 8 处包级 `var` | **子线程一律走 AST**（见下） |
+
+### 关键决策：子线程走 AST 是正确性要求，不是性能妥协
+
+设计稿原本写「BC 原则上可以（`registers` 是实例字段）」。**错了** —— 漏看了 3 个 static。
+更要紧的是 `functionTable` / `funcIds` 承载**跨线程语义**：字节码的 `Closure` 里存的是
+VM 内部函数 id，跨 VM 传递后 id 对不上。改成实例字段会打破"闭包可传递"。
+
+而 AST 的闭包是 `Procedure(参数, 体, 环境)` —— 纯数据，天然跨线程可用。
+
+### API
+
+| 符号 | 说明 |
+|---|---|
+| `(spawn expr)` | ②类求值器拦截；实参在新线程求值 |
+| `(future-get f)` / `(future-get f ms)` | 阻塞取结果；失败抛给调用方（fail-fast） |
+| `(future-try-get f)` | 非阻塞；未完成给 `nil` |
+| `(future-done? f)` / `(future-pending? f)` | 状态谓词 |
+| `(future-ok? f)` / `(future-error f)` | **容错路径**：阻塞到完成，只返回 Bool / 字符串，故不触发中止 |
+| `(future-cancel f)` | 发取消请求（协作式） |
+
+### 订正设计稿 §7（最严重的一处）
+
+原设计写「`future-get` 返回错误值但不中止调用方，用 `(if (error? r) …)` 判断」。
+**做不到**：0.6.0 的统一语义是"Error 参与求值链就中止"，`let` 绑定初值那一步就断了；
+而且 `error?` 谓词根本不存在，即使加上也没用（实参求值先出错）。
+
+改为两条路：`future-get` fail-fast；容错用 `future-ok?` + `future-error`。
+
+### 域与选项
+
+- 能力域 `async`（`escapable: true` / `hostPolicy: true` → 被 `presetPure` 排除），
+  域数 **13 → 14**；
+- **`spawn` 不在域的 `symbols` 里** —— 它是②类、不注册到环境，域装配动不了它。
+  要禁用并发用 `withNoConcurrency()`。
+
+### 测试（13 条，`xisp_tests/src/async_test.cj`）
+
+基本语义 / `set!` 与 `define` 对父可见 / 失败处置两条路 / Future 操作与谓词 /
+带超时 / 取消 / `spawn` 参数个数 / 非 Future 参数 / `withNoConcurrency` /
+**版本号并发递增不丢（4 线程 × 20000 = 80000，零丢失）** / 环境共享标记与传播 / 三后端一致。
+
+**测试纪律：不用 `sleep` 做时序等待** —— 需要确定状态时先 `future-get` 再断言；
+因此不断言"刚 spawn 完必然 pending"这类竞态，超时分支也只验证"参数被接受"。
+
+### 验证
+
+`cjpm test` **589/589**；`check-examples.sh` 22/22；`cjpm ws check` 与
+`scripts/check-members.sh` 均通过；`docs-site` 构建成功。
+
+### 用户文档
+
+- 新增 `docs-site/api/async.md`（示例全部实测；含"环境共享""失败两条路""取消是协作式的"
+  三个提醒，以及子线程走 AST、环境锁懒分配两个实现说明）；
+- `docs-site/api/index.md` 内置函数表加并发行（合计 115 → 123）；
+- `docs/design.md` §5 的 `(future.get)` 方法调用写法订正为一等函数。

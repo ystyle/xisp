@@ -180,6 +180,16 @@ extend BuiltinFunctions {
             escapable: false, hostPolicy: false)
     }
 
+    /**
+     * 异步：`future-get` / `future-try-get` / `future-done?` / `future-pending?` / `future-cancel`
+     *
+     * `spawn` 不在本域 —— 它是②类求值器拦截（与 `map`/`eval` 同层），不注册到环境，
+     * 域装配动不了它。要禁用并发请用 `withNoConcurrency()`。
+     */
+    public static func domainAsync(): LispCapability {
+        asyncDomain()
+    }
+
     /** 全部 core 内置域（安装顺序即数组顺序） */
     public static func coreDomains(): Array<LispCapability> {
         [
@@ -196,6 +206,7 @@ extend BuiltinFunctions {
             domainAliases(),
             domainErrorHelpers(),
             domainMacrosCore(),
+            domainAsync(),
         ]
     }
 }

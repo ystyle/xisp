@@ -42,7 +42,8 @@
 | [逻辑](logic) | `and` `or` `not` | 3 |
 | [字符串](string) | `str` `string-append` `string=?` `string<` `string>` `string-length` `string-contains?` `string?` `type-of` | 9 |
 | [流程控制](control) | `when` `unless` `incf` `decf` `swap` `negate` `push` `pop` `if-let` `when-let*` `condb` `do` `eval` `macroexpand` `macroexpand-all` `print` `println` `princ` `display` `newline` `error` `raise` `assert` `gensym` | 24 |
-| **合计** | | **115** |
+| [并发](async) | `spawn` `future-get` `future-try-get` `future-done?` `future-pending?` `future-ok?` `future-error` `future-cancel` | 8 |
+| **合计** | | **123** |
 
 > 表中「数量」是该篇文档覆盖的符号个数；个别符号（如 `type-of`）在多个页面都会讲到，
 > 跨页重复计入。
