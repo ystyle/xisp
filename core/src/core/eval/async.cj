@@ -106,6 +106,9 @@ extend Evaluator {
         target.currentModule = this.currentModule
         target.currentLoader = this.currentLoader
         target.concurrencyEnabled = this.concurrencyEnabled
+        // 降级器必须带过去：否则子线程里调到编译闭包会直接报
+        // "AST: closure without bytecode backend"（spawn 与 HTTP handler 都会撞上）
+        target.decompiler = this.decompiler
     }
 
     /**

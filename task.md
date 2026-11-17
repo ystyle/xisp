@@ -29,7 +29,8 @@
 - ✅ M27: JSON 能力落地（新成员 xisp_json）
 - ✅ M28: 异步能力落地（spawn + Future）
 - ✅ M29: 网络能力落地（新成员 xisp_net）
-- ✅ M30: 发版 0.7.0（并发 / JSON / HTTP）
+- ✅ M30: 发版 0.7.0（并发 / JSON / HTTP 客户端）
+- ✅ M31: HTTP 服务端（新成员 xisp_httpd，基于 tachyon）
 
 ---
 
@@ -1612,3 +1613,96 @@ setup-cangjie 导出 `CANGJIE_STDX_PATH_STATIC` / `_DYNAMIC`，而 cjpm 的 `bin
 
 `cjpm test` 601/601；`check-examples.sh` 22/22；`cjpm ws check` 与成员闸门通过；
 docs-site 构建成功；CI 全绿（run 44052479092 及之后）。
+
+---
+
+## M31: HTTP 服务端（新成员 `xisp_httpd`）✅
+
+按 [`docs/plans/2026-11-17-httpd-design.md`](docs/plans/2026-11-17-httpd-design.md) 实现。
+workspace 成员 **9 → 10**。
+
+### 为什么用 tachyon 而不是 stdx
+
+`xisp_net`（客户端）走 stdx 是因为那里有现成的 HTTP 客户端；**服务端不一样** ——
+tachyon（`atomgit.com/ystyle/tachyon`）三个特性正好对上：
+
+| | tachyon | stdx.net.http |
+|---|---|---|
+| 依赖 | **仅 `std.*`** | stdx + OpenSSL 3 |
+| 宿主门槛 | 加个依赖 | **要配 `CANGJIE_STDX_PATH`** |
+| 并发模型 | **每连接一协程** | 通用 HTTP 栈 |
+| 内存 | 31 MB 稳态 | 291 MB 稳态 |
+
+「每连接一协程」跟 xisp 为 `spawn` 做的「共享环境树 + 写锁」是同一类需求 —— 异步那轮的
+改造正好是这里需要的。
+
+### 符号（四个）
+
+`cangjie::httpd-listen`（非阻塞，返回句柄）/ `httpd-shutdown`（优雅关闭、幂等）/
+`httpd-addr` / `httpd-running?`。
+
+```lisp
+(define srv
+  (cangjie::httpd-listen 8080
+    (lambda (req)
+      {:status 200 :body (str "hello " (hashmap-get (hashmap-get req :query) "name"))})))
+```
+
+**路由不做** —— 只给一个 handler，路由用 Lisp 表达（与「axios 那层留给 Lisp 宏」同一原则）。
+
+### 请求是 `HashMap` 快照，不是 ctx
+
+tachyon 的请求上下文**池化复用**：handler 返回后被下一个请求改写。直接交给 Lisp 的话，
+一句 `(define saved req)` 之后读到的就是别的请求的数据。所以一律复制成 `HashMap`
+（method/path/query/headers/body/cookies/form/host/remote）。
+
+代价是每请求几次分配，但这是**正确性**问题不是性能问题。
+
+响应三态：`HashMap` → 按 `:status/:headers/:body`；字符串 → 200；`nil` → 204；
+**`Error` → 500 且不影响后续请求**。
+
+### 顺带修掉四个 core 问题（都不是本模块特有的）
+
+| # | 问题 | 修法 |
+|---|---|---|
+| 1 | 扩展域拿不到「继承配置」的求值器 → 域里回调的 Lisp 代码**绕过沙箱** | `CapabilityContext` 加 `newEvaluator: () -> Evaluator` |
+| 2 | `ctx.invoke` 用的也是裸求值器（0.6.0 起就这样） | 装配时就把宿主策略带过来 |
+| 3 | **编译闭包跨求值器调不通**：BC 的 `Closure` 存 VM 内部函数 id，在无后端的求值器上调用报 `AST: closure without bytecode backend`。**`spawn` 也撞同一句话** | `ExecutionBackend` 加 `decompileClosure`（只读函数表）；`Evaluator` 加独立的 `decompiler` 字段（`backend` 有类级可变状态只能在主线程用）；`copyConfigTo` 复制它；`applyProcedure` 无后端时降级成 `Procedure(参数名, AST 体, 捕获环境)` |
+| 4 | 域装配的配置快照会过期：`withHttpd()` 排在 `withBytecodeCompiler()` 之前时，子求值器永久缺后端 | `installDomains` 接受**提供者闭包**而不是实例，每次 `newEvaluator()` 现取最新配置 |
+
+第 3 条是这一轮最有价值的意外收获 —— 它同时修了 `spawn` 的既有缺陷。
+
+### 跨仓改动：tachyon 0.2.2
+
+设计稿一度判定「tachyon 现成能满足，不用改」。**实测发现 `visitHeaders` 漏了 Cookie**
+（`HeaderTable.cookie` 是专用字段，不在普通头表里）—— 调用方拿到"看起来完整"的头列表
+却永远读不到 Cookie。
+
+已修（一行）+ 新增 `HeaderVisitTest`（原先 `visitHeaders` 完全没有测试覆盖）+ 发 **0.2.2**
+（索引 sha 与制品一致）。`xisp_httpd` 依赖 `>= 0.2.2`。
+
+### 沙箱
+
+默认**只绑 `127.0.0.1`**、默认**拒绝特权端口**、默认**不注册**。脚本能选的只有端口，
+绑定地址是宿主决策 —— 与 `xisp_net` 里「脚本选 URL、宿主给域名白名单」同一条分界。
+
+### 测试 13 条，不依赖外网
+
+响应三态 / 请求快照字段 / **4 次交替请求不串数据** / handler 出错后服务仍正常 /
+8 个并发连接 / 特权端口拒绝 / REUSEPORT 语义 / 参数错误 / shutdown 幂等与端口复用 /
+三后端一致 / 域属性。
+
+客户端是**手写的最小 HTTP 请求器**（`TcpSocket` 直接发字节）—— 刻意不引 `xisp_net`，
+那会把 stdx 拖进本模块的测试依赖。
+
+### 验证
+
+`cjpm test` **614/614**（601 → 614）；`check-examples.sh` 22/22；`cjpm ws check` 与
+成员闸门通过（10 个成员）；`docs-site` 构建成功。
+
+### 待办
+
+- 本轮**不发 xisp 新版本**（0.7.0 刚发，属下一版内容）；
+- `:multipart` 未做（读文件字段要整块复制，首版价值不匹配）；
+- ~~`spawn` 的闭合验证~~ —— 已补 `AsyncTest.testSpawnCompiledClosure`（BC 下编译闭包
+  在子线程里调用，含高阶函数把闭包当值传的形式）。

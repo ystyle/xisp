@@ -531,7 +531,21 @@ extend Evaluator {
                 // 闭包值只能由后端执行产生，故未注入后端时拿到它属异常状态。
                 match (this.backend) {
                     case Some(b) => b.callClosure(id, args, closureEnv)
-                    case None => LispValue.Error(XispError(ErrorType.RuntimeError, "AST: closure without bytecode backend"))
+                    case None =>
+                        // 没有后端（子线程 / 每请求一个求值器）：把编译闭包降级成
+                        // AST 闭包再调。字节码的 Closure 里是 VM 内部函数 id，
+                        // 只有降级成 Procedure(参数名, AST 体, 捕获环境) 才能跨求值器跑。
+                        match (this.decompiler) {
+                            case Some(d) =>
+                                match (d(id, closureEnv)) {
+                                    case Some(proc) => this.applyProcedure(proc, args)
+                                    case None => LispValue.Error(XispError(ErrorType.RuntimeError,
+                                        "cannot resolve compiled closure (id=${id}): " +
+                                        "the bytecode backend was not shared with this evaluator"))
+                                }
+                            case None => LispValue.Error(XispError(ErrorType.RuntimeError,
+                                "AST: closure without bytecode backend"))
+                        }
                 }
             case _ => Nil
         }

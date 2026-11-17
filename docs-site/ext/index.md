@@ -27,7 +27,8 @@ Xisp 的核心只做「求值」——解释器、内建函数、模块系统、
 | 模块 | 内容 | 外部依赖 | 构建前提 |
 |---|---|---|---|
 | [`ystyle::xisp_json`](json) | JSON 路径取值与解析成树 | `gjson`（零依赖） | 无 |
-| [`ystyle::xisp_net`](net) | HTTP 客户端 | `stdx.net.http` / `stdx.net.tls` | **需 `CANGJIE_STDX_PATH`** |
+| [`ystyle::xisp_net`](net) | HTTP **客户端** | `stdx.net.http` / `stdx.net.tls` | **需 `CANGJIE_STDX_PATH`** |
+| [`ystyle::xisp_httpd`](httpd) | HTTP **服务端** | `tachyon`（零 stdx） | 无 |
 
 ```toml
 [dependencies]
@@ -70,6 +71,7 @@ let it = LispInterpreter([
 | 你要什么 | 看哪页 |
 |---|---|
 | 读 JSON、按路径取字段、把 JSON 解析成 Lisp 值 | [JSON](json) |
-| 发 HTTP 请求、调 REST 接口 | [网络（HTTP）](net) |
+| 发 HTTP 请求、调 REST 接口 | [HTTP 客户端](net) |
+| 起一个 HTTP 服务、给别的东西提供接口 | [HTTP 服务端](httpd) |
 | 并行执行多个求值任务 | [并发](/api/async)（**核心内置**，不在这里） |
 | 字节码 / JIT 加速 | [字节码与 JIT](/integration/options#字节码与-jit可选后端) |

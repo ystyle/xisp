@@ -331,4 +331,28 @@ class AsyncTest {
         }
         println("✓ AST / BC / JIT 三后端结果一致")
     }
+
+    /**
+     * 字节码下 `spawn` 调用编译闭包 —— 靠「编译闭包降级」落地
+     *
+     * 字节码后端的 `Closure` 里存的是 VM 内部函数 id，而子线程的求值器一律是 AST
+     * （跨线程安全），原先会直接报 `AST: closure without bytecode backend`。
+     * 修法是 `applyProcedure` 在无后端时用 `decompiler` 把闭包降级成
+     * `Procedure(参数名, AST 体, 捕获环境)` 再调。
+     *
+     * 这条用例钉住的就是那条路径：没有它，机制坏了也发现不了（HTTP handler 的用例
+     * 只覆盖了「经 ctx.newEvaluator 的求值器」，不覆盖 spawn 的子线程）。
+     */
+    @TestCase
+    func testSpawnCompiledClosure() {
+        println("\n=== 字节码下 spawn 调用编译闭包 ===")
+        let bc = this.evalIn([withQuietMode(), withBytecodeCompiler()],
+            "(begin (define (f x) (* x 2)) (future-get (spawn (f 21))))")
+        @Assert(bc == "42")
+        // 高阶函数里传编译闭包给 spawn 的形式（闭包作为值跨线程）
+        let hof = this.evalIn([withQuietMode(), withBytecodeCompiler()],
+            "(begin (define (g h) (future-get (spawn (h 10)))) (define (inc x) (+ x 1)) (g inc))")
+        @Assert(hof == "11")
+        println("✓ BC 下编译闭包在子线程里能正常调用（自动降级成 AST 闭包）")
+    }
 }

@@ -58,7 +58,8 @@
 | 模块 | 覆盖函数 | 数量 |
 |------|----------|------|
 | [JSON](/ext/json)（`ystyle::xisp_json`） | `cangjie::json-get` `cangjie::json-get-many` `cangjie::json-parse` `cangjie::json-valid?` | 4 |
-| [网络（HTTP）](/ext/net)（`ystyle::xisp_net`） | `cangjie::http-request` `cangjie::http-get` `cangjie::http-post` `cangjie::http-put` `cangjie::http-delete` `cangjie::http-patch` `cangjie::http-head` `cangjie::url-encode` | 8 |
+| [HTTP 客户端](/ext/net)（`ystyle::xisp_net`） | `cangjie::http-request` `cangjie::http-get` `cangjie::http-post` `cangjie::http-put` `cangjie::http-delete` `cangjie::http-patch` `cangjie::http-head` `cangjie::url-encode` | 8 |
+| [HTTP 服务端](/ext/httpd)（`ystyle::xisp_httpd`） | `cangjie::httpd-listen` `cangjie::httpd-shutdown` `cangjie::httpd-addr` `cangjie::httpd-running?` | 4 |
 
 **为什么不放在这里**：API 参考讲的是「核心内置、开箱可用」的东西；扩展模块要额外依赖、
 要显式装配、还有各自的构建前提（网络要 stdx 环境），混在一起会让人以为它们默认就能用。

@@ -577,6 +577,17 @@ public class LispInterpreter {
     /**
      * 获取顶层环境
      */
+    /**
+     * 宿主求值器（**装配期**使用，包内可见）。
+     *
+     * 域装配需要它来造「继承配置」的子求值器：外部域每处理一次请求/事件就要一个
+     * 独立 `Evaluator`（跨协程共享必错），而裸 `Evaluator(env)` 不带沙箱策略。
+     * 不对外暴露 —— 它是可变对象，宿主拿到会绕过解释器的状态机。
+     */
+    internal func templateEvaluator(): Evaluator {
+        evaluator
+    }
+
     public func getEnvironment(): Environment {
         this.env
     }

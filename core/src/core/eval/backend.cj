@@ -33,6 +33,18 @@ public interface ExecutionBackend {
     func callClosure(id: Int64, args: ArrayList<LispValue>, env: Environment): LispValue
 
     /**
+     * 把编译闭包**降级**成等价的 AST 闭包（`Procedure`）
+     *
+     * 用于「拿到后端产出的闭包、但要在没有后端的地方调」的场景 —— 典型是子线程 /
+     * 每请求一个求值器：字节码的 `Closure` 里存的是 VM 内部函数 id，跨求值器调不通，
+     * 而降级成 `Procedure(参数名, AST 体, 捕获环境)` 后就是纯数据，哪里都能跑。
+     *
+     * 实现要保证**只读**后端状态（不执行、不分配 VM 资源），否则调用方线程会踩到
+     * VM 的类级可变状态。
+     */
+    func decompileClosure(id: Int64, closureEnv: Environment): Option<LispValue>
+
+    /**
      * 同步协作式中断检查回调（后端热路径的检查点）
      */
     func setInterruptChecker(checker: () -> Bool): Unit

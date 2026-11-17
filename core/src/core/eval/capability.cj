@@ -58,13 +58,25 @@ public class CapabilityContext {
     /** 以 Lisp 源码安装（宏包形态，§4.2） */
     public let evalSource: (String) -> Unit
 
+    /**
+     * 造一个新的求值器，**继承宿主配置**（栈深度 / 沙箱权限 / 模块上下文 / 中断检查）。
+     *
+     * 用于"一次请求/一次事件一个求值器"这类场景（HTTP handler 每请求跑在独立协程里，
+     * 而 `Evaluator` 有大量"当前正在求值什么"的可变字段，跨协程共享必错）。
+     *
+     * 必须用它而不是自己 `Evaluator(env)`：裸求值器不带沙箱策略，会让外部域里
+     * 回调的 Lisp 代码绕过宿主的函数/路径/模块限制。
+     */
+    public let newEvaluator: () -> Evaluator
+
     public init(
         env: Environment,
         isInterrupted: () -> Bool,
         register: (String, (ArrayList<LispValue>) -> LispValue) -> Unit,
         registerType: (String) -> Unit,
         invoke: (LispValue, ArrayList<LispValue>) -> LispValue,
-        evalSource: (String) -> Unit
+        evalSource: (String) -> Unit,
+        newEvaluator: () -> Evaluator
     ) {
         this.env = env
         this.isInterrupted = isInterrupted
@@ -72,6 +84,7 @@ public class CapabilityContext {
         this.registerType = registerType
         this.invoke = invoke
         this.evalSource = evalSource
+        this.newEvaluator = newEvaluator
     }
 }
 

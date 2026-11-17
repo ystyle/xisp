@@ -214,7 +214,8 @@ public func withDomains(domains: Array<LispCapability>, replace!: Bool): Interpr
         BuiltinFunctions.installDomains(
             interpreter.getEnvironment(),
             domains,
-            isInterrupted: Some({ => interpreter.isInterruptedNow() })
+            isInterrupted: Some({ => interpreter.isInterruptedNow() }),
+            templateProvider: Some({ => interpreter.templateEvaluator() })
         )
     }
 }
@@ -300,7 +301,8 @@ public func withLevel(level: XispLevel): InterpreterOption {
         BuiltinFunctions.installDomains(
             interpreter.getEnvironment(),
             domains,
-            isInterrupted: Some({ => interpreter.isInterruptedNow() })
+            isInterrupted: Some({ => interpreter.isInterruptedNow() }),
+            templateProvider: Some({ => interpreter.templateEvaluator() })
         )
         match (level) {
             case Script =>

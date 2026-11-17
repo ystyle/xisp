@@ -127,11 +127,16 @@ extend BuiltinFunctions {
     public static func installDomains(
         env: Environment,
         domains: Array<LispCapability>,
-        isInterrupted!: Option<() -> Bool> = None
+        isInterrupted!: Option<() -> Bool> = None,
+        // 宿主求值器的**提供者**（不是实例）。
+        // 用提供者而不是快照，是因为装配顺序不确定：`withHttpd()` 可能排在
+        // `withBytecodeCompiler()` 之前，那时宿主还没注入后端 —— 装配时快照下来的
+        // 配置会永久缺后端（表现为子求值器报 "closure without bytecode backend"）。
+        templateProvider!: Option<() -> Evaluator> = None
     ): Unit {
         let ordered = orderDomains(domains)
         for (d in ordered) {
-            let ctx = makeContext(env, isInterrupted)
+            let ctx = makeContext(env, isInterrupted, templateProvider)
             d.install(ctx)
         }
     }
@@ -142,8 +147,14 @@ extend BuiltinFunctions {
      * `evalSource` 用 `Evaluator(env).eval` 装宏包 —— 这是**宿主安装期**行为，
      * 与"脚本运行期禁用 eval"是两件事（域安装由宿主发起，不受脚本侧权限约束）。
      */
-    static func makeContext(env: Environment, interrupted: Option<() -> Bool>): CapabilityContext {
+    static func makeContext(env: Environment, interrupted: Option<() -> Bool>,
+                            provider: Option<() -> Evaluator>): CapabilityContext {
         let evaluator = Evaluator(env)
+        // 装配期就把宿主策略带过来：ctx.invoke 与 ctx.newEvaluator 都必须是有配置的
+        match (provider) {
+            case Some(p) => p().copyConfigTo(evaluator)
+            case None => ()
+        }
         // 声明过的外部类型名（域可登记，供沙箱审计）
         let typeNames = HashSet<String>()
         let isInterrupted: () -> Bool = match (interrupted) {
@@ -162,6 +173,16 @@ extend BuiltinFunctions {
             env.define(name, NativeFunc(handler))
         }
         let registerType: (String) -> Unit = { t => typeNames.add(t) }
-        CapabilityContext(env, isInterrupted, register, registerType, invoke, evalSource)
+        let newEvaluator: () -> Evaluator = { =>
+            let ev = Evaluator(env)
+            // 每次**现取**宿主配置：解释器的配置可能在域装配之后还会变
+            // （比如 withBytecodeCompiler 排在 withHttpd 之后）
+            match (provider) {
+                case Some(p) => p().copyConfigTo(ev)
+                case None => evaluator.copyConfigTo(ev)
+            }
+            ev
+        }
+        CapabilityContext(env, isInterrupted, register, registerType, invoke, evalSource, newEvaluator)
     }
 }

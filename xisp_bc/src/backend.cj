@@ -34,6 +34,19 @@ public class BytecodeExecutionBackend <: ExecutionBackend {
         this.vm.callClosure(id, args, env)
     }
 
+    /**
+     * 编译闭包 → AST 闭包（只读函数表，不碰 VM 的运行时状态）
+     *
+     * `Procedure(参数名列表, AST 体, 捕获环境)` 是纯数据，可以传给别的线程/求值器。
+     */
+    public func decompileClosure(id: Int64, closureEnv: Environment): Option<LispValue> {
+        if (id < 0 || id >= BytecodeVM.functionTable.size) {
+            return None
+        }
+        let f = BytecodeVM.functionTable[id]
+        Some(LispValue.Procedure(f.params, f.body, closureEnv))
+    }
+
     public func setInterruptChecker(checker: () -> Bool): Unit {
         this.vm.setInterruptChecker(checker)
     }

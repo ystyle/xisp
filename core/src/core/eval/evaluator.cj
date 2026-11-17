@@ -42,6 +42,13 @@ public class Evaluator {
 
     // 字节码执行后端（可选注入：核心不依赖字节码实现，见 backend.cj）
     var backend: Option<ExecutionBackend> = None
+    /**
+     * 编译闭包的降级器（`id + 捕获环境 → AST 闭包`）
+     *
+     * 与 `backend` 分开存：`backend` 有类级可变状态、只能在主线程用；
+     * 降级只读后端的函数表，可以安全地跟着配置复制到子线程/子求值器。
+     */
+    var decompiler: Option<(Int64, Environment) -> Option<LispValue>> = None
 
     // 是否允许 spawn（宿主可用 withNoConcurrency() 关掉；见 async.cj）
     var concurrencyEnabled: Bool = true
@@ -72,6 +79,8 @@ public class Evaluator {
      * 未注入时全程走 AST 解释；注入后顶层表达式优先尝试编译执行。
      */
     public func setExecutionBackend(b: ExecutionBackend) {
+        // 降级器只读函数表，跟着配置走 —— 子线程里遇到编译闭包也能跑
+        this.decompiler = Some({ id, env => b.decompileClosure(id, env) })
         this.backend = Some(b)
         // 若中断检查已先于后端设置启用，补投给新后端（配置顺序不应影响中断是否生效）
         match (this.interruptChecker) {

@@ -56,7 +56,8 @@ export default defineConfig({
           items: [
             { text: '总览', link: '/ext/' },
             { text: 'JSON', link: '/ext/json' },
-            { text: '网络（HTTP）', link: '/ext/net' },
+            { text: 'HTTP 客户端', link: '/ext/net' },
+            { text: 'HTTP 服务端', link: '/ext/httpd' },
           ],
         },
       ],

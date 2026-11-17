@@ -1,7 +1,7 @@
 # Xisp HTTP 服务端（xisp_httpd）设计
 
-> **状态**：设计已定，**未实施**
-> **前置**：§3 —— tachyon 需要补一个**请求头遍历 API**（改动很小，但要发 0.2.2）
+> **状态**：**已实施**（2026-11-17）—— 模块 `xisp_httpd` 与四个符号已落地，13 条用例全绿
+> **前置**：**tachyon 0.2.2**（0.2.1 的 `visitHeaders` 漏了 Cookie —— 见 §3 末的订正）
 > **相关**：[`2026-11-17-net-design.md`](2026-11-17-net-design.md)（HTTP 客户端，互补不重叠）·
 > [`2026-11-17-async-design.md`](2026-11-17-async-design.md)（每请求一协程靠它撑住）
 
@@ -48,33 +48,36 @@
 
 ---
 
-## 3. 前置改造：tachyon 补请求头遍历 API
+## 3. 前置：无需改造（tachyon 现成能满足）
 
-**现状**：`RequestCtx` 只有 `headerGet(name)` 单个取，**没有遍历全部请求头的 public API** —— 内部的 `HeaderTable.count()` / `nameAt(i)` / `valueAt(i)` 都是包内可见。
+初版设计以为 tachyon 缺「遍历全部请求头」的 public API（内部的 `HeaderTable.count()` /
+`nameAt` / `valueAt` 确实都是包内可见），准备给它加一个 `visitRequestHeaders` 并发 0.2.2。
 
-而本设计要把请求转成 `HashMap` 快照（§4.1），拿不到全部请求头就等于做不到（`Authorization`、自定义头全都读不到）。
-
-**改动**（tachyon 仓，约 10 行）：
+**实测不需要** —— `RequestCtx.visitHeaders(f: (Bytes, Bytes) -> Bool)` 就是**请求头遍历**：
 
 ```cangjie
-/** 遍历全部请求头；回调返回 false 时提前停止 */
-public func visitRequestHeaders(f: (Bytes, Bytes) -> Bool): Unit {
-    var i = 0
-    let n = req.header.count()
-    while (i < n) {
-        if (!f(req.header.nameAt(i), req.header.valueAt(i))) {
-            return
-        }
-        i += 1
-    }
-}
+/** 遍历所有请求头（含特殊头），回调返回 false 提前终止 */
+public func visitHeaders(f: (Bytes, Bytes) -> Bool): Unit
 ```
 
-这是 fasthttp `VisitAll` 的等价物，属合理 API 补齐。**tachyon 侧要：加实现 + 单测 + 发 0.2.2**（按 tachyon 自己的发版流程）。
+它先访问特殊头（Host / Content-Length / Content-Type / User-Agent / Connection），
+再按到达顺序访问普通头，与 fasthttp 的 `VisitAll` 语义一致。初版误判是因为它物理上位于
+`ctx.cj` 的「响应侧」注释块之后 —— 那是代码组织，不是语义。
 
-`xisp_httpd` 依赖 `ystyle::tachyon = "0.2.2"` 或更高。
+**当时的结论**：`xisp_httpd` 直接依赖 tachyon 0.2.1，不改 tachyon、不发版。
 
----
+### 3.1 实测又发现一处：`visitHeaders` 漏了 Cookie（→ 还是发了 0.2.2）
+
+`visitHeaders` 覆盖了 Host / Content-Length / Content-Type / User-Agent / Connection
+五个专用字段，**但漏了 Cookie** —— `HeaderTable.cookie` 同样是专用字段，不在普通头表里。
+
+后果：调用方拿到"看起来完整"的头列表却永远读不到 Cookie，只能退化成按名逐个
+`ctx.cookie(n)`；而本设计的 HashMap 快照方案要求一次性拿全。
+
+**处置**：给 tachyon 的 `visitHeaders` 补上 Cookie（一行），新增 `HeaderVisitTest`
+（原先 `visitHeaders` **完全没有测试覆盖**），发 **0.2.2**。
+
+**最终结论**：`xisp_httpd` 依赖 `ystyle::tachyon >= 0.2.2`。
 
 ## 4. 接口形态
 
@@ -203,7 +206,7 @@ public func withHttpd(bind!: String = "127.0.0.1", portRange!: (UInt16, UInt16) 
 
 | # | 项 | 现状 | 处置 |
 |---|---|---|---|
-| H1 | tachyon 0.2.2 的请求头遍历 API | 未做 | §3，第一步 |
+| H1 | ~~tachyon 需补请求头遍历 API~~ | **已澄清不需要**；但 `visitHeaders` 漏 Cookie → 发 0.2.2 | 见 §3.1 |
 | H2 | 每请求构造 `HashMap` 的分配量 | 未测 | 量一下（预期几 KB/请求）；若过重再考虑惰性视图，但**不牺牲安全性** |
 | H3 | handler 里调 `spawn` | 可行（协程套协程）但未验证 | 实测；理论上没问题（仓颉 M:N 协程） |
 | H4 | 同一进程起多个 server | 未验证 | 实测；不行就报错而不是静默 |
@@ -214,7 +217,7 @@ public func withHttpd(bind!: String = "127.0.0.1", portRange!: (UInt16, UInt16) 
 
 ## 9. 验收标准
 
-1. **前置**：tachyon 0.2.2 已发布，含 `visitRequestHeaders` 与其单测；
+1. ~~前置：tachyon 补请求头遍历 API~~ —— 已澄清不需要；但实测发现 `visitHeaders` 漏 Cookie，故 tachyon 发 0.2.2（§3.1）；
 2. 基础：`(httpd-listen port handler)` 后能收到请求，`HashMap` 返回 → 对应状态码/头/body；`Str` → 200；`nil` → 204；
 3. 请求快照完整：method / path / query / headers（含自定义头）/ body / cookies / form 都能读到，且**值是本次请求的**（用两个不同请求交替打，确认没有串数据）；
 4. 错误不崩：handler 返回 `Error` → 500，**后续请求仍正常**；
@@ -231,3 +234,87 @@ public func withHttpd(bind!: String = "127.0.0.1", portRange!: (UInt16, UInt16) 
 - `xisp_net`（HTTP 客户端）与本文档**互补**：一个发请求、一个收请求。不合并 —— 依赖不同（stdx vs tachyon），合并会让只想要一边的宿主被迫拖进另一边；
 - 能力域文档 §6.2「网络域分层选型」只讨论过**客户端**（`stdx.net.*`）。服务端是新的一档：**tachyon 零依赖**，所以它比客户端模块的宿主门槛更低；
 - 异步设计文档 §5「共享环境树 + 写入加锁」是本模块 §6.2 的直接依据。
+
+---
+
+## 11. 实施记录（2026-11-17）
+
+### 11.1 落地内容
+
+| 文件 | 内容 |
+|---|---|
+| `xisp_httpd/src/httpd.cj` | `HttpdConfig`、`ServerState`、`HttpdServer`（`LispExternal`）、`handleRequest`、`listenHttpd`、`registerHttpd`、`httpdDomain` |
+| `xisp_httpd/src/convert.cj` | `requestToLisp`（请求 → HashMap 快照）、`writeResponse`（三态响应） |
+| `xisp_httpd/src/options.cj` | `withHttpd(bind:portRange:maxBodyBytes:maxConns:)` |
+| `xisp_httpd/src/httpd_test.cj` | 13 条用例 |
+| `xisp_httpd/README.md` | 用法、快照原因、沙箱、实现要点、已知限制 |
+| `docs-site/ext/httpd.md` | 用户文档（含三个实现说明） |
+| `tachyon` 0.2.2 | `visitHeaders` 补 Cookie + `HeaderVisitTest`（跨仓改动，见 §3） |
+
+### 11.2 顺带修掉的三个 core 问题
+
+做这个模块时撞上的，都不是本模块特有的：
+
+**一、扩展域拿不到"继承配置"的求值器**
+
+`CapabilityContext` 原来只有 `invoke`（一个装配期创建的裸求值器）。HTTP handler 需要
+「每请求一个求值器」，而裸求值器**不带沙箱策略** —— 域里回调的 Lisp 代码会绕过宿主的
+函数/路径/模块限制。
+
+新增 `CapabilityContext.newEvaluator: () -> Evaluator`。
+
+**二、`ctx.invoke` 本身也是裸求值器**
+
+装配时 `makeContext` 造的那个 evaluator 从来没继承过宿主配置（0.6.0 起就这样）。
+现在装配时就把策略带过来。
+
+**三、编译闭包跨求值器调不通（同时影响 `spawn`）**
+
+字节码后端的 `Closure` 里存的是 VM 内部函数 id，在没有后端的求值器上调用直接报
+`AST: closure without bytecode backend`。HTTP handler 在 BC 下就是这种闭包，三种后端
+一致性过不了。
+
+修法：`ExecutionBackend` 加 `decompileClosure(id, closureEnv)`（**只读**函数表），
+`Evaluator` 加独立的 `decompiler` 字段（与 `backend` 分开 —— 后者有类级可变状态只能在
+主线程用），`copyConfigTo` 复制它，`applyProcedure` 的 Closure 分支在没有后端时降级成
+`Procedure(参数名, AST 体, 捕获环境)` 再调。
+
+> 这条同时修了 `spawn` 的同类缺陷：`(spawn (f 1))` 里 `f` 若是编译闭包，子线程原先
+> 也会撞同一句话。
+
+**四、域装配的配置快照会过期**
+
+`withHttpd()` 排在 `withBytecodeCompiler()` 之前时，装配时快照下来的配置没有后端，
+子求值器永久缺后端。改成 `installDomains` 接受 **提供者闭包**（`templateProvider`）
+而不是实例，每次 `newEvaluator()` 现取最新配置 —— 装配顺序不再影响正确性。
+
+### 11.3 与设计稿的差异
+
+| 设计稿 | 实际 | 原因 |
+|---|---|---|
+| `httpd-listen` 是③类普通函数 | 一致 | 但需要 `CapabilityContext.newEvaluator` 才能做到（原设计没意识到要拿宿主配置） |
+| 请求快照含 `:multipart` | **未做** | 读文件字段要把内容整块复制出来，成本与首版价值不匹配；§1 已把 multipart 便利封装列为非目标 |
+| 端口占用 → `NetworkError` | 保留预检，但 tachyon 开了 `SO_REUSEPORT`，**同端口可重复监听** | 这是负载均衡语义不是 bug；预检仍对不支持 REUSEPORT 的占用方有效 |
+| handler 可被中断 | 一致 | 子求值器的中断 = 宿主中断 **或** 本服务正在关停 |
+
+### 11.4 测试（13 条，`xisp_httpd/src/httpd_test.cj`）
+
+| 分组 | 用例 |
+|---|---|
+| 响应三态 | map（状态码/头/body）、字符串、nil |
+| 请求快照 | 字段完整（含自定义头、cookie）、**4 次交替请求不串数据** |
+| 错误 | handler 出错 → 500 且后续请求照常 |
+| 并发 | 8 个并发连接各自拿到自己的数据 |
+| 沙箱 | 特权端口被拒、REUSEPORT 语义、参数错误 |
+| 生命周期 | shutdown 后 `running?` 为假、幂等、端口可复用 |
+| 三后端 | AST / BC / JIT 下 handler 行为一致 |
+| 域属性 | `escapable` + `hostPolicy` |
+
+**测试纪律**：只用 `127.0.0.1` + 高位端口，不依赖外网；客户端是手写的最小 HTTP 请求器
+（`TcpSocket` 直接发字节）—— 刻意不引 `xisp_net`，那会把 stdx 拖进本模块的测试依赖。
+
+### 11.5 验证
+
+`cjpm test` **614/614**（601 → 614）；`check-examples.sh` 22/22；`cjpm ws check` 与
+成员闸门通过（10 个成员）；`docs-site` 构建成功；tachyon 0.2.2 已发中心仓且索引 sha
+与制品一致。
