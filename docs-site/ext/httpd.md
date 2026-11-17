@@ -6,8 +6,8 @@
 
 ```toml
 [dependencies]
-  "ystyle::xisp" = "0.7.0"
-  "ystyle::xisp_httpd" = "0.7.0"
+  "ystyle::xisp" = "0.8.0"
+  "ystyle::xisp_httpd" = "0.8.0"
 ```
 
 与 [HTTP 客户端](net) 分工：一个发请求、一个收请求。客户端要 stdx，服务端不要。

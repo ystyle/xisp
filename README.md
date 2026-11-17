@@ -3,7 +3,7 @@
 > 仓颉嵌入式 Lisp 脚本语言
 
 [![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
-[![Version](https://img.shields.io/badge/version-0.7.0-green.svg)](https://github.com/ystyle/xisp)
+[![Version](https://img.shields.io/badge/version-0.8.0-green.svg)](https://github.com/ystyle/xisp)
 [![Cangjie](https://img.shields.io/badge/Cangjie-1.2.0-orange.svg)](https://cangjie-lang.cn/)
 ![star](https://atomgit.com/ystyle/xisp/star/badge.svg)
 
@@ -30,7 +30,23 @@ Xisp（星枢）是一个用仓颉（Cangjie）语言编写的嵌入式 Lisp 解
 
 ## 破坏性变更与迁移
 
-### 0.7.0（当前版本）
+### 0.8.0（当前版本）
+
+新增两个能力，**无破坏性变更**（API 只增不改）：
+
+- **HTTP 服务端**（新模块 `ystyle::xisp_httpd`）：`httpd-listen` 等四个符号，基于
+  [tachyon](https://atomgit.com/ystyle/tachyon)（**零 stdx**，宿主只要加个依赖）
+- **JSON 序列化**：`ystyle::xisp_json` 新增 `cangjie::json-dump`
+
+顺带修了三个既有缺陷（都在扩展域/并发这条线上）：
+
+- **编译闭包跨求值器调不通** —— 字节码后端下 `Closure` 存的是 VM 内部函数 id，
+  子线程/子求值器调用会报 `AST: closure without bytecode backend`。`spawn` 原先也会撞
+- **扩展域拿不到「继承配置」的求值器** —— 域里回调的 Lisp 代码会绕过宿主的沙箱策略
+- **域装配的配置快照会过期** —— `withHttpd()` 排在 `withBytecodeCompiler()` 之前时，
+  子求值器永久缺后端
+
+### 0.7.0
 
 新增并发、JSON、HTTP 三个能力。**升级到 0.7.0 要改两处**：
 
@@ -117,12 +133,12 @@ Xisp 以 cjpm 工作区组织，9 个成员模块**按需依赖**：
 
 ```toml
 [dependencies]
-  "ystyle::xisp" = "0.7.0"           # 核心：解释器 / 内建 / 桥接
-  # "ystyle::xisp_repl" = "0.7.0"    # 需要交互式 REPL 时
-  # "ystyle::xisp_bc" = "0.7.0"      # 需要字节码 / JIT 时
+  "ystyle::xisp" = "0.8.0"           # 核心：解释器 / 内建 / 桥接
+  # "ystyle::xisp_repl" = "0.8.0"    # 需要交互式 REPL 时
+  # "ystyle::xisp_bc" = "0.8.0"      # 需要字节码 / JIT 时
   # JSON / HTTP 两个能力模块（0.7.0 起）：
-  # "ystyle::xisp_json" = "0.7.0"    # JSON 能力
-  # "ystyle::xisp_net" = "0.7.0"     # HTTP 能力（另需 stdx 环境）
+  # "ystyle::xisp_json" = "0.8.0"    # JSON 能力
+  # "ystyle::xisp_net" = "0.8.0"     # HTTP 能力（另需 stdx 环境）
 ```
 
 **核心（`ystyle::xisp`）不含字节码与 JIT 代码**——不依赖 `xisp_bc` 的宿主，产物里就没有这部分
@@ -143,7 +159,7 @@ cjpm ws check         # 版本一致性闸门（多包产品共用版本号）
 ❯ ./target/release/bin/ystyle::xisp_cli
 ╔═══════════════════════════════════════════════════════════╗
 ║           星枢 - 仓颉嵌入式 Lisp 脚本语言                   ║
-║                   版本 0.7.0                              ║
+║                   版本 0.8.0                              ║
 ╚═══════════════════════════════════════════════════════════╝
 xisp> (print "你好，仓颉")
 "你好，仓颉"

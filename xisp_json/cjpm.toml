@@ -3,7 +3,7 @@
   name = "xisp_json"
   organization = "ystyle"
   description = "星枢 JSON 能力：路径取值与解析成树（基于 gjson）"
-  version = "0.7.0"
+  version = "0.8.0"
   output-type = "static"
   compile-option = "-O2 -Woff unused"
   override-compile-option = ""
@@ -15,6 +15,6 @@
   repository = "https://gitcode.com/ystyle/xisp"
 
 [dependencies]
-  "ystyle::xisp" = "0.7.0"
+  "ystyle::xisp" = "0.8.0"
   # 无组织名（default org）：中心仓已发布 1.2.2，零依赖，MulanPSL-2.0
   "gjson" = "1.2.2"

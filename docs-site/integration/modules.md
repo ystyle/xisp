@@ -55,9 +55,9 @@ xisp（核心：零外部依赖，不含字节码 / JIT / JSON / 网络）
 
 ```toml
 [dependencies]
-  "ystyle::xisp" = "0.7.0"
-  "ystyle::xisp_repl" = "0.7.0"   # 需要 REPL 时
-  "ystyle::xisp_bc" = "0.7.0"     # 需要字节码 / JIT 时
+  "ystyle::xisp" = "0.8.0"
+  "ystyle::xisp_repl" = "0.8.0"   # 需要 REPL 时
+  "ystyle::xisp_bc" = "0.8.0"     # 需要字节码 / JIT 时
 ```
 
 ::: tip 核心是零依赖的
