@@ -74,6 +74,8 @@ for path in members:
     # 2b. test-dependencies 的成员版本必须与产品版本一致
     #     cjpm ws bump 只改 [dependencies]，不管 [test-dependencies] —— 漏改会在
     #     bundle 时报"依赖冲突"，而且错误指向 [dependencies]（让人以为主依赖写错了）。
+    #     注：cjpm-ws 0.1.6 起 bump 与 check 都已覆盖这一段。这里保留是为了不依赖
+    #     工具版本（别人用旧版 cjpm-ws 时这道闸门仍然有效）。
     for dep, depver in (cfg.get("test-dependencies") or {}).items():
         if not dep.startswith("ystyle::"):
             continue
