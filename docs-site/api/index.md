@@ -46,6 +46,21 @@
 
 > 表中「数量」是该篇文档覆盖的符号个数；个别符号（如 `type-of`）在多个页面都会讲到，
 > 跨页重复计入。
+>
+> 上表只统计**核心内置**。可选模块提供的能力单列如下，不计入上表合计。
+
+## 可选模块的能力
+
+| 文档 | 模块 | 覆盖函数 | 数量 |
+|------|------|----------|------|
+| [JSON](json) | `ystyle::xisp_json` | `cangjie::json-get` `cangjie::json-get-many` `cangjie::json-parse` `cangjie::json-valid?` | 4 |
+
+可选模块需要额外依赖，不使用就完全不接触（也就不会引入依赖）：
+
+```toml
+[dependencies]
+  "ystyle::xisp_json" = "0.6.0"
+```
 
 ---
 

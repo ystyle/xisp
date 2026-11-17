@@ -81,17 +81,18 @@ cjpm build
 
 ## 模块结构
 
-Xisp 以 cjpm 工作区组织，7 个成员模块**按需依赖**：
+Xisp 以 cjpm 工作区组织，8 个成员模块**按需依赖**：
 
 | 模块 | 包 | 内容 | 依赖 |
 |---|---|---|---|
 | `core/` | `ystyle::xisp` | AST 解释器 / 内建 / 模块系统 / 桥接 | **无**（零外部依赖） |
 | `xisp_bc/` | `ystyle::xisp_bc` | 字节码编译器 / 寄存器栈 VM / JIT（可选后端） | `xisp` |
+| `xisp_json/` | `ystyle::xisp_json` | JSON 路径取值与解析成树 | `xisp`、`gjson` |
 | `terminal/` | `ystyle::xisp_terminal` | 终端能力（raw mode、字符宽度） | 无 |
 | `repl/` | `ystyle::xisp_repl` | 交互式 REPL | `xisp`、`xisp_terminal` |
 | `cli/` | `ystyle::xisp_cli` | 命令行入口（可执行） | `xisp`、`xisp_repl`、`xisp_bc` |
 | `xisp_examples/` | `ystyle::xisp_examples.*` | 仓颉侧示例（不发布） | `xisp`、`xisp_repl` |
-| `xisp_tests/` | `ystyle::xisp_tests` | 契约 / 集成测试（不发布） | `xisp`、`xisp_bc` |
+| `xisp_tests/` | `ystyle::xisp_tests` | 契约 / 集成测试（不发布） | `xisp`、`xisp_bc`、`xisp_json` |
 
 作为库嵌入时按需依赖：
 
@@ -100,6 +101,7 @@ Xisp 以 cjpm 工作区组织，7 个成员模块**按需依赖**：
   "ystyle::xisp" = "0.6.0"           # 核心：解释器 / 内建 / 桥接
   # "ystyle::xisp_repl" = "0.6.0"    # 需要交互式 REPL 时
   # "ystyle::xisp_bc" = "0.6.0"      # 需要字节码 / JIT 时
+  # "ystyle::xisp_json" = "0.6.0"    # 需要 JSON 能力时
 ```
 
 **核心（`ystyle::xisp`）不含字节码与 JIT 代码**——不依赖 `xisp_bc` 的宿主，产物里就没有这部分

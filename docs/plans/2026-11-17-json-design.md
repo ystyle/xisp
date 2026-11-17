@@ -1,6 +1,7 @@
 # Xisp JSON 能力（xisp_json）设计
 
-> **状态**：设计已定，**未实施**
+> **状态**：**已实施**（2026-11-17）—— 模块 `xisp_json` 与四个符号已落地，
+> 测试 20 条全绿；JSON 序列化（§8）仍为待办
 > **前置**：无（可独立开工，不依赖异步/网络）
 > **后续**：`xisp_net` 会用到它，但**不依赖它**（见 §7）
 > **相关**：
@@ -176,7 +177,10 @@ gjson 只读。要写 JSON 有三条路：
 
 JSON 是**纯计算**：不碰文件、不碰网络、不碰进程。故：
 
-- 域属性 `escapable: false, hostPolicy: false` → **会进 `presetPure`**；
+- 域属性 `escapable: false, hostPolicy: false` → 符合进纯函数子集的条件。
+  **但 `presetPure()` 只遍历 `coreDomains()`**（`core/src/core/builtin/domains_preset.cj`），
+  外部模块的域**不会**自动进 —— 宿主必须显式装配（`withJson()` 就是这件事的入口）。
+  实现时核对过这一点，原设计写"会自动进"是错的；
 - 不需要额外的权限回调（对照网络要 `urlChecker`）；
 - 唯一的资源风险是**大输入的内存放大**（`json-parse` 会把整棵树转成 `LispValue`）。对策见 §10。
 
@@ -203,6 +207,24 @@ JSON 是**纯计算**：不碰文件、不碰网络、不碰进程。故：
 3. `xisp_json` **不引入到 core 的依赖**：发布后 `core/cjpm.toml` 的 `[dependencies]` 仍为空；
 4. 三后端（AST / BC / JIT）行为一致 —— 桥接函数是 `NativeFunc`，天然一致，但要在差分语料里加一个 JSON 脚本；
 5. `docs-site/api/` 新增 JSON 章节，示例全部实测过。
+
+### 实施记录（2026-11-17）
+
+- 模块 `xisp_json`：`src/json.cj`（映射 + 四个符号）、`src/options.cj`（`withJson()`）、
+  `src/json_test.cj`（白盒 7 条）、`README.md`（含 MulanPSL-2.0 声明）；
+- 契约测试 `xisp_tests/src/json_test.cj` 13 条，**每条都跑 AST / BC / JIT 三个后端**；
+- 制品核对：`xisp_json-0.6.0.cjp` 顶层只有 `README.md` / `cjpm.toml` / `src`，
+  无 `docs` / `docs-site` / `examples` / `tests` / `AGENTS.md`；
+- 全量 `cjpm test` 574/574，`check-examples.sh` 22/22，`cjpm ws check` 与
+  `scripts/check-members.sh` 均通过。
+
+实施中遇到两个与设计稿不符处，均以上述方式订正：
+
+1. **`presetPure` 不会自动纳入外部域**（§9，见上）；
+2. **空数组与 `null` 都映射成 `Nil`** —— 设计 §5 只说"array → Cons 列表"，
+   但 xisp 里空列表就是 `nil`（`list()` 对空数组返回 `Nil`），所以 `[]` 与 `null`
+   映射后不可区分。这是语言既有语义，本模块不破例；已在 `README.md` 与
+   用户文档里写明。
 
 ---
 

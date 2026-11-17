@@ -47,6 +47,12 @@ export default defineConfig({
             { text: '流程控制', link: '/api/control' },
           ],
         },
+        {
+          text: '可选模块',
+          items: [
+            { text: 'JSON', link: '/api/json' },
+          ],
+        },
       ],
       '/integration/': [
         {

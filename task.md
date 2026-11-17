@@ -25,6 +25,8 @@
 - ✅ M22: 收尾审计（5 个「看起来在跑、实际没跑」的东西）
 - ✅ M23: 域装配 5 处缺陷订正 + 两档装配收敛
 - ✅ M24: 装配档位 XispLevel（Expr / Pure / Script）
+- ✅ M26: 三份设计文档（JSON / 异步 / 网络）
+- ✅ M27: JSON 能力落地（新成员 xisp_json）
 
 ---
 
@@ -1299,3 +1301,82 @@ tag `v0.6.0` 已推送到 `gitcode.com/ystyle/xisp`（master 同步到 `fe95097`
 **JSON → 异步 → 网络**。JSON 零依赖零未知可立刻做；异步改核心且是网络的前置；网络等 TLS 实测。
 
 **验证**：三份文档均为设计稿，不改代码，故本次无 `cjpm test` 相关变更；文档里的事实断言（HashMap 字面量、static var、jitCurEnv、ErrorType 8 臂、gjson 只读）逐条核实过。
+
+---
+
+## M27: JSON 能力落地（新成员 `xisp_json`）✅
+
+按 [`docs/plans/2026-11-17-json-design.md`](docs/plans/2026-11-17-json-design.md) 实现，
+一次性做完（含文档、测试、制品核对）。
+
+### 新增成员
+
+```
+xisp_json/
+├── cjpm.toml        # 依赖 ystyle::xisp + gjson 1.2.2；include 锚定 /src；元数据齐全
+├── README.md        # 用法 + 映射规则 + 错误语义 + MulanPSL-2.0 声明
+└── src/
+    ├── json.cj      # resultToLisp / numberFromRaw / 四个符号 / jsonDomain()
+    ├── options.cj   # withJson()
+    └── json_test.cj # 白盒 7 条
+```
+
+workspace 成员 **7 → 8**。制品核对：`xisp_json-0.6.0.cjp` 顶层只有
+`README.md` / `cjpm.toml` / `src`，无 `docs` / `examples` / `tests` / `AGENTS.md`。
+
+### 四个符号
+
+| 符号 | 语义 |
+|---|---|
+| `cangjie::json-get` | 路径取值，不存在 → `nil` |
+| `cangjie::json-get-many` | 批量取值，一次扫描（避免大 JSON 反复重扫） |
+| `cangjie::json-parse` | 解析成 `LispValue` 树 |
+| `cangjie::json-valid?` | 语法检查 |
+
+### 关键实现点
+
+- **整数不丢整数性**：按 `raw` 原始文本判形态（不含 `.` / `e` / `E`）→ `Int`，否则 `Float`。
+  用 `raw` 而不是 `num`（`Float64`），后者超 2^53 丢精度；
+- **语法校验**：gjson 的 `parse` 对非法输入**静默返回 Null**（不抛），所以必须先 `valid`
+  再解析 —— 否则非法 JSON 会变成 `nil`，与"语法错报 `SyntaxError`"的契约冲突；
+- **import 别名**：gjson 的 `parse` / `get` 与 `std.convert` 的 `Parsable.parse` 重名，
+  逐个改名引入（`gjsonParse` / `gjsonGet` / …），否则解析到错误目标；
+- **空数组 = `nil`**：xisp 里 `list()` 对空数组返回 `Nil`，所以 `[]` 与 `null` 映射后
+  不可区分。这是语言既有语义（`'()` = `nil`），不为新能力破例，文档里写明。
+
+### 两处设计稿与实现不符（已订正设计文档）
+
+1. **`presetPure` 不会自动纳入外部域** —— 原设计 §9 写"属性正确就会进 `presetPure`"，
+   实际 `presetPure()` 只遍历 `coreDomains()`，外部模块的域必须由宿主显式装配
+   （`withJson()` 就是入口）；
+2. **空数组与 `null` 都是 `nil`** —— 原设计 §5 只说"array → Cons 列表"，没考虑空数组
+   在 xisp 里就是 `nil`。
+
+### 测试（共 20 条，全部三后端）
+
+- 白盒 `xisp_json/src/json_test.cj` 7 条：整数形态判定、数字映射（含 Int64 边界与越界回落）、
+  六个变体映射、object/array/嵌套映射、参数辅助函数；
+- 契约 `xisp_tests/src/json_test.cj` 13 条：四个符号装上、路径取值、路径不存在返 `nil`、
+  批量取值、整数不丢整数性、解析成树、空数组=nil、语法检查、`SyntaxError`、参数错误、
+  错误中止求值链、域属性与独占装配、**`testDocExamples`（把用户文档 25 条示例逐条断言）**、
+  综合用例。
+
+`testDocExamples` 是这轮加的一道防腐化闸：文档里的 `=> 输出` 全部变成断言，改行为没改文档会红。
+
+### 用户文档
+
+- 新增 `docs-site/api/json.md`（全部示例经实测后写入，并由 `testDocExamples` 钉住）；
+- `docs-site/api/index.md` 新增「可选模块的能力」分节（不计入核心内置的 115 个）；
+- `docs-site/.vitepress/config.mjs` 侧边栏加「可选模块 → JSON」；
+- 根 `README.md` 模块表 7 → 8；`AGENTS.md` 项目结构补 `xisp_json/`。
+
+### 验证
+
+`cjpm test` **575/575**；`check-examples.sh` 22/22；`cjpm ws check` 通过
+（8 个成员版本一致）；`scripts/check-members.sh` 通过（8 个成员）。
+
+### 待办（发版相关）
+
+**产品版本需要推进**：`xisp_json` 是第 6 个发布成员，而 0.6.0 已随 5 个成员发布过。
+同一产品版本对应两个不同的成员集合会造成混乱，所以发版时应 `cjpm ws bump 0.7.0`，
+不能沿用 0.6.0。本次按"不 bump、不 publish"执行，版本推进留待决定。
