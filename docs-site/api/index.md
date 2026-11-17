@@ -48,21 +48,23 @@
 > 表中「数量」是该篇文档覆盖的符号个数；个别符号（如 `type-of`）在多个页面都会讲到，
 > 跨页重复计入。
 >
-> 上表只统计**核心内置**。可选模块提供的能力单列如下，不计入上表合计。
+> 上表只统计**核心内置**（123 = 内置函数 115 + 并发 8）。扩展模块的能力不计入，
+> 见下一节。
 
-## 可选模块的能力
+## 本页之外：扩展模块
 
-| 文档 | 模块 | 覆盖函数 | 数量 |
-|------|------|----------|------|
-| [JSON](json) | `ystyle::xisp_json` | `cangjie::json-get` `cangjie::json-get-many` `cangjie::json-parse` `cangjie::json-valid?` | 4 |
-| [网络（HTTP）](net) | `ystyle::xisp_net` | `cangjie::http-request` `cangjie::http-get` `cangjie::http-post` `cangjie::http-put` `cangjie::http-delete` `cangjie::http-patch` `cangjie::http-head` `cangjie::url-encode` | 8 |
+有些能力要额外依赖（JSON、HTTP），它们单独成模块，文档也在单独的章节：
 
-可选模块需要额外依赖，不使用就完全不接触（也就不会引入依赖）：
+| 模块 | 覆盖函数 | 数量 |
+|------|----------|------|
+| [JSON](/ext/json)（`ystyle::xisp_json`） | `cangjie::json-get` `cangjie::json-get-many` `cangjie::json-parse` `cangjie::json-valid?` | 4 |
+| [网络（HTTP）](/ext/net)（`ystyle::xisp_net`） | `cangjie::http-request` `cangjie::http-get` `cangjie::http-post` `cangjie::http-put` `cangjie::http-delete` `cangjie::http-patch` `cangjie::http-head` `cangjie::url-encode` | 8 |
 
-```toml
-[dependencies]
-  "ystyle::xisp_json" = "0.7.0"   # 0.7.0 起提供，中心仓待发布
-```
+**为什么不放在这里**：API 参考讲的是「核心内置、开箱可用」的东西；扩展模块要额外依赖、
+要显式装配、还有各自的构建前提（网络要 stdx 环境），混在一起会让人以为它们默认就能用。
+见[扩展模块](/ext/)。
+
+并发（`spawn` / `future-*`）**在核心里**，用 `std.core` 的线程，所以它在上面那张内置函数表里。
 
 ---
 

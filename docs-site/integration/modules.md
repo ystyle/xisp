@@ -50,7 +50,7 @@ xisp（核心：零外部依赖，不含字节码 / JIT / JSON / 网络）
 ::: warning `xisp_net` 需要 stdx
 它用 stdx 的 HTTP 客户端，构建前必须 `eval "$(cjvs stdx-env zsh)"`。
 缺 `CANGJIE_STDX_PATH` 时 cjpm 会报"cjpm.toml 里没加依赖"——**那是指错误方向**，
-真正原因是环境变量不存在。详见[网络](/api/net)。
+真正原因是环境变量不存在。详见[扩展模块 · 网络](/ext/net)。
 :::
 
 ```toml

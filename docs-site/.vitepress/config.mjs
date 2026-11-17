@@ -11,6 +11,7 @@ export default defineConfig({
     nav: [
       { text: '指南', link: '/guide/01-quickstart' },
       { text: 'API 参考', link: '/api/' },
+      { text: '扩展模块', link: '/ext/' },
       { text: '集成', link: '/integration/embedding' },
     ],
     sidebar: {
@@ -48,11 +49,14 @@ export default defineConfig({
             { text: '并发', link: '/api/async' },
           ],
         },
+      ],
+      '/ext/': [
         {
-          text: '可选模块',
+          text: '扩展模块',
           items: [
-            { text: 'JSON', link: '/api/json' },
-            { text: '网络（HTTP）', link: '/api/net' },
+            { text: '总览', link: '/ext/' },
+            { text: 'JSON', link: '/ext/json' },
+            { text: '网络（HTTP）', link: '/ext/net' },
           ],
         },
       ],

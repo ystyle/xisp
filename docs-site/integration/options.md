@@ -163,7 +163,7 @@ let domain = SimpleCapability("demo.counterbox", ["make-box"],
 
 ---
 
-## 可选模块的能力
+## 扩展模块的能力
 
 JSON / 网络 / 并发不由核心提供（并发例外，见下），需要先依赖对应模块再用它自己的选项：
 
@@ -186,7 +186,7 @@ let it = LispInterpreter([
 
 ::: warning `xisp_net` 需要 stdx
 构建前必须 `eval "$(cjvs stdx-env zsh)"`。缺 `CANGJIE_STDX_PATH` 时 cjpm 会报
-"cjpm.toml 里没加依赖"——那是指错误方向。见[网络](/api/net)。
+"cjpm.toml 里没加依赖"——那是指错误方向。见[扩展模块 · 网络](/ext/net)。
 :::
 
 **并发（`spawn` / `future-*`）在核心里**，不需要额外模块 —— 它用 `std.core` 的线程与
@@ -299,7 +299,7 @@ let embedded = LispInterpreter([withModuleMode()])
 
 ## 字节码与 JIT（可选后端）
 
-这两项选项由可选模块 `ystyle::xisp_bc` 提供（核心不含），使用前需先依赖它：
+这两项选项由**可选后端模块** `ystyle::xisp_bc` 提供（核心不含；它零外部依赖，只是可选），使用前需先依赖它：
 
 ```toml
 [dependencies]
@@ -470,7 +470,7 @@ paths.eval("(cangjie::write-file \"/etc/passwd\" \"hack\")")      // 拒绝
 | `withBytecodeCompiler` ★ | 无 | 未启用（AST 解释） | `setExecutionBackend` |
 | `withJit` ★ | 无 | 未启用 | `JitRuntime()` |
 
-★ 由可选模块提供，核心不含：`withBytecodeCompiler` / `withJit` 来自 `ystyle::xisp_bc`，
+★ 核心不含，按需依赖：`withBytecodeCompiler` / `withJit` 来自可选后端 `ystyle::xisp_bc`，
 `withJson` 来自 `ystyle::xisp_json`，`withNetwork` / `withNetworkUnrestricted` 来自 `ystyle::xisp_net`。
 
 ## 参见

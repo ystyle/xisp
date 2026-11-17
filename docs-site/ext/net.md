@@ -1,7 +1,7 @@
 # 网络（HTTP 客户端）
 
-::: warning 来自可选模块，且需要 stdx
-本页的函数由**可选模块** `ystyle::xisp_net` 提供，**核心不含**。它依赖 stdx 的 HTTP 客户端，
+::: warning 来自扩展模块，且需要 stdx
+本页的函数由**扩展模块** `ystyle::xisp_net` 提供，**核心不含**。它依赖 stdx 的 HTTP 客户端，
 构建前必须配好 stdx 环境：
 
 ```shell
@@ -97,7 +97,7 @@ baseURL 继承、拦截器链、自动重试这类能力用 Lisp 宏自己写 �
 - `:headers` 的键统一小写，**同名多值给列表**（典型是 `set-cookie`）；
 - `:body` 是按 UTF-8 解码的字符串。
 
-配合 [JSON](/api/json) 使用：
+配合 [JSON](/ext/json) 使用：
 
 ```lisp
 (cangjie::json-get (hashmap-get (cangjie::http-get url) "body") "data.0.name")

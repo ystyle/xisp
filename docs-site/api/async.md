@@ -16,7 +16,7 @@ Xisp 的并发模型是 **`spawn` + `Future`**（不是 `async` / `await`）：
   (+ (future-get f1) (future-get f2)))   ; => 6
 ```
 
-::: tip 由 core 提供，不属可选模块
+::: tip 由 core 提供，不属扩展模块
 `spawn` 与 `future-*` 是核心能力（用 `std.core` 的线程与 `Future`），不需要额外依赖。
 它们属于能力域 `async`，`presetPure` 按属性推导会排除它（并发不是"纯函数"）。
 :::
