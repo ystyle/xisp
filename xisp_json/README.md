@@ -12,6 +12,10 @@
 核心 `ystyle::xisp` 的 `[dependencies]` 为空，「核心零外部依赖」是它的红线。JSON 能力
 放进独立成员，**不用 JSON 的宿主完全不接触 gjson**。
 
+**不涉及 stdx**：本模块只用标准库 + gjson，构建不依赖 `CANGJIE_STDX_PATH` 或任何平台相关
+配置（`bin-dependencies` / `link-option` 均为空），也不需要 FFI 动态库。这与将来的
+`xisp_net`（走 `stdx.net.http`，要 OpenSSL 3 动态库）是两种情况，别混。
+
 ## 用法
 
 ```cangjie
