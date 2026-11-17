@@ -32,6 +32,7 @@
 - ✅ M30: 发版 0.7.0（并发 / JSON / HTTP 客户端）
 - ✅ M31: HTTP 服务端（新成员 xisp_httpd，基于 tachyon）
 - ✅ M32: JSON 序列化（json-dump）
+- ✅ M33: 发版 0.8.0（HTTP 服务端 + JSON 序列化）
 
 ---
 
@@ -1749,3 +1750,60 @@ tachyon 的请求上下文**池化复用**：handler 返回后被下一个请求
 往返、pretty、拒绝、参数错误）。
 
 验证：`cjpm test` **629/629**（615 → 629）。
+
+---
+
+## M33: 发版 0.8.0 ✅
+
+整产品 **0.7.0 → 0.8.0**，10 个成员 lockstep（8 个发布）。
+
+### 内容
+
+| 能力 | 形式 |
+|---|---|
+| HTTP 服务端 | 新模块 `ystyle::xisp_httpd`（基于 tachyon，零 stdx） |
+| JSON 序列化 | `ystyle::xisp_json` 新增 `cangjie::json-dump` |
+
+**无破坏性变更**（API 只增不改）。顺带修了三个既有缺陷：编译闭包跨求值器调不通
+（`spawn` 也撞）、扩展域拿不到继承配置的求值器、域装配的配置快照会过期。
+
+### 发布结果（2026-11-17）
+
+| 成员 | 索引 | 制品 |
+|---|---|---|
+| `xisp` | ✅ | 130KB / 59 个 .cj |
+| `xisp_terminal` | ✅ | 6KB |
+| `xisp_bc` | ✅ | 53KB |
+| `xisp_json` | ✅ | 11KB（+serialize.cj） |
+| `xisp_httpd` | ✅ | 13KB（新） |
+| `xisp_net` | ✅ | 12KB |
+| `xisp_repl` | ✅ | 14KB |
+| `xisp_cli` | ✅ | 2KB |
+
+索引 sha256 与制品逐字节一致（8/8）；制品顶层只有 `README.md` / `cjpm.toml` / `src`。
+tag `v0.8.0` 已推两平台。
+
+### 发版中闸门第二次抓到问题
+
+`cjpm ws bump` **不管 `[test-dependencies]`** —— 上一轮发 0.7.0 时为此手工修过，并加了闸门。
+这轮 bump 完，闸门立刻报：
+
+```
+xisp_httpd/cjpm.toml: test-dependencies 的 ystyle::xisp_bc=0.7.0 与产品版本 0.8.0 不一致
+xisp_net/cjpm.toml: test-dependencies 的 ystyle::xisp_bc=0.7.0 与产品版本 0.8.0 不一致
+```
+
+**闸门的价值就在这里** —— 上次是人肉踩出来的，这次是自动拦下的。
+
+### 私有仓预演的一个新情况
+
+`xisp_httpd` 依赖 tachyon 0.2.2，而**私有仓里没有 tachyon**（它发在中心仓）——
+预演时 bundle 直接报 `no available version for module 'ystyle::tachyon'`。
+
+处置：把 tachyon 0.2.2 也发一份到私有仓。以后凡是有**外部依赖**的成员，预演前都要确认
+该依赖在私有仓可见。
+
+### 验证
+
+`cjpm test` 629/629；`check-examples.sh` 22/22；`cjpm ws check` 与成员闸门通过
+（10 个成员均 0.8.0）；`docs-site` 构建成功。
