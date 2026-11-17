@@ -1,0 +1,20 @@
+[package]
+  cjc-version = "1.0.0"
+  name = "xisp_json"
+  organization = "ystyle"
+  description = "星枢 JSON 能力：路径取值与解析成树（基于 gjson）"
+  version = "0.6.0"
+  output-type = "static"
+  compile-option = "-O2 -Woff unused"
+  override-compile-option = ""
+  link-option = ""
+  # 锚定到包根：未锚定的 `src` 会匹配任意层级的同名目录
+  include = ["/src"]
+  license = ["MIT"]
+  authors = ["ystyle"]
+  repository = "https://gitcode.com/ystyle/xisp"
+
+[dependencies]
+  "ystyle::xisp" = "0.6.0"
+  # 无组织名（default org）：中心仓已发布 1.2.2，零依赖，MulanPSL-2.0
+  "gjson" = "1.2.2"

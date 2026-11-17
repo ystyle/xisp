@@ -17,3 +17,5 @@
   "ystyle::xisp" = "0.6.0"
   # 字节码 / JIT 的契约与集成测试需要后端模块
   "ystyle::xisp_bc" = "0.6.0"
+  # JSON 能力的契约测试
+  "ystyle::xisp_json" = "0.6.0"
