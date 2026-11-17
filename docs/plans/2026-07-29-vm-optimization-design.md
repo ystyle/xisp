@@ -4,6 +4,8 @@
 **日期**: 2026-07-29  
 **状态**: 设计评审
 
+> **现状（2026-11-17 标注）**：**已实施**。两条目标都落地了：变量按槽位索引（`CompiledFunction.globalSlots` / `localSlots`）+ 寄存器栈 VM（`BytecodeVM.registers`）。
+
 ---
 
 ## 1. 目标
