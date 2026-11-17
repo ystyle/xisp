@@ -61,7 +61,7 @@ let script = LispInterpreter([withLevel(XispLevel.Script), withSandbox()])
 
 ## 能力域装配
 
-「能力域」是**一个域 = 一组顶层符号 + 一份安装函数**的抽象。core 内置 13 个域，
+「能力域」是**一个域 = 一组顶层符号 + 一份安装函数**的抽象。core 内置 14 个域，
 宿主也可以自己造域（这是宿主扩展解释器的唯一入口）。
 
 ### 内置域
@@ -82,6 +82,7 @@ let script = LispInterpreter([withLevel(XispLevel.Script), withSandbox()])
 | `aliases` | `first rest second third fourth prepend more cadr caddr cadddr cddr cdar caar setq progn string-append` | `after: base, list, string` |
 | `error` | `error raise assert` | — |
 | `macros.core` | 16 个内建宏（`when` / `unless` / `condb` / `if-let` / `let*` / `when-let*` / `and` / `or` / `incf` / `decf` / `negate` / `swap` / `push` / `pop` / `do` / `defun`） | `evalSource` 形态 |
+| `async` | `future-get future-try-get future-done? future-pending? future-ok? future-error future-cancel` | `escapable` + `hostPolicy`（**`spawn` 不在此域** —— 它是②类求值器拦截，不注册到环境） |
 
 **域的 `symbols` 声明就是契约**：单独装这个域（连同它 `after` 依赖的传递闭包）后，
 声明里的符号全部可用。
@@ -90,7 +91,7 @@ let script = LispInterpreter([withLevel(XispLevel.Script), withSandbox()])
 
 | 组合 | 内容 | 用途 |
 |------|------|------|
-| `presetFull()` | 全部 13 个域 | 「全量」，与 `LispInterpreter()` 默认装配等价 |
+| `presetFull()` | 全部 14 个域 | 「全量」，与 `LispInterpreter()` 默认装配等价 |
 | `presetPure()` | 按属性推导：`!escapable && !hostPolicy` | 纯函数子集；**不含** `print` 域，输出由宿主用 `output` 接管 |
 
 `presetPure()` 是**推导**出来的，不是手写清单 —— 新增域默认 `escapable = true`，
@@ -159,6 +160,37 @@ let domain = SimpleCapability("demo.counterbox", ["make-box"],
 
 所以「只要算术+列表、不要高阶函数」是**做不到**的：高阶形式本就不在域里。
 这是设计边界（能力域设计 §5.3），不是遗漏。
+
+---
+
+## 可选模块的能力
+
+JSON / 网络 / 并发不由核心提供（并发例外，见下），需要先依赖对应模块再用它自己的选项：
+
+| 选项 | 来自 | 说明 |
+|------|------|------|
+| `withJson()` | `ystyle::xisp_json` | 追加 JSON 域（`cangjie::json-get` 等四个符号） |
+| `withNetwork(hosts)` | `ystyle::xisp_net` | 追加 HTTP 域；**必须给域名白名单**，空数组 = 全部拒绝 |
+| `withNetworkUnrestricted()` | `ystyle::xisp_net` | 同上但不限域名（**仅供测试/受控环境**） |
+| `withNoConcurrency()` | 核心 | 关掉 `spawn`（`spawn` 是②类求值器拦截、不进环境，域装配动不了它） |
+
+```cangjie
+import ystyle::xisp_json.*   // withJson
+import ystyle::xisp_net.*    // withNetwork
+
+let it = LispInterpreter([
+    withJson(),
+    withNetwork(["api.example.com", "*.example.org"]),
+])
+```
+
+::: warning `xisp_net` 需要 stdx
+构建前必须 `eval "$(cjvs stdx-env zsh)"`。缺 `CANGJIE_STDX_PATH` 时 cjpm 会报
+"cjpm.toml 里没加依赖"——那是指错误方向。见[网络](/api/net)。
+:::
+
+**并发（`spawn` / `future-*`）在核心里**，不需要额外模块 —— 它用 `std.core` 的线程与
+`Future`，零外部依赖。要禁用用 `withNoConcurrency()`。
 
 ---
 
@@ -399,9 +431,13 @@ paths.eval("(cangjie::write-file \"/etc/passwd\" \"hack\")")      // 拒绝
 | `withLevel` | `XispLevel`（`Expr` / `Pure` / `Script`） | — | 独占装配（清空 + 装域 [+ std 桥接]） |
 | `withDomains` | `Array<LispCapability>`，可选 `replace` | 追加（`replace = false`） | `installDomains` |
 | `withPreset` | `Array<LispCapability>`，可选 `replace` | 追加 | `installDomains` |
-| `presetFull` | 无 | 全部 13 个域 | `BuiltinFunctions.presetFull` |
+| `presetFull` | 无 | 全部 14 个域 | `BuiltinFunctions.presetFull` |
 | `presetPure` | 无 | 按属性推导（无 `print`） | `BuiltinFunctions.presetPure` |
 | `withNoFirstClassValues` | 无 | ②类符号不注册为一等值 | `setFirstClassValues(false)` |
+| `withNoConcurrency` | 无 | `spawn` 可用 | `setConcurrencyEnabled(false)` |
+| `withJson` ★ | 无 | 未装 JSON 域 | `withDomains([jsonDomain()])` |
+| `withNetwork` ★ | `Array<String>`（域名白名单） | 未装网络域 | `withDomains([netDomain(cfg)])` |
+| `withNetworkUnrestricted` ★ | 无 | 未装网络域 | 同上，不设域名限制 |
 | `withKeywordAlias` | `(alias, original): (String, String)` | — | `registerKeywordAlias` |
 | `withKeywordAliases` | `Array<(String, String)>` | — | `registerKeywordAlias` |
 | `withChineseKeywords` | 无 | 中文预设别名 | `registerKeywordAlias` |
@@ -434,11 +470,12 @@ paths.eval("(cangjie::write-file \"/etc/passwd\" \"hack\")")      // 拒绝
 | `withBytecodeCompiler` ★ | 无 | 未启用（AST 解释） | `setExecutionBackend` |
 | `withJit` ★ | 无 | 未启用 | `JitRuntime()` |
 
-★ 由可选模块 `ystyle::xisp_bc` 提供，核心不含。
+★ 由可选模块提供，核心不含：`withBytecodeCompiler` / `withJit` 来自 `ystyle::xisp_bc`，
+`withJson` 来自 `ystyle::xisp_json`，`withNetwork` / `withNetworkUnrestricted` 来自 `ystyle::xisp_net`。
 
 ## 参见
 
 - [嵌入解释器](embedding) - `LispInterpreter` 基本用法
 - [沙箱](sandbox) - 沙箱选项的机制与最佳实践
 - [桥接](bridge) - 标准库桥接函数与自定义函数注册
-- [模块与依赖](modules) - 7 个成员模块、依赖方向与按需依赖
+- [模块与依赖](modules) - 9 个成员模块、依赖方向与按需依赖

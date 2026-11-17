@@ -11,7 +11,7 @@ eval "$(cjvs env zsh)" && eval "$(cjvs stdx-env zsh)"
 ```toml
 [dependencies]
   "ystyle::xisp" = "0.6.0"
-  "ystyle::xisp_net" = "0.6.0"
+  "ystyle::xisp_net" = "0.7.0"   # 0.7.0 起提供，中心仓待发布
 ```
 
 这也是工作区里**唯一**需要平台相关配置的模块；`core` 与其它模块仍然零外部依赖。

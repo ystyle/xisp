@@ -19,7 +19,7 @@ hero:
 
 features:
   - title: 轻量级
-    details: 手写 Lexer/Parser + AST 求值器，自包含核心，不重复实现 IO/网络，直接桥接仓颉标准库。
+    details: 手写 Lexer/Parser + AST 求值器。核心只做求值、零外部依赖；JSON / 网络 / 字节码都是按需依赖的独立模块。
     icon: ⚡
   - title: 现代化
     details: 向量/哈希字面量、字符串插值、解构绑定、管道操作符、模式匹配，现代 Lisp 语法开箱即用。

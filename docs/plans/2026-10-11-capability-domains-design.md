@@ -1054,7 +1054,7 @@ public interface LispExternalCallable <: LispExternal {
 ### 12.6 装配档位落地，以及"清空环境"的两个后遗症（2026-11-08）
 
 新增 `XispLevel`（`Expr` / `Pure` / `Script`）+ `withLevel()`：宿主选一档，
-不再需要知道 13 个域的名字。`Expr` 由 `presetPure` 减去 `macros.core` 与 `symbols`
+不再需要知道十几个域的名字（当时 13 个，加 `async` 后 14 个）。`Expr` 由 `presetPure` 减去 `macros.core` 与 `symbols`
 推导，`Script` = `presetFull` + 标准库桥接 —— 档位本身不维护第四套清单。
 
 落地时暴露出 `clearEnvironmentBindings()`（独占装配的唯一入口）的**两个后遗症**：
