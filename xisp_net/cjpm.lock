@@ -1,5 +1,5 @@
 version = 0
 
 [requires]
-  "ystyle::xisp_bc" = {version = "0.8.0"}
-  "ystyle::xisp" = {version = "0.8.0"}
+  "ystyle::xisp_bc" = {version = "0.9.0"}
+  "ystyle::xisp" = {version = "0.9.0"}

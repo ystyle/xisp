@@ -1897,3 +1897,47 @@ case _ => Nil    // 非 Int/Float → 静默返回 nil
 
 （上一轮 0.8.0 的结论是"cjpm-ws 0.1.6 已覆盖 test-dependencies"，实际只覆盖了
 `check` 一侧。要改 `bump`，见看板。）
+
+### 发布结果（2026-11-19）
+
+8 个发布成员全部 `cjpm publish success`：
+
+| 成员 | 索引 | 制品 | 大小 | .cj |
+|---|---|---|---|---|
+| `ystyle::xisp` | ✅ | 200 | 138KB | 59 |
+| `ystyle::xisp_terminal` | ✅ | 200 | 6KB | 5 |
+| `ystyle::xisp_bc` | ✅ | 200 | 55KB | 8 |
+| `ystyle::xisp_httpd` | ✅ | 200 | 13KB | 4 |
+| `ystyle::xisp_json` | ✅ | 200 | 12KB | 4 |
+| `ystyle::xisp_net` | ✅ | 200 | 12KB | 3 |
+| `ystyle::xisp_repl` | ✅ | 200 | 15KB | 11 |
+| `ystyle::xisp_cli` | ✅ | 200 | 3KB | 1 |
+
+**索引 sha256 与下载制品逐字节一致（8/8）**；制品顶层只有 `README.md` / `cjpm.toml` / `src`。
+
+### 发版中踩到的一个真坑：本地索引缓存与服务端的时序
+
+`cjpm ws publish` / `workspace-release.sh publish` 对官方仓**一律拒绝**（设计如此），
+中心仓只能按拓扑序手工 `cd <member> && cjpm bundle --skip-lint && cjpm publish`。
+
+手工发时撞上一个连锁问题：`xisp` 发完后立刻发 `xisp_bc`，报
+
+```
+Error: no available version for module 'ystyle::xisp' by require '0.9.0'
+```
+
+而当时中心仓的制品 URL **已经是 200**。查本地缓存才发现真因：
+
+```
+~/.cjpm/repository/index/ystyle/xi/sp/xisp_bc   ← 只有 0.6.0 / 0.7.0 / 0.8.0
+```
+
+**`cjpm` 的本地索引缓存更新有滞后**：制品能下载（走 `/pkg/`）、但索引文件（走 `/index/`）
+还是旧的，于是依赖解析失败。这个错误的措辞 `wrong format with dependency` 极具误导性
+—— 看起来像 `cjpm.toml` 写错了，实际是缓存没刷新。
+
+处置：**每发完一个被依赖的成员，等它的 `/pkg/` 返回 200 后 `rm -rf ~/.cjpm/repository/index/ystyle`
+再重试**（只删缓存不够，要等服务端索引真的更新，否则清完又拉回旧的 —— 我第一次清了就白清）。
+
+另外 `[test-dependencies]` 在 workspace 里**不走本地成员解析**，同样要等对应版本在中心仓
+索引可见才能 bundle —— `xisp_httpd` / `xisp_net` 的测试依赖 `xisp_bc`，就是卡在这。
