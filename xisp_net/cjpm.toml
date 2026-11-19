@@ -3,7 +3,7 @@
   name = "xisp_net"
   organization = "ystyle"
   description = "星枢网络能力：HTTP 客户端（基于 stdx.net.http，需 stdx 环境）"
-  version = "0.9.0"
+  version = "0.9.1"
   output-type = "static"
   compile-option = "-O2 -Woff unused"
   override-compile-option = ""
@@ -17,12 +17,12 @@
   repository = "https://gitcode.com/ystyle/xisp"
 
 [dependencies]
-  "ystyle::xisp" = "0.9.0"
+  "ystyle::xisp" = "0.9.1"
 
 # 仅测试用：三后端一致性用例需要字节码/JIT 后端。
 # 放 test-dependencies 而不是 dependencies —— 正常使用 xisp_net 不必拖进后端模块。
 [test-dependencies]
-  "ystyle::xisp_bc" = "0.9.0"
+  "ystyle::xisp_bc" = "0.9.1"
 
 # 构建前必须先 `eval "$(cjvs stdx-env zsh)"`（或等价配置）。
 # 缺 CANGJIE_STDX_PATH 时 cjpm 的报错会指向 cjpm.toml 说"没加依赖"，

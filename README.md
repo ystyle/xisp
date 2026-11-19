@@ -3,7 +3,7 @@
 > 仓颉嵌入式 Lisp 脚本语言
 
 [![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
-[![Version](https://img.shields.io/badge/version-0.9.0-green.svg)](https://github.com/ystyle/xisp)
+[![Version](https://img.shields.io/badge/version-0.9.1-green.svg)](https://github.com/ystyle/xisp)
 [![Cangjie](https://img.shields.io/badge/Cangjie-1.2.0-orange.svg)](https://cangjie-lang.cn/)
 ![star](https://atomgit.com/ystyle/xisp/star/badge.svg)
 
@@ -30,7 +30,23 @@ Xisp（星枢）是一个用仓颉（Cangjie）语言编写的嵌入式 Lisp 解
 
 ## 破坏性变更与迁移
 
-### 0.9.0（当前版本）
+### 0.9.1（当前版本）
+
+**修一个 0.9.0 的缺陷，无 API 变更。**
+
+字节码后端不支持外部值参与算术：AST 侧 `+ - * /` 走 `NativeFunc`、能按
+`LispExternalArithmetic` 分派，但字节码把它们编成 `OP_ADD` / `OP_SUB` / `OP_MUL` /
+`OP_DIV` 指令，VM 里这些指令只认 `Int` / `Float`，于是同一段 `(+ arr arr)` 在
+AST 下能算、在字节码下报 `+: expected a number`。
+
+VM 的四个算术操作码现在遇到非数值组合时回退到 `BuiltinFunctions.dispatchArith`，
+与 AST 共用同一份分派逻辑。
+
+**教训**：外部值分派横跨 AST / 字节码 / JIT 三条路径，0.9.0 的分派测试只在 AST 上跑，
+漏掉了另外两条。已补 `ExternalDispatchAllBackendsTest`（三后端各跑一遍算术、归约、
+逐元素分派）。
+
+### 0.9.0
 
 **无破坏性变更**（只增不改），但有一处**行为收紧**值得注意：
 
@@ -158,12 +174,12 @@ Xisp 以 cjpm 工作区组织，9 个成员模块**按需依赖**：
 
 ```toml
 [dependencies]
-  "ystyle::xisp" = "0.9.0"           # 核心：解释器 / 内建 / 桥接
-  # "ystyle::xisp_repl" = "0.9.0"    # 需要交互式 REPL 时
-  # "ystyle::xisp_bc" = "0.9.0"      # 需要字节码 / JIT 时
+  "ystyle::xisp" = "0.9.1"           # 核心：解释器 / 内建 / 桥接
+  # "ystyle::xisp_repl" = "0.9.1"    # 需要交互式 REPL 时
+  # "ystyle::xisp_bc" = "0.9.1"      # 需要字节码 / JIT 时
   # JSON / HTTP 两个能力模块（0.7.0 起）：
-  # "ystyle::xisp_json" = "0.9.0"    # JSON 能力
-  # "ystyle::xisp_net" = "0.9.0"     # HTTP 能力（另需 stdx 环境）
+  # "ystyle::xisp_json" = "0.9.1"    # JSON 能力
+  # "ystyle::xisp_net" = "0.9.1"     # HTTP 能力（另需 stdx 环境）
 ```
 
 **核心（`ystyle::xisp`）不含字节码与 JIT 代码**——不依赖 `xisp_bc` 的宿主，产物里就没有这部分
@@ -184,7 +200,7 @@ cjpm ws check         # 版本一致性闸门（多包产品共用版本号）
 ❯ ./target/release/bin/ystyle::xisp_cli
 ╔═══════════════════════════════════════════════════════════╗
 ║           星枢 - 仓颉嵌入式 Lisp 脚本语言                   ║
-║                   版本 0.9.0                              ║
+║                   版本 0.9.1                              ║
 ╚═══════════════════════════════════════════════════════════╝
 xisp> (print "你好，仓颉")
 "你好，仓颉"

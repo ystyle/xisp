@@ -207,11 +207,24 @@ class VectorBox <: LispExternalArithmetic & LispExternalReducible & LispExternal
     }
 }
 
-/** 在解释器里求值，把 box 放进环境 */
-func evalWithBoxes(code: String, boxes: Array<(String, Array<Float64>)>): LispValue {
+/**
+ * 在指定后端上求值，把 box 放进环境
+ *
+ * **必须能切换后端**：外部值分派横跨三条执行路径 —— AST 的 `NativeFunc`、
+ * 字节码的 `OP_ADD` 等特化指令、JIT 的同一批指令。只测 AST 会漏掉后两条，
+ * 而 0.9.0 发布时正是这么漏的（BC 后端对数据数组报 "expected a number"）。
+ */
+func evalWithBoxesOn(code: String, boxes: Array<(String, Array<Float64>)>,
+                     backend: String): LispValue {
     let opts = ArrayList<InterpreterOption>()
     opts.add(withQuietMode())
     opts.add(withStdLib())
+    if (backend != "AST") {
+        opts.add(withBytecodeCompiler())
+    }
+    if (backend == "JIT") {
+        opts.add(withJit())
+    }
     let it = LispInterpreter(opts.toArray())
     for (b in boxes) {
         it.getEnvironment().define(b[0], LispValue.External(VectorBox(b[1])))
@@ -221,6 +234,10 @@ func evalWithBoxes(code: String, boxes: Array<(String, Array<Float64>)>): LispVa
         result = it.evalExpr(expr)
     }
     result
+}
+
+func evalWithBoxes(code: String, boxes: Array<(String, Array<Float64>)>): LispValue {
+    evalWithBoxesOn(code, boxes, "AST")
 }
 
 func boxValue(v: LispValue): Array<Float64> {
@@ -434,3 +451,63 @@ class ExternalElementwiseTest {
     }
 }
 
+
+/**
+ * 三个后端的分派行为必须一致
+ *
+ * 0.9.0 发布时漏了这一组：AST 走 `NativeFunc` 能算，字节码把 `+ - * /` 编成
+ * `OP_ADD` 等指令、VM 的 `binNum` 只认数字，于是同一段代码在 BC 下报
+ * `expected a number`。修复见 `xisp_bc/src/vm.cj` 的 `binNumFallback`。
+ *
+ * 教训：**外部值分派横跨 AST / BC / JIT 三条路径**，只测 AST 等于没测。
+ */
+@Test
+class ExternalDispatchAllBackendsTest {
+    @TestCase
+    func testArithAllBackends() {
+        println("\n=== 算术分派三后端一致 ===")
+        let boxes: Array<(String, Array<Float64>)> =
+            [("a", [1.0, 2.0, 3.0]), ("b", [10.0, 20.0, 30.0])]
+        for (backend in ["AST", "BC", "JIT"]) {
+            let sum = evalWithBoxesOn("(+ a b)", boxes, backend)
+            expectBox(sum, [11.0, 22.0, 33.0], "[${backend}] (+ a b)")
+            // 非交换运算的方向
+            let sub = evalWithBoxesOn("(- 10 a)", boxes, backend)
+            expectBox(sub, [9.0, 8.0, 7.0], "[${backend}] (- 10 a)")
+            // 一元取负
+            let neg = evalWithBoxesOn("(- a)", boxes, backend)
+            expectBox(neg, [-1.0, -2.0, -3.0], "[${backend}] (- a)")
+            // N 元折叠
+            let fold = evalWithBoxesOn("(+ a b b)", boxes, backend)
+            expectBox(fold, [21.0, 42.0, 63.0], "[${backend}] (+ a b b)")
+        }
+        println("✓ AST / BC / JIT 三个后端的算术分派一致")
+    }
+
+    @TestCase
+    func testReduceAllBackends() {
+        println("\n=== 归约分派三后端一致 ===")
+        let boxes: Array<(String, Array<Float64>)> = [("a", [1.0, 2.0, 3.0, 4.0])]
+        for (backend in ["AST", "BC", "JIT"]) {
+            expectFloat(evalWithBoxesOn("(sum a)", boxes, backend), 10.0, "[${backend}] sum")
+            expectFloat(evalWithBoxesOn("(max a)", boxes, backend), 4.0, "[${backend}] max")
+        }
+        println("✓ AST / BC / JIT 的归约分派一致")
+    }
+
+    /**
+     * 逐元素分派三后端一致
+     *
+     * `sin` / `sqrt` 没有编译期特化（走普通函数调用），理论上一致，但
+     * `withBytecodeCompiler()` 下函数调用路径不同，仍要验。
+     */
+    @TestCase
+    func testElementwiseAllBackends() {
+        println("\n=== 逐元素分派三后端一致 ===")
+        let boxes: Array<(String, Array<Float64>)> = [("a", [4.0, 9.0])]
+        for (backend in ["AST", "BC", "JIT"]) {
+            expectBox(evalWithBoxesOn("(sqrt a)", boxes, backend), [2.0, 3.0], "[${backend}] sqrt")
+        }
+        println("✓ AST / BC / JIT 的逐元素分派一致")
+    }
+}

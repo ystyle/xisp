@@ -1,6 +1,7 @@
 package ystyle::xisp_bc
 
 import ystyle::xisp.core.eval.*
+import ystyle::xisp.core.builtin.*
 import ystyle::xisp.types.*
 import std.collection.ArrayList
 import std.collection.HashMap
@@ -323,15 +324,15 @@ public class BytecodeVM <: VM {
                             let result = match (a) {
                                 case Int(ai) => match (b) {
                                     case Float(bf) => LispValue.Float(Float64(ai) + bf)
-                                    case _ => LispValue.Error(XispError(ErrorType.TypeError, "+: expected a number"))
+                                    case _ => this.binNumFallback(a, b, 0)
                                 }
                                 case Float(af) => match (b) {
                                     case Int(bi) => LispValue.Float(af + Float64(bi))
                                     case Float(bf) => LispValue.Float(af + bf)
-                                    case _ => LispValue.Error(XispError(ErrorType.TypeError, "+: expected a number"))
+                                    case _ => this.binNumFallback(a, b, 0)
                                 }
                                 case Str(s) => Str(s + b.toString())
-                                case _ => LispValue.Error(XispError(ErrorType.TypeError, "+: expected a number"))
+                                case _ => this.binNumFallback(a, b, 0)
                             }
                             this.push(result)
                         }
@@ -356,14 +357,14 @@ public class BytecodeVM <: VM {
                             let result = match (a) {
                                 case Int(ai) => match (b) {
                                     case Float(bf) => LispValue.Float(Float64(ai) - bf)
-                                    case _ => LispValue.Error(XispError(ErrorType.TypeError, "-: expected a number"))
+                                    case _ => this.binNumFallback(a, b, 1)
                                 }
                                 case Float(af) => match (b) {
                                     case Int(bi) => LispValue.Float(af - Float64(bi))
                                     case Float(bf) => LispValue.Float(af - bf)
-                                    case _ => LispValue.Error(XispError(ErrorType.TypeError, "-: expected a number"))
+                                    case _ => this.binNumFallback(a, b, 1)
                                 }
-                                case _ => LispValue.Error(XispError(ErrorType.TypeError, "-: expected a number"))
+                                case _ => this.binNumFallback(a, b, 1)
                             }
                             this.push(result)
                         }
@@ -388,14 +389,14 @@ public class BytecodeVM <: VM {
                             let result = match (a) {
                                 case Int(ai) => match (b) {
                                     case Float(bf) => LispValue.Float(Float64(ai) * bf)
-                                    case _ => LispValue.Error(XispError(ErrorType.TypeError, "*: expected a number"))
+                                    case _ => this.binNumFallback(a, b, 2)
                                 }
                                 case Float(af) => match (b) {
                                     case Int(bi) => LispValue.Float(af * Float64(bi))
                                     case Float(bf) => LispValue.Float(af * bf)
-                                    case _ => LispValue.Error(XispError(ErrorType.TypeError, "*: expected a number"))
+                                    case _ => this.binNumFallback(a, b, 2)
                                 }
-                                case _ => LispValue.Error(XispError(ErrorType.TypeError, "*: expected a number"))
+                                case _ => this.binNumFallback(a, b, 2)
                             }
                             this.push(result)
                         }
@@ -420,14 +421,14 @@ public class BytecodeVM <: VM {
                             let result = match (a) {
                                 case Int(ai) => match (b) {
                                     case Float(bf) => LispValue.Float(Float64(ai) / bf)
-                                    case _ => LispValue.Error(XispError(ErrorType.TypeError, "/: expected a number"))
+                                    case _ => this.binNumFallback(a, b, 3)
                                 }
                                 case Float(af) => match (b) {
                                     case Int(bi) => LispValue.Float(af / Float64(bi))
                                     case Float(bf) => LispValue.Float(af / bf)
-                                    case _ => LispValue.Error(XispError(ErrorType.TypeError, "/: expected a number"))
+                                    case _ => this.binNumFallback(a, b, 3)
                                 }
-                                case _ => LispValue.Error(XispError(ErrorType.TypeError, "/: expected a number"))
+                                case _ => this.binNumFallback(a, b, 3)
                             }
                             this.push(result)
                         }
@@ -1716,6 +1717,13 @@ public class BytecodeVM <: VM {
     /**
      * 数值二元运算（L+C 超指令用）：opKind 0=+ 1=- 2=* 3=/（Int 快路径）
      */
+    /**
+     * 二元算术（`OP_ADD` / `OP_SUB` / `OP_MUL` / `OP_DIV` 的快路径）
+     *
+     * 四种数值组合直接内联；其余走 `binNumFallback` —— **外部值（如 NDArray）
+     * 要能参与运算**，所以这里不能一律报类型错误。与 AST 侧的
+     * `BuiltinFunctions.dispatchArith` 共用同一份分派逻辑，不重复实现。
+     */
     func binNum(a: LispValue, b: LispValue, opKind: Int64): LispValue {
         if (let LispValue.Int(ai) <- a && let LispValue.Int(bi) <- b) {
             return match (opKind) {
@@ -1725,37 +1733,52 @@ public class BytecodeVM <: VM {
                 case _ => if (bi == 0) { Nil } else { LispValue.Float(Float64(ai) / Float64(bi)) }
             }
         }
-        match (a) {
-            case LispValue.Int(ai) =>
-                match (b) {
-                    case LispValue.Float(bf) =>
-                        match (opKind) {
-                            case 0 => LispValue.Float(Float64(ai) + bf)
-                            case 1 => LispValue.Float(Float64(ai) - bf)
-                            case 2 => LispValue.Float(Float64(ai) * bf)
-                            case _ => LispValue.Float(Float64(ai) / bf)
-                        }
-                    case _ => LispValue.Error(XispError(ErrorType.TypeError, "expected a number"))
-                }
-            case LispValue.Float(af) =>
-                match (b) {
-                    case LispValue.Int(bi) =>
-                        match (opKind) {
-                            case 0 => LispValue.Float(af + Float64(bi))
-                            case 1 => LispValue.Float(af - Float64(bi))
-                            case 2 => LispValue.Float(af * Float64(bi))
-                            case _ => LispValue.Float(af / Float64(bi))
-                        }
-                    case LispValue.Float(bf) =>
-                        match (opKind) {
-                            case 0 => LispValue.Float(af + bf)
-                            case 1 => LispValue.Float(af - bf)
-                            case 2 => LispValue.Float(af * bf)
-                            case _ => LispValue.Float(af / bf)
-                        }
-                    case _ => LispValue.Error(XispError(ErrorType.TypeError, "expected a number"))
-                }
-            case _ => LispValue.Error(XispError(ErrorType.TypeError, "expected a number"))
+        if (let LispValue.Int(ai) <- a && let LispValue.Float(bf) <- b) {
+            return match (opKind) {
+                case 0 => LispValue.Float(Float64(ai) + bf)
+                case 1 => LispValue.Float(Float64(ai) - bf)
+                case 2 => LispValue.Float(Float64(ai) * bf)
+                case _ => LispValue.Float(Float64(ai) / bf)
+            }
+        }
+        if (let LispValue.Float(af) <- a && let LispValue.Int(bi) <- b) {
+            return match (opKind) {
+                case 0 => LispValue.Float(af + Float64(bi))
+                case 1 => LispValue.Float(af - Float64(bi))
+                case 2 => LispValue.Float(af * Float64(bi))
+                case _ => LispValue.Float(af / Float64(bi))
+            }
+        }
+        if (let LispValue.Float(af) <- a && let LispValue.Float(bf) <- b) {
+            return match (opKind) {
+                case 0 => LispValue.Float(af + bf)
+                case 1 => LispValue.Float(af - bf)
+                case 2 => LispValue.Float(af * bf)
+                case _ => LispValue.Float(af / bf)
+            }
+        }
+        this.binNumFallback(a, b, opKind)
+    }
+
+    /**
+     * 非数值组合的兜底：外部值按能力接口分派，其余照常报类型错误
+     *
+     * 构造 `ArrayList` 只在慢路径发生（数值运算不会走到这里），所以不影响
+     * 快速路径的性能。
+     */
+    func binNumFallback(a: LispValue, b: LispValue, opKind: Int64): LispValue {
+        let opName = match (opKind) {
+            case 0 => "+"
+            case 1 => "-"
+            case 2 => "*"
+            case _ => "/"
+        }
+        let args = ArrayList<LispValue>()
+        args.add(a)
+        args.add(b)
+        match (BuiltinFunctions.dispatchArith(opName, args)) {
+            case Some(v) => v
+            case None => LispValue.Error(XispError(ErrorType.TypeError, "expected a number"))
         }
     }
 
