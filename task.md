@@ -1988,3 +1988,18 @@ let invoke = { fn, args =>
 xisp 653 测试全过，无回归。
 
 （按约定本轮不发版 —— `xisp-sci` 用 path 依赖顶着，等数组模块稳定后统一发。）
+
+---
+
+## v0.9.2（2026-11-19）
+
+修 `CapabilityContext.invoke`：域装配时快照的宿主配置会过期，`withCsv()` 排在
+`withBytecodeCompiler()` 之前时 `decompiler` 还是 `None`，域里的回调在字节码后端
+永远调不动编译闭包。改成每次调用前刷新。
+
+一处改动（`domains_preset.cj`，+15 -1），653 测试全过。
+
+**这是 xisp-sci 0.3.0 的前置**：`csv-each` / `group-agg` / `fmin` / `rk4` 全走这条路。
+
+8 个成员已发官方中心仓（索引 + 制品均验证，制品解包核对通过：顶层只有
+README.md / cjpm.toml / src）。
