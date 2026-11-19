@@ -13,6 +13,7 @@ export default defineConfig({
       { text: 'API 参考', link: '/api/' },
       { text: '扩展模块', link: '/ext/' },
       { text: '集成', link: '/integration/embedding' },
+      { text: '科学计算', link: 'https://ystyle.github.io/xisp-sci/' },
     ],
     sidebar: {
       '/guide/': [
