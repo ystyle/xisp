@@ -3,7 +3,7 @@
 > 仓颉嵌入式 Lisp 脚本语言
 
 [![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
-[![Version](https://img.shields.io/badge/version-0.8.0-green.svg)](https://github.com/ystyle/xisp)
+[![Version](https://img.shields.io/badge/version-0.9.0-green.svg)](https://github.com/ystyle/xisp)
 [![Cangjie](https://img.shields.io/badge/Cangjie-1.2.0-orange.svg)](https://cangjie-lang.cn/)
 ![star](https://atomgit.com/ystyle/xisp/star/badge.svg)
 
@@ -30,7 +30,32 @@ Xisp（星枢）是一个用仓颉（Cangjie）语言编写的嵌入式 Lisp 解
 
 ## 破坏性变更与迁移
 
-### 0.8.0（当前版本）
+### 0.9.0（当前版本）
+
+**无破坏性变更**（只增不改），但有一处**行为收紧**值得注意：
+
+- **标量数学函数补齐**：`sin` / `cos` / `tan` / `asin` / `acos` / `atan` / `exp` /
+  `log` / `log10` / `sqrt` / `cbrt` / `pow` / `hypot` 十三个，外加 `abs` / `floor` /
+  `ceil` / `sign`。此前 `arithmetic` 域只有 `+ - * / mod round min max sum product`
+- **外部值分派协议扩到 8 个接口**：新增 `LispExternalArithmetic`（`+ - * /`）、
+  `LispExternalReducible`（`sum/product/max/min`）、`LispExternalElementwise`
+  （一元数学函数）。外部模块（如 NDArray）实现哪个接口就自动获得哪档内建支持
+
+行为收紧的两处：
+
+- **`(- x)` 对非数值不再静默返回 `nil`**，改为报 `TypeError`。此前 `(- "abc")`
+  会安静地得到一个 `nil`，看起来像算成功了
+- **`sum` / `product` / `max` / `min` 遇到外部值若实现方拒绝归约（如空数组求 `max`），
+  报 `TypeError` 而不是返回 `nil` 或 `0`**
+
+数学函数的两个约定：
+
+- **结果恒为浮点**（整型入参先转 `Float64`），除了 `abs` / `floor` / `ceil` / `sign`
+  保留入参量纲 —— `(floor 3.7)` 返回整数 `3`，好让它能直接当下标用
+- **定义域外不抛异常**，返回 `nan` / `-inf` 让它在算式里传播：`(log 0)` => `-inf`，
+  `(sqrt -1)` => `nan`
+
+### 0.8.0
 
 新增两个能力，**无破坏性变更**（API 只增不改）：
 
@@ -133,12 +158,12 @@ Xisp 以 cjpm 工作区组织，9 个成员模块**按需依赖**：
 
 ```toml
 [dependencies]
-  "ystyle::xisp" = "0.8.0"           # 核心：解释器 / 内建 / 桥接
-  # "ystyle::xisp_repl" = "0.8.0"    # 需要交互式 REPL 时
-  # "ystyle::xisp_bc" = "0.8.0"      # 需要字节码 / JIT 时
+  "ystyle::xisp" = "0.9.0"           # 核心：解释器 / 内建 / 桥接
+  # "ystyle::xisp_repl" = "0.9.0"    # 需要交互式 REPL 时
+  # "ystyle::xisp_bc" = "0.9.0"      # 需要字节码 / JIT 时
   # JSON / HTTP 两个能力模块（0.7.0 起）：
-  # "ystyle::xisp_json" = "0.8.0"    # JSON 能力
-  # "ystyle::xisp_net" = "0.8.0"     # HTTP 能力（另需 stdx 环境）
+  # "ystyle::xisp_json" = "0.9.0"    # JSON 能力
+  # "ystyle::xisp_net" = "0.9.0"     # HTTP 能力（另需 stdx 环境）
 ```
 
 **核心（`ystyle::xisp`）不含字节码与 JIT 代码**——不依赖 `xisp_bc` 的宿主，产物里就没有这部分
@@ -159,7 +184,7 @@ cjpm ws check         # 版本一致性闸门（多包产品共用版本号）
 ❯ ./target/release/bin/ystyle::xisp_cli
 ╔═══════════════════════════════════════════════════════════╗
 ║           星枢 - 仓颉嵌入式 Lisp 脚本语言                   ║
-║                   版本 0.8.0                              ║
+║                   版本 0.9.0                              ║
 ╚═══════════════════════════════════════════════════════════╝
 xisp> (print "你好，仓颉")
 "你好，仓颉"

@@ -401,6 +401,44 @@ let interpreter = LispInterpreter([
 - 文件访问控制
 - 使用示例和最佳实践
 
+### 5.2 外部值的通用内建分派
+
+`LispValue` 是**封闭枚举**，外部模块（NDArray、分布对象、句柄…）要把自己的值
+交给 Lisp 层，只能通过 `LispValue.External(LispExternal)`。core 不知道这些值是什么，
+只按**能力接口**分派 —— 外部值实现了哪个接口，就自动获得哪一档内建支持：
+
+| 接口 | 分派到 |
+|---|---|
+| `LispExternal` | `type-of`（`typeName`）、`print`（`display()`） |
+| `LispExternalEquatable` | `=` / `!=` |
+| `LispExternalIndexable` | `length` / `nth` |
+| `LispExternalComparable` | `<` / `>` / `<=` / `>=` |
+| `LispExternalCallable` | 把外部值放在函数位置 |
+| `LispExternalArithmetic` | `+` / `-` / `*` / `/` |
+| `LispExternalReducible` | `sum` / `product` / `max` / `min` |
+| `LispExternalElementwise` | `sin` / `exp` / `sqrt` 等一元数学函数 |
+
+**设计意图**：`(sin 1.0)` 与 `(sin arr)` 是**同一个符号**，外部值不需要
+`array-sin` 这类第二套名字。为此 core 的标量数学函数在遇到非数值参数时，
+先试 `LispExternalElementwise`，不实现该接口才报类型错误。
+
+三条实现契约：
+
+1. **返回 `None` 表示"这个组合我不支持"**，core 会照常报 `TypeError`。
+   用 `Option` 而不是"返回 `nil`"，是为了让"类型不兼容"和"算错"能区分开 ——
+   静默产出 `nil` 会让 `(+ arr "x")` 看起来算成功了。
+2. **算术分左右两个方向**（`arithLeft` / `arithRight`）。减法与除法不满足交换律，
+   `(- 1 arr)` 和 `(- arr 1)` 是两个不同表达式，不能靠传个布尔标志让实现方
+   自己倒过来。
+3. **归约不复用 `LispExternalIndexable`**。逐元素 `at(i)` 会把每个元素装箱成
+   `LispValue`，一百万次求和就是一百万次装箱；归约必须由实现方在自己的连续
+   存储上直接做。
+
+⚠️ **算术运算符有求值器快速路径**（见 `core/src/core/eval/arithmetic_fast.cj`）。
+`+ - * / < > =` 被提升成特殊形式以跳过查找与实参列表构建，所以给它们加外部值
+支持时，**快速路径和原生函数两条路都要改**。只顾一处会出现"二元运算能算、
+一元取负返回 nil"这类不对称行为。
+
 ---
 
 ## 六、实现路线图

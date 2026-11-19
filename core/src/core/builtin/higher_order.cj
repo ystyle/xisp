@@ -27,6 +27,11 @@ extend BuiltinFunctions {
                 return LispValue.Float(0.0)
             }
 
+            // 外部值（数组等）在自己的连续存储上直接归约，避免逐元素装箱
+            if (let Some(v) <- BuiltinFunctions.reduceExternalOr("sum", args[0])) {
+                return v
+            }
+
             var hasFloat = false
             var intTotal: Int64 = 0
             var floatTotal: Float64 = 0.0
@@ -71,6 +76,10 @@ extend BuiltinFunctions {
                 return LispValue.Float(1.0)
             }
 
+            if (let Some(v) <- BuiltinFunctions.reduceExternalOr("product", args[0])) {
+                return v
+            }
+
             var hasFloat = false
             var intTotal: Int64 = 1
             var floatTotal: Float64 = 1.0
@@ -113,6 +122,11 @@ extend BuiltinFunctions {
         // - (max '(1 2 3)) - 传入列表
         // - (apply max '(1 2 3)) - 通过 apply 传入多个参数
         env.define("max", NativeFunc({ args =>
+            if (args.size == 1) {
+                if (let Some(v) <- BuiltinFunctions.reduceExternalOr("max", args[0])) {
+                    return v
+                }
+            }
             var maxIntValue: ?Int64 = None
             var maxFloatValue: ?Float64 = None
             var hasFloat = false
@@ -191,6 +205,11 @@ extend BuiltinFunctions {
         // - (min '(1 2 3)) - 传入列表
         // - (apply min '(1 2 3)) - 通过 apply 传入多个参数
         env.define("min", NativeFunc({ args =>
+            if (args.size == 1) {
+                if (let Some(v) <- BuiltinFunctions.reduceExternalOr("min", args[0])) {
+                    return v
+                }
+            }
             var minIntValue: ?Int64 = None
             var minFloatValue: ?Float64 = None
             var hasFloat = false

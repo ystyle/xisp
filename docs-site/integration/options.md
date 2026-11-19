@@ -303,7 +303,7 @@ let embedded = LispInterpreter([withModuleMode()])
 
 ```toml
 [dependencies]
-  "ystyle::xisp_bc" = "0.8.0"
+  "ystyle::xisp_bc" = "0.9.0"
 ```
 
 | 选项 | 说明 |

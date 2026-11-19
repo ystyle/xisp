@@ -1807,3 +1807,93 @@ xisp_net/cjpm.toml: test-dependencies 的 ystyle::xisp_bc=0.7.0 与产品版本 
 
 `cjpm test` 629/629；`check-examples.sh` 22/22；`cjpm ws check` 与成员闸门通过
 （10 个成员均 0.8.0）；`docs-site` 构建成功。
+
+---
+
+## M34: 标量数学 + 外部值分派协议（0.9.0）✅
+
+### 起因
+
+`xisp-sci` 做阶段 2 时要 `(+ arr arr)` 和 `(sin arr)`，但 core 缺两块：
+
+1. **算术域没有数学函数** —— 只有 `+ - * / mod round min max sum product`，
+   `sin` / `cos` / `exp` / `log` / `sqrt` / `pow` / `abs` / `floor` / `ceil` 一个都没有；
+2. **通用内建对 `External` 的分派只做了一半** —— `=` / `<` / `length` / `nth` / 调用已接通，
+   但 `+ - * /` 只匹配 `Int` / `Float`，`sum` / `max` / `min` / `product` 只认 `Cons` 链。
+
+### 新增三个能力接口
+
+`core/src/types/lisp_external.cj`，能力接口从 5 个扩到 8 个：
+
+| 接口 | 分派到 |
+|---|---|
+| `LispExternalArithmetic` | `+ - * /`（`arithLeft` / `arithRight` 两个方向） |
+| `LispExternalReducible` | `sum` / `product` / `max` / `min`（`reduceAll(op)`） |
+| `LispExternalElementwise` | 一元数学函数（`applyElementwise(fn)`） |
+
+三条设计契约（已写进 `docs/design.md` §5.2）：
+
+- **返回 `None` 表示"这个组合我不支持"**，core 报 `TypeError`。不用"返回 nil"
+  是因为那会让 `(+ arr "x")` 看起来算成功了；
+- **算术分左右两个方向** —— 减法除法不满足交换律，`(- 1 arr)` 和 `(- arr 1)` 是
+  两个不同表达式，不能靠布尔标志让实现方自己倒过来；
+- **归约不复用 `LispExternalIndexable`** —— `at(i)` 会把每个元素装箱成 `LispValue`，
+  一百万次求和就是一百万次装箱。归约必须由实现方在自己的连续存储上做。
+
+### 标量数学 17 个
+
+`sin cos tan asin acos atan exp log log10 sqrt cbrt pow hypot abs floor ceil sign`
+
+两个约定：
+
+- **结果恒为浮点**（整型入参先转 `Float64`），但 `abs` / `floor` / `ceil` / `sign`
+  保留入参量纲 —— `(floor 3.7)` 返回整数 `3`，好让它能直接当下标用；
+- **定义域外不抛异常**：`(log 0)` => `-inf`，`(sqrt -1)` => `nan`。
+  仓颉 `std.math` 的 `sqrt` / `asin` 对定义域外输入抛 `IllegalArgumentException`，
+  而数值计算里 nan 能在算式里传播、让用户看到"这里坏了"并继续处理其余数据。
+  为此加了 `safeApplyFloat` 兜底，`log` / `log10` 单独处理 0 处返回 `-inf`。
+
+`hypot` 自己实现（`std.math` 没有），且**不中间溢出**：直接 `sqrt(a²+b²)` 在
+`a = 1e200` 时平方已溢出得到 `inf`，正确做法是先除以较大绝对值再乘回去。
+
+### 踩到的坑：算术运算符有求值器快速路径
+
+给 `+ - * /` 加 External 分派后，`(+ a b)` 正常但 **`(- a)` 返回 `nil`**。
+
+根因：`+ - * / < > =` 被**提升成特殊形式**（`core/src/core/eval/arithmetic_fast.cj`，
+为跳过函数查找与实参列表构建），求值时不走 `NativeFunc`。`evalSub` 的一元分支是：
+
+```cangjie
+case _ => Nil    // 非 Int/Float → 静默返回 nil
+```
+
+于是外部值取负落到这里。修法是回退到原生函数 `callNativeArith("-", rest)`，
+由它决定是"外部值自己实现取负"还是"类型错误"。
+
+**教训**：给 `+ - * / < > =` 加语义时必须**两条路一起改** —— 快速路径与原生函数。
+只顾一处会出现「二元能算、一元返回 nil」这种不对称，而且不报错，特别难发现。
+
+### 测试
+
+新增两个契约测试文件（`xisp_tests/`）：
+
+- `external_dispatch_test.cj` —— 用**测试替身** `VectorBox`（不是真数组，core 不能依赖
+  sci）验证三个分派路径。重点钉：减除法的方向、`None` → `TypeError`、N 元折叠顺序、
+  长度不一致报错、空归约报错；
+- `math_test.cj` —— 17 个标量函数的三后端一致性与错误路径，含定义域外行为、
+  `hypot` 大数不溢出、以及"加了外部值分派后 `sum`/`max` 对列表与变参的行为不变"。
+
+### 发版中发现的工具问题
+
+`cjpm ws bump 0.9.0` 之后，两道闸门各自报出了它没改的东西：
+
+| 漏改 | 为什么 |
+|---|---|
+| `xisp_net` / `xisp_httpd` 的 `[test-dependencies]` | bump 只改 `[dependencies]` |
+| `xisp_tests` / `xisp_examples` 的 `version` | bump 只改**发布成员**，测试/示例包不参与 |
+
+有意思的是 `cjpm ws check` **能检测到**这两类问题（报"成员依赖 … 应为 v0.9.0"），
+只是 `bump` 不修。也就是说 check 与 bump 的口径不一致 —— 这次仍是手工补的 4 处。
+
+（上一轮 0.8.0 的结论是"cjpm-ws 0.1.6 已覆盖 test-dependencies"，实际只覆盖了
+`check` 一侧。要改 `bump`，见看板。）

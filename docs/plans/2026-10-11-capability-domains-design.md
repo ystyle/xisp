@@ -8,6 +8,12 @@
 > **下游规划**：科学计算族（`xisp_array` / `linalg` / `stats` / `signal` / `io` / `sci`）见
 > [`2026-10-11-sci-family-design.md`](2026-10-11-sci-family-design.md)（**规划中**，最后做）
 > **实测记录**：本文的测量细节与原始数据见 [`../bugs/symbol-layering-findings.md`](../bugs/symbol-layering-findings.md)
+>
+> **现状（2026-11-19 标注）**：§7.3 列的 5 个能力接口在 0.9.0 扩到 **8 个** ——
+> 新增 `LispExternalArithmetic`（`+ - * /`）、`LispExternalReducible`
+> （`sum/product/max/min`）、`LispExternalElementwise`（一元数学函数）。
+> 起因是科学计算族要 `(+ arr arr)` 与 `(sin arr)` 可用；详细契约见
+> [`../design.md`](../design.md) §5.2。**§7.3 的原文保留不动**，接口清单以 design.md 为准。
 
 ---
 

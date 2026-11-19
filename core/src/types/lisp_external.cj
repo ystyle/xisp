@@ -68,3 +68,46 @@ public interface LispExternalComparable <: LispExternal {
 public interface LispExternalCallable <: LispExternal {
     func invoke(args: ArrayList<LispValue>): LispValue
 }
+
+/**
+ * 支持四则运算的外部值：供 `+` / `-` / `*` / `/` 分派
+ *
+ * 两个方向分开声明，因为减法与除法不满足交换律：`(- 1 arr)` 和 `(- arr 1)` 是
+ * 两个不同的表达式，不能靠"传个布尔标志"让实现方自己倒过来。
+ *
+ * **返回 `None` 表示"这个组合我不支持"**，core 会照常报 `TypeError` ——
+ * 这样"类型不兼容"和"算错"能区分开，不会静默产出错误结果。
+ *
+ * 参数类型刻意用 `String` 而不是枚举：外部值将来要支持 `**` / `@`（矩阵乘）
+ * 这类新运算符时不必改 core 的接口定义。不认识的 op 应当返回 `None`。
+ */
+public interface LispExternalArithmetic <: LispExternal {
+    /** 本值作为**左**操作数：`(op self other)` */
+    func arithLeft(op: String, other: LispValue): Option<LispValue>
+
+    /** 本值作为**右**操作数：`(op other self)` */
+    func arithRight(op: String, other: LispValue): Option<LispValue>
+}
+
+/**
+ * 支持归约的外部值：供 `sum` / `product` / `max` / `min` 分派
+ *
+ * 不复用 `LispExternalIndexable` 逐元素取值，是因为那会把每个元素装箱成
+ * `LispValue` —— 一百万次求和就是一百万次装箱。归约必须由实现方在自己的
+ * 连续存储上直接做。
+ *
+ * `op` 取 `"sum"` / `"product"` / `"max"` / `"min"`；不认识的返回 `None`。
+ */
+public interface LispExternalReducible <: LispExternal {
+    func reduceAll(op: String): Option<LispValue>
+}
+
+/**
+ * 支持逐元素应用标量函数的外部值：供 `sin` / `exp` / `sqrt` … 分派
+ *
+ * `fn` 是标量内建的名字。这样 `(sin 1.0)` 与 `(sin arr)` 是**同一个符号**，
+ * 不需要一套 `sin` 加一套 `array-sin`。实现方不认识的 `fn` 返回 `None`。
+ */
+public interface LispExternalElementwise <: LispExternal {
+    func applyElementwise(fn: String): Option<LispValue>
+}

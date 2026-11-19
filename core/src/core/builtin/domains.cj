@@ -33,17 +33,25 @@ extend BuiltinFunctions {
     }
 
     /**
-     * 算术：`+ - * / mod round min max sum product`
+     * 算术与标量数学：`+ - * / mod round`，聚合 `min max sum product`，
+     * 标量数学 `sin cos tan asin acos atan exp log log10 sqrt cbrt pow hypot abs floor ceil sign`
      *
      * 原先声明里还有个 `abs`，但**它从未被实现**（全仓无 `env.define("abs")`，
      * docs-site 的算术 API 清单里也没有）。域声明的 `symbols` 是对外契约
      * （沙箱审计 / 文档生成 / 重名检出都读它），多声明一个不存在的符号会让
      * 上层以为可用 —— 已从声明移除；`min` / `max` / `sum` / `product` 由
-     * `registerHigherOrder` 提供，不在 `registerMath` 里。
+     * `registerAggregates` 提供，不在 `registerMath` 里。
+     *
+     * `abs` 在 0.9.0 才真正实现（保留整数性：`(abs -3)` 是 `3`），
+     * 与同批加入的 `floor` / `ceil` / `sign` 一起回到清单。
      */
     public static func domainArithmetic(): LispCapability {
         SimpleCapability("arithmetic",
-            ["+", "-", "*", "/", "mod", "round", "min", "max", "sum", "product"],
+            ["+", "-", "*", "/", "mod", "round",
+             "min", "max", "sum", "product",
+             "sin", "cos", "tan", "asin", "acos", "atan",
+             "exp", "log", "log10", "sqrt", "cbrt",
+             "pow", "hypot", "abs", "floor", "ceil", "sign"],
             { ctx =>
                 registerArithmetic(ctx.env)
                 registerModulo(ctx.env)

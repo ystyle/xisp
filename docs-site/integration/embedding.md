@@ -7,12 +7,12 @@ Xisp 以 cjpm 工作区组织（9 个成员模块），**按需依赖**：只要
 
 ```toml
 [dependencies]
-  "ystyle::xisp" = "0.8.0"           # 核心：解释器 / 内建 / 桥接（零外部依赖）
-  # "ystyle::xisp_repl" = "0.8.0"    # 需要交互式 REPL 时
-  # "ystyle::xisp_bc" = "0.8.0"      # 需要字节码 / JIT 时
+  "ystyle::xisp" = "0.9.0"           # 核心：解释器 / 内建 / 桥接（零外部依赖）
+  # "ystyle::xisp_repl" = "0.9.0"    # 需要交互式 REPL 时
+  # "ystyle::xisp_bc" = "0.9.0"      # 需要字节码 / JIT 时
   # 以下两个能力模块 0.7.0 起提供：
-  # "ystyle::xisp_json" = "0.8.0"    # JSON 能力
-  # "ystyle::xisp_net" = "0.8.0"     # HTTP 能力（另需 stdx 环境）
+  # "ystyle::xisp_json" = "0.9.0"    # JSON 能力
+  # "ystyle::xisp_net" = "0.9.0"     # HTTP 能力（另需 stdx 环境）
 ```
 
 ---
