@@ -3,7 +3,7 @@
   name = "xisp_httpd"
   organization = "ystyle"
   description = "星枢 HTTP 服务端：起一个 HTTP/1.1 服务（基于 tachyon，零 stdx）"
-  version = "0.9.1"
+  version = "0.9.2"
   output-type = "static"
   # -O2 是必须的：tachyon 的扫描循环不开 -O2 会慢 55 倍（见其 README）
   compile-option = "-O2 -Woff unused"
@@ -15,11 +15,11 @@
   repository = "https://gitcode.com/ystyle/xisp"
 
 [dependencies]
-  "ystyle::xisp" = "0.9.1"
+  "ystyle::xisp" = "0.9.2"
   # tachyon：fasthttp 风格的零分配 HTTP/1.1 服务端，仅依赖 std.*
   # 注意它不做 TLS / HTTP/2 / WebSocket —— 那些该由前置 LB 终结。
   "ystyle::tachyon" = "0.2.2"
 
 # 仅测试用：三后端一致性用例需要字节码/JIT 后端
 [test-dependencies]
-  "ystyle::xisp_bc" = "0.9.1"
+  "ystyle::xisp_bc" = "0.9.2"
