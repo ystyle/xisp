@@ -3,7 +3,7 @@
   name = "xisp_examples"
   organization = "ystyle"
   description = "星枢仓颉侧示例（不发布）"
-  version = "0.8.0"
+  version = "0.9.0"
   output-type = "static"
   compile-option = "-O2 -Woff unused"
   override-compile-option = ""

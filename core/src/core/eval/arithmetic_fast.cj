@@ -67,7 +67,10 @@ extend Evaluator {
                             case LispValue.Int(i) => LispValue.Int(-i)
                             case LispValue.Float(f) => LispValue.Float(-f)
                             case Error(_) => v
-                            case _ => Nil
+                            // 非数值（含外部值）：回退到原生函数，由它决定是
+                            // 「外部值自己实现取负」还是「类型错误」。
+                            // 这里曾经返回 Nil —— 外部值取负会静默得到 nil。
+                            case _ => this.callNativeArith("-", rest)
                         }
                     case Cons(c2) =>
                         match (c2.cdr) {
