@@ -161,7 +161,21 @@ extend BuiltinFunctions {
             case Some(f) => f
             case None => { => false }
         }
-        let invoke: (LispValue, ArrayList<LispValue>) -> LispValue = { fn, args => evaluator.applyFunction(fn, args) }
+        // 每次调用前刷新宿主的配置（尤其 `decompiler`）。
+        //
+        // 装配期复制一次是不够的：域装配顺序不确定，`withCsv()` 可能排在
+        // `withBytecodeCompiler()` 之前，那时宿主还没有后端 —— 装配期快照下来的
+        // 配置会永久缺 `decompiler`，于是域里的回调（`csv-each` 之类）在字节码后端下
+        // 调编译闭包时报 "AST: closure without bytecode backend"。
+        //
+        // 开销是一次十几个字段的赋值，相比"回调根本不能用"可以接受。
+        let invoke: (LispValue, ArrayList<LispValue>) -> LispValue = { fn, args =>
+            match (provider) {
+                case Some(p) => p().copyConfigTo(evaluator)
+                case None => ()
+            }
+            evaluator.applyFunction(fn, args)
+        }
         let evalSource: (String) -> Unit = { source =>
             let lexer = Lexer(source)
             let parser = Parser(lexer.tokenize())

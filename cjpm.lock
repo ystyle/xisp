@@ -2,5 +2,5 @@ version = 0
 
 [requires]
   "ystyle::tachyon" = {version = "0.2.2"}
-  gjson = {version = "1.2.2"}
   cjpminfo = {version = "1.2.1"}
+  gjson = {version = "1.2.2"}

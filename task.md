@@ -1941,3 +1941,50 @@ Error: no available version for module 'ystyle::xisp' by require '0.9.0'
 
 另外 `[test-dependencies]` 在 workspace 里**不走本地成员解析**，同样要等对应版本在中心仓
 索引可见才能 bundle —— `xisp_httpd` / `xisp_net` 的测试依赖 `xisp_bc`，就是卡在这。
+
+---
+
+## M35: 阶段 3 联动修复 —— `ctx.invoke` 的配置快照
+
+### 问题
+
+`xisp-sci` 的 CSV 流式遍历 `cangjie::csv-each` 在**字节码后端**下报：
+
+```
+[RuntimeError] AST: closure without bytecode backend
+```
+
+AST 后端正常。根因在 core：
+
+`CapabilityContext.invoke`（`domains_preset.cj`）在**域装配时**把宿主配置
+`copyConfigTo` 进去一次，之后就固定了。但域装配顺序不确定 —— `withCsv()` 排在
+`withBytecodeCompiler()` 之前时，那次快照里 `decompiler` 还是 `None`，于是域里的
+回调永远调不动编译闭包。
+
+这与 0.8.0 修的「域装配的配置快照会过期」是**同一类问题**，但当时只改了
+`ctx.newEvaluator`（用 provider 每次取新配置），漏了 `ctx.invoke`。
+
+### 修复
+
+`invoke` 闭包在每次调用前刷新一次配置：
+
+```cangjie
+let invoke = { fn, args =>
+    match (provider) {
+        case Some(p) => p().copyConfigTo(evaluator)
+        case None => ()
+    }
+    evaluator.applyFunction(fn, args)
+}
+```
+
+开销是十几个字段的赋值，相比"回调根本不能用"可以接受。
+
+### 影响面
+
+所有**域里回调 Lisp 函数**的能力都受益：`csv-each`、未来的 `array-map`、
+`httpd` 的 handler 回调等。此前它们只在 AST 后端可用。
+
+xisp 653 测试全过，无回归。
+
+（按约定本轮不发版 —— `xisp-sci` 用 path 依赖顶着，等数组模块稳定后统一发。）
