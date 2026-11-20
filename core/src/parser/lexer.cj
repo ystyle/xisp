@@ -147,11 +147,35 @@ public class Lexer {
             }
         }
 
+        // 读取指数部分（科学计数法）：`1e3` / `1e-3` / `1.5E+2`
+        //
+        // 只在 `e` / `E` 后面**确实跟着数字**时才吃进来。`1e` 这种保持原样
+        // （数字 1 后面跟符号 e）—— Lisp 里 `(foo 1e)` 很可能是 `(foo 1 e)` 的笔误，
+        // 宽松解析比直接报「非法数字字面量」更有用，而且不会让合法输入变少。
+        var hasExponent = false
+        if (let Some(er) <- this.peek() && (er == r'e' || er == r'E')) {
+            var digitsAt: Int64 = 1
+            if (let Some(sign) <- this.peekAhead(digitsAt) && (sign == r'+' || sign == r'-')) {
+                digitsAt = digitsAt + 1
+            }
+            if (let Some(d) <- this.peekAhead(digitsAt) && d.isAsciiNumber()) {
+                this.advance()  // 吃掉 e / E
+                if (let Some(sign) <- this.peek() && (sign == r'+' || sign == r'-')) {
+                    this.advance()
+                }
+                while (let Some(d2) <- this.peek() && d2.isAsciiNumber()) {
+                    this.advance()
+                }
+                hasExponent = true
+            }
+        }
+
         let runeSlice = this.runeArray[start..this.pos]
         let numStr = String(runeSlice)
 
-        if (hasDecimalPoint) {
-            // 浮点数
+        if (hasDecimalPoint || hasExponent) {
+            // 浮点数。带指数的一律是浮点：`1e3` 的写法本身就暗示浮点语境，
+            // 而且 `1e-3` 必然是浮点 —— 分两种类型只会让人猜不到 `1e3` 得到什么。
             let num = Float64.parse(numStr)
             Token.Float(num)
         } else {

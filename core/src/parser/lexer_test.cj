@@ -22,6 +22,26 @@ var lexerTests = ArrayList<LexerTestItem>([
         "42 3.14",
         [Token.Int(42), Token.Float(3.14)]
     ),
+    // 科学计数法：带指数的一律是浮点
+    LexerTestItem(
+        "1e3 1E3 1e-3 1.5e3 1.5E+2 2e-10",
+        [Token.Float(1000.0), Token.Float(1000.0), Token.Float(0.001),
+            Token.Float(1500.0), Token.Float(150.0), Token.Float(2e-10)]
+    ),
+    // 指数带负号开头也要能解析（数本身是负的）
+    LexerTestItem(
+        "-1e-3 -2.5E2",
+        [Token.Float(-0.001), Token.Float(-250.0)]
+    ),
+    // `e` 后面不跟数字时不吞 e：保持「数字 + 符号」的宽松解析
+    LexerTestItem(
+        "1e",
+        [Token.Int(1), Token.Symbol("e")]
+    ),
+    LexerTestItem(
+        "1e+",
+        [Token.Int(1), Token.Symbol("e+")]
+    ),
     // 符号
     LexerTestItem(
         "foo bar+baz? test123 中文",
