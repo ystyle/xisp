@@ -1,4 +1,4 @@
 version = 0
 
 [requires]
-  "ystyle::xisp" = {version = "0.9.2"}
+  "ystyle::xisp" = {version = "0.9.3"}

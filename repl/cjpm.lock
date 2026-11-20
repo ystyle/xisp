@@ -1,6 +1,6 @@
 version = 0
 
 [requires]
-  "ystyle::xisp" = {version = "0.9.2"}
   cjpminfo = {version = "1.2.1"}
-  "ystyle::xisp_terminal" = {version = "0.9.2"}
+  "ystyle::xisp" = {version = "0.9.3"}
+  "ystyle::xisp_terminal" = {version = "0.9.3"}
