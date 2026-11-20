@@ -462,8 +462,11 @@ public class Lexer {
                 } else {
                     this.readSymbol()
                 }
-            } else {
+            } else if (this.isSymbolChar(r)) {
                 this.readSymbol()
+            } else {
+                this.advance()
+                Token.Error("Syntax error: unexpected character '${r}'")
             }
         } else {
             Token.EOF
