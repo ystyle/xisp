@@ -3,7 +3,7 @@
   name = "xisp_tests"
   organization = "ystyle"
   description = "星枢契约 / 集成测试：只用 public API 验证语言行为（不发布）"
-  version = "0.9.2"
+  version = "0.9.3"
   output-type = "static"
   compile-option = "-O2 -Woff unused"
   override-compile-option = ""
